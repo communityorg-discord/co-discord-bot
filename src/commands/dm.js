@@ -248,6 +248,7 @@ export async function execute(interaction) {
       { name: '👥 Total', value: String(recipients.length), inline: true },
       ...(exemptCount > 0 ? [{ name: '⏭️ Exempt Skipped', value: String(exemptCount), inline: true }] : []),
       ...(emailConfirm ? [{ name: '📧 Email Confirm', value: `${recipients.length} recipients must acknowledge`, inline: false }] : []),
+      ...(failedUsers.length > 0 ? [{ name: '❌ Failed Recipients', value: failedUsers.slice(0, 10).join(', ') + (failedUsers.length > 10 ? `\n+${failedUsers.length - 10} more` : ''), inline: false }] : []),
     ],
     specificChannelId: DM_LOG_CHANNEL_ID
   });
