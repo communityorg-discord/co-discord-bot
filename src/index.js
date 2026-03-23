@@ -140,11 +140,16 @@ client.on('interactionCreate', async interaction => {
       const { getAllActiveStaff } = await import('./utils/botDb.js');
       const allStaff = getAllActiveStaff();
 
-      const selectOptions = allStaff.map(s => ({
-        label: s.display_name || s.username || 'Unknown',
-        value: String(s.id),
-        description: s.position || s.department || ''
-      }));
+      const selectOptions = allStaff.slice(0, 25).map(s => {
+        const label = (s.display_name || s.username || 'Unknown').slice(0, 100);
+        const desc = ((s.position || s.department || '').trim() || null);
+        const opt = {
+          label,
+          value: String(s.id)
+        };
+        if (desc) opt.description = desc.slice(0, 100);
+        return opt;
+      });
 
       if (selectOptions.length === 0) {
         await interaction.update({ content: '❌ No staff members found.', components: [] });
@@ -158,7 +163,7 @@ client.on('interactionCreate', async interaction => {
             new StringSelectMenuBuilder()
               .setCustomId('dm_exempt_user_select')
               .setPlaceholder('Choose a staff member...')
-              .addOptions(selectOptions.slice(0, 25))
+              .addOptions(selectOptions)
           ),
           new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('dm_exempt_cancel').setLabel('Cancel').setStyle(2)
