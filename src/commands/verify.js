@@ -123,12 +123,17 @@ export async function handleButton(interaction) {
     const entry = db.prepare("SELECT * FROM verification_queue WHERE id = ? AND status = 'pending'").get(queueId);
     if (!entry) return interaction.reply({ content: '❌ Request not found or already processed.', ephemeral: true });
 
-    // Defer immediately — do slow work after to avoid 3s timeout
+    // Defer immediately — send first reply before slow work
     await interaction.deferReply({ ephemeral: true });
-
     const isOfficial = Number(entry.verified_official) === 1;
 
-    // Apply roles + nickname across all guilds
+    // Send "processing" immediately so Discord stops thinking
+    await interaction.editReply({
+      content: '⏳ Processing verification — applying roles across servers...',
+      ephemeral: true
+    });
+
+    // Apply roles + nickname across all guilds (slow)
     await applyVerification(interaction.client, entry.discord_id, entry.position, entry.requested_nickname);
 
     // Save to verified_members
