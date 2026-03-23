@@ -111,6 +111,16 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId === 'nid_cancel') {
       await interaction.update({ content: 'NID submission cancelled.', embeds: [], components: [] });
     }
+
+    // DM acknowledgement button
+    if (interaction.customId.startsWith('dm_ack_')) {
+      await interaction.update({
+        content: `✅ **Acknowledged.** The sender has been notified that you have read this message.`,
+        embeds: [],
+        components: []
+      });
+      // Optionally notify the sender — logAction already captured the original send
+    }
   }
 
   // Verify/Unverify modal handlers

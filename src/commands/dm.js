@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder } from 'discord.js';
 import { canRunCommand, isSuperuser } from '../utils/permissions.js';
 import { logAction } from '../utils/logger.js';
 import { getUserByDiscordId } from '../db.js';
@@ -57,6 +57,11 @@ export const data = new SlashCommandBuilder()
       .setDescription('Subject line for the DM (optional)')
       .setRequired(false)
       .setMaxLength(100)
+  )
+  .addBooleanOption(opt =>
+    opt.setName('email')
+      .setDescription('Require recipient to acknowledge receipt (adds confirmation button)')
+      .setRequired(false)
   );
 
 export async function execute(interaction) {
@@ -68,6 +73,7 @@ export async function execute(interaction) {
   const mass = interaction.options.getBoolean('mass');
   const team = interaction.options.getString('team');
   const subject = interaction.options.getString('subject') || 'Message from CO Staff Management';
+  const emailConfirm = interaction.options.getBoolean('email') || false;
   const senderPortalUser = getUserByDiscordId(interaction.user.id);
 
   // Validate — must provide at least one target
@@ -82,49 +88,90 @@ export async function execute(interaction) {
 
   await interaction.deferReply({ ephemeral: true });
 
-  const buildEmbed = () => new EmbedBuilder()
-    .setTitle(`📩 ${subject}`)
-    .setColor(0x5865F2)
-    .setDescription(message)
-    .addFields({ name: 'From', value: `${senderPortalUser?.display_name || interaction.user.username} — via CO Staff Management`, inline: false })
-    .setFooter({ text: 'Community Organisation | Staff Assistant' })
-    .setTimestamp();
+  const buildEmbed = (forDM) => {
+    const embed = new EmbedBuilder()
+      .setTitle(`📩 ${subject}`)
+      .setColor(0x5865F2)
+      .setDescription(message)
+      .addFields({ name: 'From', value: `${senderPortalUser?.display_name || interaction.user.username} — via CO Staff Management`, inline: false })
+      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setTimestamp();
+
+    if (forDM && emailConfirm) {
+      embed.setDescription(
+        `**📧 Please check your email for important information.**\n\n${message}`
+      );
+    }
+
+    return embed;
+  };
+
+  const buildAckButton = (interactionId) =>
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`dm_ack_${interactionId}`)
+        .setLabel('Acknowledge & Confirm Read')
+        .setStyle(2) // secondary style
+    );
 
   // Single user DM
   if (target && !mass && !team) {
     const portalUser = getUserByDiscordId(target.id);
     try {
-      await target.send({ embeds: [buildEmbed()] });
+      const msgPayload = {
+        embeds: [buildEmbed(true)],
+        components: emailConfirm ? [buildAckButton(interaction.id)] : []
+      };
+      await target.send(msgPayload);
+
       await logAction(interaction.client, {
         action: '📩 Direct Message Sent',
         moderator: { discordId: interaction.user.id, name: senderPortalUser?.display_name || interaction.user.username },
         target: { discordId: target.id, name: portalUser?.display_name || target.username },
-        reason: `Subject: ${subject}`,
+        reason: `Subject: ${subject}${emailConfirm ? ' [Email Confirmation Requested]' : ''}`,
         color: 0x5865F2,
         fields: [
           { name: '📋 Subject', value: subject, inline: false },
           { name: '💬 Message', value: message.length > 200 ? message.slice(0, 200) + '...' : message, inline: false },
+          ...(emailConfirm ? [{ name: '📧 Email Confirm', value: 'Recipient must acknowledge', inline: false }] : []),
         ]
       });
-      return interaction.editReply({ embeds: [new EmbedBuilder()
-        .setTitle('✅ Message Sent')
-        .setColor(0x22c55e)
-        .setDescription(`Message delivered to **${portalUser?.display_name || target.username}**.`)
-        .setFooter({ text: 'Community Organisation | Staff Assistant' })
-        .setTimestamp()
-      ]});
+
+      return interaction.editReply({
+        embeds: [new EmbedBuilder()
+          .setTitle('✅ Message Sent')
+          .setColor(0x22c55e)
+          .setDescription(
+            `Message delivered to **${portalUser?.display_name || target.username}**.` +
+            (emailConfirm ? '\n\n📧 Recipient must click **Acknowledge & Confirm Read** in the DM.' : '')
+          )
+          .addFields(
+            { name: '📋 Subject', value: subject, inline: true },
+            { name: '👤 Recipient', value: `<@${target.id}>`, inline: true },
+            ...(emailConfirm ? [{ name: '📧 Email Confirm', value: 'Yes', inline: true }] : []),
+          )
+          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setTimestamp()
+        ]
+      });
     } catch (e) {
-      return interaction.editReply({ embeds: [new EmbedBuilder()
-        .setTitle('❌ Failed to Send')
-        .setColor(0xef4444)
-        .setDescription(`Could not deliver message to **${portalUser?.display_name || target.username}**. They may have DMs disabled.`)
-        .setFooter({ text: 'Community Organisation | Staff Assistant' })
-        .setTimestamp()
-      ]});
+      return interaction.editReply({
+        embeds: [new EmbedBuilder()
+          .setTitle('❌ Failed to Send')
+          .setColor(0xef4444)
+          .setDescription(`Could not deliver message to **${portalUser?.display_name || target.username}**. They may have DMs disabled.`)
+          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setTimestamp()
+        ]
+      });
     }
   }
 
-  // Mass or team DM
+  // Mass or team DM — email confirm not supported for mass/team
+  if (emailConfirm) {
+    return interaction.editReply({ content: '❌ `email` option is only available for single user DMs.' });
+  }
+
   let recipients = [];
 
   if (mass) {
@@ -150,7 +197,7 @@ export async function execute(interaction) {
     try {
       const discordUser = await interaction.client.users.fetch(recipient.discord_id).catch(() => null);
       if (!discordUser) { failed++; failedUsers.push(recipient.display_name || recipient.discord_id); continue; }
-      await discordUser.send({ embeds: [buildEmbed()] });
+      await discordUser.send({ embeds: [buildEmbed(false)] });
       sent++;
       await new Promise(r => setTimeout(r, 500));
     } catch {
