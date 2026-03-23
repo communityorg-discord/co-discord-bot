@@ -61,36 +61,42 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isChatInputCommand()) {
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
+    let success = true;
+    let errorMessage = null;
     try {
       await command.execute(interaction);
-
-      // Log command usage
-      if (COMMAND_LOG_CHANNEL_ID) {
-        const portalUser = getUserByDiscordId(interaction.user.id);
-        const logChannel = await interaction.client.channels.fetch(COMMAND_LOG_CHANNEL_ID).catch(() => null);
-        if (logChannel) {
-          const options = interaction.options?._hoistedOptions?.map(o => `**${o.name}:** ${o.value}`).join('\n') || '';
-          const embed = new EmbedBuilder()
-            .setTitle(`📋 Command Executed`)
-            .setColor(0x5865F2)
-            .addFields(
-              { name: 'Command', value: `/${interaction.commandName}`, inline: true },
-              { name: 'User', value: `${portalUser?.display_name || interaction.user.username} (<@${interaction.user.id}>)`, inline: true },
-              { name: 'Guild', value: interaction.guild?.name || 'DM', inline: true },
-              ...(options ? [{ name: 'Options', value: options, inline: false }] : []),
-            )
-            .setFooter({ text: 'Community Organisation | Staff Assistant' })
-            .setTimestamp();
-          await logChannel.send({ embeds: [embed] }).catch(() => {});
-        }
-      }
     } catch (e) {
+      success = false;
+      errorMessage = e.message;
       console.error(`[CO Bot] Command error (${interaction.commandName}):`, e.message);
       const msg = { content: '❌ An error occurred. Please try again or contact an administrator.', ephemeral: true };
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp(msg);
       } else {
         await interaction.reply(msg);
+      }
+    }
+
+    // Always log the command attempt
+    if (COMMAND_LOG_CHANNEL_ID) {
+      const portalUser = getUserByDiscordId(interaction.user.id);
+      const logChannel = await interaction.client.channels.fetch(COMMAND_LOG_CHANNEL_ID).catch(() => null);
+      if (logChannel) {
+        const options = interaction.options?._hoistedOptions?.map(o => `**${o.name}:** ${o.value}`).join('\n') || '';
+        const embed = new EmbedBuilder()
+          .setTitle(success ? `✅ Command Executed` : `❌ Command Failed`)
+          .setColor(success ? 0x22c55e : 0xef4444)
+          .addFields(
+            { name: 'Command', value: `/${interaction.commandName}`, inline: true },
+            { name: 'User', value: `${portalUser?.display_name || interaction.user.username} (<@${interaction.user.id}>)`, inline: true },
+            { name: 'Guild', value: interaction.guild?.name || 'DM', inline: true },
+            { name: 'Status', value: success ? '✅ Success' : '❌ Failed', inline: true },
+            ...(options ? [{ name: 'Options', value: options, inline: false }] : []),
+            ...(errorMessage ? [{ name: 'Error', value: errorMessage.slice(0, 500), inline: false }] : []),
+          )
+          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setTimestamp();
+        await logChannel.send({ embeds: [embed] }).catch(() => {});
       }
     }
   }
