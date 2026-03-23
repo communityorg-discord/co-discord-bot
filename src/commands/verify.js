@@ -123,15 +123,10 @@ export async function handleButton(interaction) {
     const entry = db.prepare("SELECT * FROM verification_queue WHERE id = ? AND status = 'pending'").get(queueId);
     if (!entry) return interaction.reply({ content: '❌ Request not found or already processed.', ephemeral: true });
 
-    // Defer immediately — send first reply before slow work
-    await interaction.deferReply({ ephemeral: true });
     const isOfficial = Number(entry.verified_official) === 1;
 
-    // Send "processing" immediately so Discord stops thinking
-    await interaction.editReply({
-      content: '⏳ Processing verification — applying roles across servers...',
-      ephemeral: true
-    });
+    // Acknowledge immediately with deferUpdate — then edit original message after slow work
+    await interaction.deferUpdate();
 
     // Apply roles + nickname across all guilds (slow)
     await applyVerification(interaction.client, entry.discord_id, entry.position, entry.requested_nickname);
@@ -146,16 +141,16 @@ export async function handleButton(interaction) {
     db.prepare("UPDATE verification_queue SET status = 'approved', reviewed_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
       .run(interaction.user.id, queueId);
 
-    const replyEmbed = new EmbedBuilder()
+    // Edit the ORIGINAL button message to show the result (same as unverify)
+    const updatedEmbed = new EmbedBuilder()
       .setColor(0x22c55e)
-      .setTitle(`✅ Verification **#${queueId}** Approved${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
-      .setDescription(`Verification approved. <@${entry.discord_id}> can now verify.`)
+      .setTitle(`✅ Verification Request #${queueId} — Approved${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
       .addFields({ name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false })
-      .addFields({ name: 'User', value: `<@${entry.discord_id}>`, inline: false });
+      .addFields({ name: 'Note', value: `Verified - Employee: ${entry.employee_number || 'N/A'}`, inline: false });
 
-    await interaction.editReply({ embeds: [replyEmbed] });
+    await interaction.message.edit({ embeds: [updatedEmbed], components: [] });
 
-    // DM the user
+    // DM the user (fire and forget)
     try {
       const user = await interaction.client.users.fetch(entry.discord_id);
       const note = isOfficial ? 'Official Account' : `Employee: ${entry.employee_number || 'N/A'}`;
@@ -213,8 +208,8 @@ export async function handleModal(interaction) {
     .addFields({ name: 'Denied By', value: `<@${interaction.user.id}>`, inline: false })
     .addFields({ name: 'Reason', value: reason, inline: false });
 
-  await interaction.deferReply({ ephemeral: true });
-  await interaction.editReply({ embeds: [deniedEmbed] });
+  await interaction.deferUpdate();
+  await interaction.message.edit({ embeds: [deniedEmbed], components: [] });
 
   try {
     const user = await interaction.client.users.fetch(entry.discord_id);
