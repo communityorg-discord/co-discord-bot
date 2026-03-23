@@ -89,32 +89,6 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     active INTEGER DEFAULT 1
   );
-
-  CREATE TABLE IF NOT EXISTS elections (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    created_by TEXT,
-    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    ends_at DATETIME,
-    active INTEGER DEFAULT 1,
-    result TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS election_candidates (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    election_id INTEGER,
-    discord_id TEXT,
-    name TEXT,
-    whitelisted INTEGER DEFAULT 0
-  );
-
-  CREATE TABLE IF NOT EXISTS election_votes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    election_id INTEGER,
-    voter_id TEXT,
-    candidate_id INTEGER,
-    voted_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
 `);
 
 export default db;
