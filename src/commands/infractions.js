@@ -45,6 +45,20 @@ export async function execute(interaction) {
     const id = interaction.options.getInteger('id');
     const deleted = deleteInfraction(id, interaction.user.id);
     if (!deleted) return interaction.reply({ content: `❌ Infraction #${id} not found.`, ephemeral: true });
+
+    await logAction(interaction.client, {
+      action: '🗑️ Infraction Deleted',
+      moderator: { discordId: interaction.user.id, name: interaction.user.username },
+      target: { discordId: deleted.discord_id, name: getUserByDiscordId(deleted.discord_id)?.display_name || deleted.discord_id },
+      reason: `Infraction #${id} (${deleted.type})`,
+      color: 0x22C55E,
+      fields: [
+        { name: 'Infraction ID', value: `#${id}`, inline: true },
+        { name: 'Type', value: deleted.type, inline: true },
+        { name: 'Original Reason', value: deleted.reason || 'N/A', inline: false },
+      ],
+      specificChannelId: INFRACTIONS_CASES_LOG_CHANNEL_ID
+    });
     await interaction.reply({ embeds: [new EmbedBuilder()
       .setTitle('🗑️ Infraction Deleted')
       .setColor(0x22C55E)
