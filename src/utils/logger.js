@@ -1,9 +1,10 @@
 import { EmbedBuilder } from 'discord.js';
-import { LOG_CHANNEL_ID } from '../config.js';
+import { LOG_CHANNEL_ID, MOD_LOG_CHANNEL_ID } from '../config.js';
 
 export async function logAction(client, { action, moderator, target, reason, color = 0x5865F2, fields = [] }) {
   try {
-    const channel = await client.channels.fetch(LOG_CHANNEL_ID).catch(() => null);
+    const channelId = MOD_LOG_CHANNEL_ID || LOG_CHANNEL_ID;
+    const channel = await client.channels.fetch(channelId).catch(() => null);
     if (!channel) return;
     const embed = new EmbedBuilder()
       .setTitle(`📋 ${action}`)

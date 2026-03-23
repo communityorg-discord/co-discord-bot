@@ -11,6 +11,7 @@ export const SUSPENDED_ROLE_ID = process.env.SUSPENDED_ROLE_ID;
 export const UNDER_INVESTIGATION_ROLE_ID = process.env.UNDER_INVESTIGATION_ROLE_ID;
 export const APPEALS_SERVER_ID = process.env.APPEALS_SERVER_ID;
 export const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
+export const MOD_LOG_CHANNEL_ID = process.env.MOD_LOG_CHANNEL_ID;
 export const SUPERUSER_IDS = (process.env.SUPERUSER_IDS || '').split(',').filter(Boolean);
 export const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 

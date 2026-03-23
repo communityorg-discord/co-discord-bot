@@ -176,7 +176,7 @@ export async function execute(interaction) {
     }
 
     // Post to log channel
-    const logChannelId = process.env.LOG_CHANNEL_ID;
+    const logChannelId = process.env.MOD_LOG_CHANNEL_ID || process.env.LOG_CHANNEL_ID;
     if (logChannelId) {
       const logChannel = await interaction.client.channels.fetch(logChannelId).catch(() => null);
       if (logChannel) {
