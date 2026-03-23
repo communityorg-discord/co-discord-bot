@@ -2,6 +2,8 @@ import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, But
 import { getPortalUser, isSuperuser, applyVerification, getOrCreateVerificationChannel } from '../utils/verifyHelper.js';
 import { POSITIONS } from '../utils/positions.js';
 import db from '../utils/botDb.js';
+import { VERIFY_UNVERIFY_LOG_CHANNEL_ID } from '../config.js';
+import { logAction } from '../utils/logger.js';
 
 // Official account bypass IDs — can verify as CO | Official Account without portal entry
 const OFFICIAL_BYPASS_IDS = ['878775920180228127', '1355367209249148928'];
@@ -108,6 +110,40 @@ export async function execute(interaction) {
   }
 }
 
+// Build per-guild result lines for the embed
+function buildGuildResultsField(results, type) {
+  const lines = [];
+  for (const r of results) {
+    if (r.error && !r.success) {
+      lines.push(`❌ **${r.guild}** — ${r.error}`);
+      continue;
+    }
+    if (type === 'verify') {
+      let line = `✅ **${r.guild}**`;
+      const parts = [];
+      if (r.nicknameSet) parts.push('Nickname set');
+      else if (r.nicknameError) parts.push(`Nickname failed: ${r.nicknameError}`);
+      if (r.rolesAdded.length) parts.push(`+${r.rolesAdded.length} role(s)`);
+      if (r.rolesRemoveFailed.length) parts.push(`⚠️ Could not remove: ${r.rolesRemoveFailed.join(', ')}`);
+      if (r.rolesAddFailed.length) parts.push(`⚠️ Could not add: ${r.rolesAddFailed.join(', ')}`);
+      if (!parts.length && !r.nicknameSet) parts.push('No changes needed');
+      if (parts.length) line += ` — ${parts.join(' | ')}`;
+      lines.push(line);
+    } else {
+      let line = r.success ? `✅ **${r.guild}**` : `❌ **${r.guild}**`;
+      const parts = [];
+      if (r.nicknameReset) parts.push('Nickname reset');
+      else if (r.nicknameError) parts.push(`Nickname failed: ${r.nicknameError}`);
+      if (r.rolesRemoved.length) parts.push(`-${r.rolesRemoved.length} role(s)`);
+      if (r.rolesRemoveFailed.length) parts.push(`⚠️ Could not remove: ${r.rolesRemoveFailed.join(', ')}`);
+      if (!parts.length) parts.push('No roles to remove');
+      line += ` — ${parts.join(' | ')}`;
+      lines.push(line);
+    }
+  }
+  return lines.join('\n');
+}
+
 // Button interaction handler
 export async function handleButton(interaction) {
   const customId = interaction.customId;
@@ -125,11 +161,10 @@ export async function handleButton(interaction) {
 
     const isOfficial = Number(entry.verified_official) === 1;
 
-    // Acknowledge immediately with deferUpdate — then edit original message after slow work
     await interaction.deferUpdate();
 
-    // Apply roles + nickname across all guilds (slow)
-    await applyVerification(interaction.client, entry.discord_id, entry.position, entry.requested_nickname);
+    // Apply roles + nickname across all guilds — get detailed results
+    const results = await applyVerification(interaction.client, entry.discord_id, entry.position, entry.requested_nickname);
 
     // Save to verified_members
     db.prepare(`
@@ -141,36 +176,66 @@ export async function handleButton(interaction) {
     db.prepare("UPDATE verification_queue SET status = 'approved', reviewed_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
       .run(interaction.user.id, queueId);
 
-    // Edit the ORIGINAL button message — rebuild full embed with all original fields + approval fields
+    const guildFieldLines = buildGuildResultsField(results, 'verify');
+    const successCount = results.filter(r => r.success && !r.rolesAddFailed.length && !r.rolesRemoveFailed.length).length;
+    const partialCount = results.filter(r => r.success && (r.rolesAddFailed.length || r.rolesRemoveFailed.length)).length;
+    const failedCount = results.filter(r => !r.success).length;
+
     const fields = [
-        { name: 'User', value: `<@${entry.discord_id}> (${entry.discord_id})`, inline: false },
-        { name: 'Position Requested', value: entry.position, inline: false },
-        { name: 'Nickname Requested', value: entry.requested_nickname, inline: false },
-        { name: 'Supervisor', value: entry.supervisor_name || 'N/A', inline: false },
-        { name: 'Employee Number', value: entry.employee_number || 'N/A', inline: false },
-        { name: 'Verification ID', value: `#${queueId}`, inline: false },
-        { name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false },
-        { name: 'Note', value: `Verified - Employee: ${entry.employee_number || 'N/A'}`, inline: false },
+      { name: 'User', value: `<@${entry.discord_id}> (${entry.discord_id})`, inline: false },
+      { name: 'Position', value: entry.position, inline: true },
+      { name: 'Nickname', value: entry.requested_nickname, inline: true },
+      { name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false },
+      { name: 'Servers Applied', value: `${successCount} ✅ | ${partialCount} ⚠️ | ${failedCount} ❌`, inline: false },
+      { name: 'Per-Server Results', value: guildFieldLines.slice(0, 1024) || 'None', inline: false },
     ];
-    if (isOfficial) {
-        fields.push({ name: 'Account Type', value: 'Official Account (Bypass)', inline: false });
-    }
+
+    if (isOfficial) fields.push({ name: 'Account Type', value: 'Official Account (Bypass)', inline: false });
+
     const updatedEmbed = new EmbedBuilder()
-      .setColor(0x22c55e)
-      .setTitle(`✅ Verification Request #${queueId} — Approved${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
+      .setColor(failedCount > 0 ? 0xF59E0B : 0x22C55E)
+      .setTitle(`✅ Verification #${queueId} — Approved${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
       .addFields(...fields)
       .setTimestamp();
 
     await interaction.message.edit({ embeds: [updatedEmbed], components: [] });
 
-    // DM the user (fire and forget)
+    // Log to verify-unverify-logs + full-mod-logs
+    await logAction(interaction.client, {
+      action: `✅ Staff Verified${isOfficial ? ' [Official Account]' : ''}`,
+      moderator: { discordId: interaction.user.id, name: interaction.user.username },
+      target: { discordId: entry.discord_id, name: entry.requested_nickname },
+      reason: entry.position,
+      color: 0x22C55E,
+      fields: [
+        { name: 'Position', value: entry.position, inline: true },
+        { name: 'Nickname', value: entry.requested_nickname, inline: true },
+        { name: 'Servers Applied', value: `${successCount} ✅ | ${partialCount} ⚠️ | ${failedCount} ❌`, inline: false },
+        { name: 'Per-Server Results', value: guildFieldLines.slice(0, 1024) || 'None', inline: false },
+      ],
+      specificChannelId: VERIFY_UNVERIFY_LOG_CHANNEL_ID
+    });
+
+    // DM the user
     try {
       const user = await interaction.client.users.fetch(entry.discord_id);
+      const summary = guildFieldLines.split('\n').slice(0, 20).join('\n');
       const note = isOfficial ? 'Official Account' : `Employee: ${entry.employee_number || 'N/A'}`;
-      await user.send(`✅ Your CO verification has been **approved** by <@${interaction.user.id}>.
-
-Your roles and nickname have been applied across all CO servers.
-**Note:** Verified - ${note}`);
+      await user.send({
+        embeds: [new EmbedBuilder()
+          .setTitle('✅ CO Verification Approved')
+          .setColor(0x22C55E)
+          .setDescription(`Your CO staff verification has been approved by <@${interaction.user.id}>.`)
+          .addFields(
+            { name: 'Position', value: entry.position, inline: true },
+            { name: 'Note', value: `Verified - ${note}`, inline: false },
+            { name: 'Per-Server Results', value: summary || 'None', inline: false },
+            { name: 'Servers Applied', value: `${successCount} ✅ | ${partialCount} ⚠️ | ${failedCount} ❌`, inline: false },
+          )
+          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setTimestamp()
+        ]
+      });
     } catch (e) {
       console.warn('[Verify] Could not DM user:', e.message);
     }

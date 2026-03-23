@@ -1,21 +1,46 @@
 import { POSITIONS, ALL_MANAGED_ROLES } from './positions.js';
 import db from './botDb.js';
 
-// Apply roles + nickname for a verified member across ALL guilds
+/**
+ * Apply roles + nickname for a verified member across ALL guilds.
+ * Returns detailed per-guild results showing roles added/removed and any failures.
+ */
 export async function applyVerification(client, discordId, position, nickname) {
   const roleNames = [...(POSITIONS[position] || []), 'Verified', 'CO Staff'];
   const results = [];
 
   for (const [guildId, guild] of client.guilds.cache) {
+    const guildResult = {
+      guild: guild.name,
+      guildId,
+      nicknameSet: false,
+      nicknameError: null,
+      rolesAdded: [],
+      rolesAddFailed: [],
+      rolesRemoved: [],
+      rolesRemoveFailed: [],
+      success: true,
+      error: null
+    };
+
     try {
       const member = await guild.members.fetch(discordId).catch(() => null);
-      if (!member) continue;
+      if (!member) {
+        guildResult.success = false;
+        guildResult.error = 'Member not found in this server';
+        results.push(guildResult);
+        continue;
+      }
 
       // Set nickname
-      try {
-        await member.setNickname(nickname);
-      } catch (e) {
-        console.warn(`[Verify] Could not set nickname in ${guild.name}:`, e.message);
+      if (nickname) {
+        try {
+          await member.setNickname(nickname);
+          guildResult.nicknameSet = true;
+        } catch (e) {
+          guildResult.nicknameError = e.message;
+          guildResult.success = false;
+        }
       }
 
       // Get all managed role objects that exist in this guild
@@ -23,56 +48,105 @@ export async function applyVerification(client, discordId, position, nickname) {
       const toAssign = guild.roles.cache.filter(r => roleNames.includes(r.name));
       const toRemove = allManagedInGuild.filter(r => !roleNames.includes(r.name));
 
-      // Remove old CO roles
+      // Remove old CO roles — track individual failures
       if (toRemove.size > 0) {
-        await member.roles.remove(toRemove).catch(e => console.warn(`[Verify] Remove roles error in ${guild.name}:`, e.message));
-      }
-      // Add new roles
-      if (toAssign.size > 0) {
-        await member.roles.add(toAssign).catch(e => console.warn(`[Verify] Add roles error in ${guild.name}:`, e.message));
+        const removeResult = await member.roles.remove(toRemove).catch(e => ({ error: e.message }));
+        if (removeResult.error) {
+          guildResult.rolesRemoveFailed = toRemove.map(r => r.name);
+          guildResult.success = false;
+          guildResult.error = removeResult.error;
+        } else {
+          guildResult.rolesRemoved = toRemove.map(r => r.name);
+        }
       }
 
-      results.push({ guild: guild.name, success: true });
+      // Add new roles — track individual failures
+      if (toAssign.size > 0) {
+        const addResult = await member.roles.add(toAssign).catch(e => ({ error: e.message }));
+        if (addResult.error) {
+          guildResult.rolesAddFailed = toAssign.map(r => r.name);
+          guildResult.success = false;
+          guildResult.error = addResult.error;
+        } else {
+          guildResult.rolesAdded = toAssign.map(r => r.name);
+        }
+      }
+
+      results.push(guildResult);
     } catch (e) {
-      console.error(`[Verify] Error in guild ${guild.name}:`, e.message);
-      results.push({ guild: guild.name, success: false, error: e.message });
+      guildResult.success = false;
+      guildResult.error = e.message;
+      results.push(guildResult);
     }
   }
 
-  console.log(`[Verify] Applied verification for ${discordId} (${position}) across ${results.length} guilds`);
+  const successCount = results.filter(r => r.success).length;
+  console.log(`[Verify] Applied for ${discordId} (${position}) — ${successCount}/${results.length} guilds OK`);
   return results;
 }
 
-// Strip all CO roles + reset nickname across ALL guilds
+/**
+ * Strip all CO roles + reset nickname across ALL guilds.
+ * Returns detailed per-guild results showing roles removed and any failures.
+ */
 export async function stripVerification(client, discordId, username) {
   const results = [];
 
   for (const [guildId, guild] of client.guilds.cache) {
+    const guildResult = {
+      guild: guild.name,
+      guildId,
+      nicknameReset: false,
+      nicknameError: null,
+      rolesRemoved: [],
+      rolesRemoveFailed: [],
+      success: true,
+      error: null
+    };
+
     try {
       const member = await guild.members.fetch(discordId).catch(() => null);
-      if (!member) continue;
+      if (!member) {
+        guildResult.success = false;
+        guildResult.error = 'Member not found in this server';
+        results.push(guildResult);
+        continue;
+      }
 
       // Reset nickname to username
-      try {
-        await member.setNickname(username || null);
-      } catch (e) {
-        console.warn(`[Unverify] Could not reset nickname in ${guild.name}:`, e.message);
+      if (username !== undefined) {
+        try {
+          await member.setNickname(username || null);
+          guildResult.nicknameReset = true;
+        } catch (e) {
+          guildResult.nicknameError = e.message;
+          guildResult.success = false;
+        }
       }
 
-      // Remove all managed CO roles
+      // Remove all managed CO roles — track individual failures
       const toRemove = guild.roles.cache.filter(r => ALL_MANAGED_ROLES.includes(r.name));
       if (toRemove.size > 0) {
-        await member.roles.remove(toRemove).catch(e => console.warn(`[Unverify] Remove roles error in ${guild.name}:`, e.message));
+        const removeResult = await member.roles.remove(toRemove).catch(e => ({ error: e.message }));
+        if (removeResult.error) {
+          guildResult.rolesRemoveFailed = toRemove.map(r => r.name);
+          guildResult.success = false;
+          guildResult.error = removeResult.error;
+        } else {
+          guildResult.rolesRemoved = toRemove.map(r => r.name);
+        }
       }
 
-      results.push({ guild: guild.name, success: true });
+      results.push(guildResult);
     } catch (e) {
-      console.error(`[Unverify] Error in guild ${guild.name}:`, e.message);
-      results.push({ guild: guild.name, success: false, error: e.message });
+      guildResult.success = false;
+      guildResult.error = e.message;
+      results.push(guildResult);
     }
   }
 
-  console.log(`[Unverify] Stripped verification for ${discordId} across ${results.length} guilds`);
+  const successCount = results.filter(r => r.success).length;
+  console.log(`[Unverify] Stripped for ${discordId} — ${successCount}/${results.length} guilds OK`);
   return results;
 }
 
