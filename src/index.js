@@ -23,6 +23,7 @@ import * as unban from './commands/unban.js';
 import { handleButton as verifyButton, handleModal as verifyModal } from './commands/verify.js';
 import { handleButton as unverifyButton, handleModal as unverifyModal } from './commands/unverify.js';
 import * as verify from './commands/verify.js';
+import * as dm from './commands/dm.js';
 import * as unverify from './commands/unverify.js';
 
 config();
@@ -32,7 +33,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, election, ban, unban, verify, unverify];
+const commands = [dm, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, election, ban, unban, verify, unverify];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }

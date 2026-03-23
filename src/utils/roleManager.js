@@ -132,6 +132,9 @@ export async function suspendAcrossGuilds(client, discordId) {
 
       // Add Suspended role (create if missing)
       const suspendedRole = await getOrCreateRole(guild, 'Suspended');
+      console.log('[Suspend Debug] guild:', guild.name, 'member roles:', member.roles.cache.map(r => r.name).join(', '));
+      console.log('[Suspend Debug] toRemove count:', toRemove.size, 'roles:', toRemove.map(r => r.name).join(', '));
+      console.log('[Suspend Debug] suspendedRole:', suspendedRole?.name || 'NOT FOUND');
       if (suspendedRole) await member.roles.add(suspendedRole).catch(e => console.warn('[Suspend] Add error in', guild.name, e.message));
 
       console.log('[Suspend] Applied in', guild.name);
