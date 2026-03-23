@@ -218,7 +218,8 @@ export async function handleButton(interaction) {
       .setDescription(`Approved <@${entry.discord_id}> at **Level ${overrideLevel}** override.`)
       .setTimestamp();
 
-    await interaction.reply({ embeds: [ackEmbed], ephemeral: true });
+    await interaction.deferReply();
+    await interaction.editReply({ embeds: [ackEmbed] });
 
     await logAction(interaction.client, {
       action: `✅ Staff Verified [Lvl ${overrideLevel} Override]${isOfficial ? ' [Official Account]' : ''}`,
