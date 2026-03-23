@@ -96,26 +96,12 @@ export async function execute(interaction) {
       .setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId(`verify_auth_${queueId}`)
-        .setPlaceholder('Select authorisation level...')
-        .addOptions([
-          { label: 'No Override (Use Default)', value: '0' },
-          { label: 'Authorisation Level 7', value: '7' },
-          { label: 'Authorisation Level 6', value: '6' },
-          { label: 'Authorisation Level 5', value: '5' },
-          { label: 'Authorisation Level 4', value: '4' },
-          { label: 'Authorisation Level 3', value: '3' },
-          { label: 'Authorisation Level 2', value: '2' },
-          { label: 'Authorisation Level 1', value: '1' },
-        ])
-    );
-
-    const row2 = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`verify_approve_${queueId}_0`).setLabel('Confirm').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`verify_auth_override_${queueId}`).setLabel('Authorisation Level').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`verify_deny_${queueId}`).setLabel('Deny').setStyle(ButtonStyle.Danger),
     );
 
-    const msg = await verifyChannel.send({ embeds: [embed], components: [row, row2] });
+    const msg = await verifyChannel.send({ embeds: [embed], components: [row] });
 
     // Save message ID
     db.prepare("UPDATE verification_queue SET message_id = ? WHERE id = ?").run(msg.id, queueId);
@@ -167,9 +153,9 @@ function buildGuildResultsField(results, type) {
 export async function handleButton(interaction) {
   const customId = interaction.customId;
 
-  // ── Auth Level Select Menu ───────────────────────────────────────────────
-  if (customId.startsWith('verify_auth_')) {
-    const queueId = customId.replace('verify_auth_', '');
+  // ── Auth Override select menu ─────────────────────────────────────────────
+  if (customId.startsWith('verify_auth_select_')) {
+    const queueId = customId.replace('verify_auth_select_', '');
     const overrideLevel = parseInt(interaction.values[0]);
 
     if (!await isSuperuser(interaction.user.id)) {
@@ -183,17 +169,14 @@ export async function handleButton(interaction) {
 
     await interaction.deferUpdate();
 
-    // Apply roles + nickname across all guilds
-    const override = overrideLevel > 0 ? overrideLevel : null;
+    const override = overrideLevel;
     const results = await applyVerification(interaction.client, entry.discord_id, entry.position, entry.requested_nickname, { isProbation: !!Number(entry.is_probation), overrideAuthLevel: override });
 
-    // Save to verified_members
     db.prepare(`
       INSERT OR REPLACE INTO verified_members (discord_id, portal_user_id, position, employee_number, nickname, verified_at, updated_at)
       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `).run(entry.discord_id, entry.portal_user_id || null, entry.position, entry.employee_number, entry.requested_nickname);
 
-    // Update queue status
     db.prepare("UPDATE verification_queue SET status = 'approved', reviewed_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
       .run(interaction.user.id, queueId);
 
@@ -207,40 +190,35 @@ export async function handleButton(interaction) {
       { name: 'Position', value: entry.position, inline: true },
       { name: 'Nickname', value: entry.requested_nickname, inline: true },
       { name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false },
-      { name: 'Auth Level', value: overrideLevel > 0 ? `Override → Level ${overrideLevel}` : 'Default (No Override)', inline: true },
+      { name: 'Auth Level', value: `Override → Level ${overrideLevel}`, inline: true },
     ];
-
     if (isOfficial) fields.push({ name: 'Account Type', value: 'Official Account (Bypass)', inline: false });
 
     const updatedEmbed = new EmbedBuilder()
       .setColor(0x22C55E)
-      .setTitle(`✅ Verification #${queueId} — Approved${overrideLevel > 0 ? ` [Lvl ${overrideLevel} Override]` : ''}${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
+      .setTitle(`✅ Verification #${queueId} — Approved [Lvl ${overrideLevel} Override]${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
       .addFields(...fields)
       .setTimestamp();
 
-    // Fetch original message and edit it
     let originalMsg = null;
     try {
       const channel = await interaction.client.channels.fetch(entry.channel_id);
       originalMsg = await channel.messages.fetch(entry.message_id);
-    } catch (e) {
-      console.warn(`[Verify] Could not fetch original message: ${e.message}`);
-    }
+    } catch (e) {}
 
     if (originalMsg) {
       await originalMsg.edit({ embeds: [updatedEmbed], components: [] }).catch(() => {});
     }
 
-    // Log to verify-unverify-logs
     await logAction(interaction.client, {
-      action: `✅ Staff Verified${overrideLevel > 0 ? ` [Lvl ${overrideLevel} Override]` : ''}${isOfficial ? ' [Official Account]' : ''}`,
+      action: `✅ Staff Verified [Lvl ${overrideLevel} Override]${isOfficial ? ' [Official Account]' : ''}`,
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       target: { discordId: entry.discord_id, name: entry.requested_nickname },
       reason: entry.position,
       color: 0x22C55E,
       fields: [
         { name: 'Position', value: entry.position, inline: true },
-        { name: 'Auth Level', value: overrideLevel > 0 ? `Override → Level ${overrideLevel}` : 'Default (No Override)', inline: true },
+        { name: 'Auth Level', value: `Override → Level ${overrideLevel}`, inline: true },
         { name: 'Nickname', value: entry.requested_nickname, inline: true },
         { name: 'Servers Applied', value: `${successCount} ✅ | ${partialCount} ⚠️ | ${failedCount} ❌`, inline: false },
         { name: 'Per-Server Results', value: guildFieldLines.slice(0, 1024) || 'None', inline: false },
@@ -248,7 +226,7 @@ export async function handleButton(interaction) {
       specificChannelId: VERIFY_UNVERIFY_LOG_CHANNEL_ID
     });
 
-    // DM the user — welcome message with 7-day invite links
+    // DM the user
     try {
       const user = await interaction.client.users.fetch(entry.discord_id);
       const inviteLines = [];
@@ -263,7 +241,6 @@ export async function handleButton(interaction) {
           }
         } catch {}
       }
-
       await user.send({
         embeds: [new EmbedBuilder()
           .setTitle("🏛️ Welcome to the Community Organisation!")
@@ -281,6 +258,38 @@ export async function handleButton(interaction) {
     } catch (e) {
       console.warn("[Verify] Could not DM user:", e.message);
     }
+    return;
+  }
+
+  // ── Auth Override button — show ephemeral select menu ──────────────────
+  if (customId.startsWith('verify_auth_override_')) {
+    const queueId = customId.replace('verify_auth_override_', '');
+    if (!await isSuperuser(interaction.user.id)) {
+      return interaction.reply({ content: '❌ Only superusers can use this.', ephemeral: true });
+    }
+
+    const overrideRow = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`verify_auth_select_${queueId}`)
+        .setPlaceholder('Select authorisation level override...')
+        .addOptions([
+          { label: 'Authorisation Level 7', value: '7' },
+          { label: 'Authorisation Level 6', value: '6' },
+          { label: 'Authorisation Level 5', value: '5' },
+          { label: 'Authorisation Level 4', value: '4' },
+          { label: 'Authorisation Level 3', value: '3' },
+          { label: 'Authorisation Level 2', value: '2' },
+          { label: 'Authorisation Level 1', value: '1' },
+        ])
+    );
+
+    const infoEmbed = new EmbedBuilder()
+      .setColor(0x5865F2)
+      .setTitle('🔐 Authorisation Level Override')
+      .setDescription(`Select the authorisation level to assign for verification request **#${queueId}**.\n\nThe selected level will be applied across all servers.`)
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [infoEmbed], components: [overrideRow], ephemeral: true });
     return;
   }
 
