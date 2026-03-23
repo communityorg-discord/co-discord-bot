@@ -24,6 +24,7 @@ import { handleButton as verifyButton, handleModal as verifyModal } from './comm
 import { handleButton as unverifyButton, handleModal as unverifyModal } from './commands/unverify.js';
 import * as verify from './commands/verify.js';
 import * as dm from './commands/dm.js';
+import * as purge from './commands/purge.js';
 import * as unverify from './commands/unverify.js';
 
 config();
@@ -33,7 +34,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, election, ban, unban, verify, unverify];
+const commands = [dm, purge, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, election, ban, unban, verify, unverify];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
