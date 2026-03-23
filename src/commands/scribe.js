@@ -7,8 +7,33 @@ function generateHTML(messages, channel, guild, requestedBy, limit) {
   const rows = messages.map(m => {
     const time = new Date(m.createdTimestamp).toLocaleString('en-GB', { timeZone: 'UTC' });
     const avatar = m.author.displayAvatarURL({ size: 64, extension: 'png' });
-    const content = m.content
-      ? m.content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const authorName = m.author.displayName || m.author.username;
+
+    // Resolve Discord mentions (<@id>, <#id>, <@&id>) to actual names
+    let resolvedContent = m.content || '';
+    if (resolvedContent) {
+      // Replace user mentions
+      resolvedContent = resolvedContent.replace(/<@!?(\d+)>/g, (match, id) => {
+        const user = m.mentions.users.get(id) || m.mentions.members?.get(id);
+        if (user) return '@' + (user.displayName || user.username || id);
+        return '@' + id;
+      });
+      // Replace channel mentions
+      resolvedContent = resolvedContent.replace(/<#(\d+)>/g, (match, id) => {
+        const ch = m.mentions.channels?.get(id);
+        return ch ? '#' + ch.name : '#' + id;
+      });
+      // Replace role mentions
+      resolvedContent = resolvedContent.replace(/<@&(\d+)>/g, (match, id) => {
+        const role = m.mentions.roles?.get(id);
+        return role ? '@' + role.name : '@' + id;
+      });
+      resolvedContent = resolvedContent.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    const hasContent = resolvedContent.trim().length > 0;
+    const content = hasContent
+      ? resolvedContent
       : '<em style="color:#666">No text content</em>';
     const attachments = [...m.attachments.values()].map(a =>
       a.contentType?.startsWith('image/')
@@ -23,7 +48,7 @@ function generateHTML(messages, channel, guild, requestedBy, limit) {
  <img src="${avatar}" style="width:36px;height:36px;border-radius:50%;flex-shrink:0" onerror="this.style.display='none'" />
  <div style="flex:1;min-width:0">
  <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
- <span style="font-weight:700;color:#fff">${m.author.username}</span>
+ <span style="font-weight:700;color:#fff">${authorName}</span>
  <span style="font-size:11px;color:#666">${time} UTC</span>
  ${m.author.bot ? '<span style="font-size:10px;background:#5865f2;color:#fff;padding:1px 5px;border-radius:3px">BOT</span>' : ''}
  </div>
