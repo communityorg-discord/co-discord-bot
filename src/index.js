@@ -293,7 +293,6 @@ client.on('interactionCreate', async interaction => {
       });
       return;
     }
-  }
 
   // Verify/Unverify modal handlers
   if (interaction.isModalSubmit()) {
