@@ -88,40 +88,39 @@ export async function execute(interaction) {
 
   await interaction.deferReply({ ephemeral: true });
 
-  const buildEmbed = (forDM) => {
-    const embed = new EmbedBuilder()
-      .setTitle(`📩 ${subject}`)
-      .setColor(0x5865F2)
-      .setDescription(message)
-      .addFields({ name: 'From', value: `${senderPortalUser?.display_name || interaction.user.username} — via CO Staff Management`, inline: false })
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
-      .setTimestamp();
-
-    if (forDM && emailConfirm) {
-      embed.setDescription(
-        `**📧 Please check your email for important information.**\n\n${message}`
-      );
-    }
-
-    return embed;
-  };
-
-  const buildAckButton = (interactionId) =>
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`dm_ack_${interactionId}`)
-        .setLabel('Acknowledge & Confirm Read')
-        .setStyle(2) // secondary style
-    );
+  const buildEmbed = () => new EmbedBuilder()
+    .setTitle(`📩 ${subject}`)
+    .setColor(0x5865F2)
+    .setDescription(message)
+    .addFields({ name: 'From', value: `${senderPortalUser?.display_name || interaction.user.username} — via CO Staff Management`, inline: false })
+    .setFooter({ text: 'Community Organisation | Staff Assistant' })
+    .setTimestamp();
 
   // Single user DM
   if (target && !mass && !team) {
     const portalUser = getUserByDiscordId(target.id);
     try {
       const msgPayload = {
-        embeds: [buildEmbed(true)],
-        components: emailConfirm ? [buildAckButton(interaction.id)] : []
+        embeds: [buildEmbed()],
+        components: emailConfirm ? [new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`dm_ack_${interaction.id}`)
+            .setLabel('Acknowledge & Confirm Read')
+            .setStyle(2)
+        )] : []
       };
+
+      if (emailConfirm) {
+        msgPayload.embeds = [new EmbedBuilder()
+          .setTitle(`📩 ${subject}`)
+          .setColor(0x5865F2)
+          .setDescription(`**📧 Please check your email for important information.**\n\n${message}`)
+          .addFields({ name: 'From', value: `${senderPortalUser?.display_name || interaction.user.username} — via CO Staff Management`, inline: false })
+          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setTimestamp()
+        ];
+      }
+
       await target.send(msgPayload);
 
       await logAction(interaction.client, {
@@ -167,11 +166,7 @@ export async function execute(interaction) {
     }
   }
 
-  // Mass or team DM — email confirm not supported for mass/team
-  if (emailConfirm) {
-    return interaction.editReply({ content: '❌ `email` option is only available for single user DMs.' });
-  }
-
+  // Mass or team DM
   let recipients = [];
 
   if (mass) {
@@ -191,13 +186,33 @@ export async function execute(interaction) {
 
   let sent = 0;
   let failed = 0;
-  const failedUsers = [];
+  let failedUsers = [];
 
   for (const recipient of recipients) {
     try {
       const discordUser = await interaction.client.users.fetch(recipient.discord_id).catch(() => null);
       if (!discordUser) { failed++; failedUsers.push(recipient.display_name || recipient.discord_id); continue; }
-      await discordUser.send({ embeds: [buildEmbed(false)] });
+
+      const msgPayload = { embeds: [buildEmbed()] };
+
+      if (emailConfirm) {
+        msgPayload.embeds = [new EmbedBuilder()
+          .setTitle(`📩 ${subject}`)
+          .setColor(0x5865F2)
+          .setDescription(`**📧 Please check your email for important information.**\n\n${message}`)
+          .addFields({ name: 'From', value: `${senderPortalUser?.display_name || interaction.user.username} — via CO Staff Management`, inline: false })
+          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setTimestamp()
+        ];
+        msgPayload.components = [new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`dm_ack_${interaction.id}_${recipient.discord_id}`)
+            .setLabel('Acknowledge & Confirm Read')
+            .setStyle(2)
+        )];
+      }
+
+      await discordUser.send(msgPayload);
       sent++;
       await new Promise(r => setTimeout(r, 500));
     } catch {
@@ -210,7 +225,7 @@ export async function execute(interaction) {
     action: mass ? '📩 Mass DM Sent' : `📩 Team DM Sent — ${TEAMS[team]}`,
     moderator: { discordId: interaction.user.id, name: senderPortalUser?.display_name || interaction.user.username },
     target: { discordId: 'MULTIPLE', name: mass ? 'All Staff' : TEAMS[team] },
-    reason: `Subject: ${subject}`,
+    reason: `Subject: ${subject}${emailConfirm ? ' [Email Confirmation Requested]' : ''}`,
     color: 0x5865F2,
     fields: [
       { name: '📋 Subject', value: subject, inline: false },
@@ -218,17 +233,22 @@ export async function execute(interaction) {
       { name: '✅ Delivered', value: String(sent), inline: true },
       { name: '❌ Failed', value: String(failed), inline: true },
       { name: '👥 Total', value: String(recipients.length), inline: true },
+      ...(emailConfirm ? [{ name: '📧 Email Confirm', value: `${recipients.length} recipients must acknowledge`, inline: false }] : []),
     ]
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()
     .setTitle(mass ? '📩 Mass DM Complete' : `📩 Team DM Complete`)
     .setColor(failed === 0 ? 0x22c55e : 0xf59e0b)
-    .setDescription(mass ? `Message sent to all active CO staff.` : `Message sent to **${TEAMS[team]}**.`)
+    .setDescription(
+      (mass ? `Message sent to all active CO staff.` : `Message sent to **${TEAMS[team]}**.`) +
+      (emailConfirm ? `\n\n📧 All recipients must click **Acknowledge & Confirm Read** in their DM.` : '')
+    )
     .addFields(
       { name: '✅ Delivered', value: String(sent), inline: true },
       { name: '❌ Failed', value: String(failed), inline: true },
       { name: '👥 Total', value: String(recipients.length), inline: true },
+      ...(emailConfirm ? [{ name: '📧 Email Confirm', value: 'Yes — all recipients must acknowledge', inline: true }] : []),
       ...(failedUsers.length > 0 ? [{ name: 'Failed Recipients', value: failedUsers.slice(0, 10).join(', ') + (failedUsers.length > 10 ? ` +${failedUsers.length - 10} more` : ''), inline: false }] : [])
     )
     .setFooter({ text: 'Community Organisation | Staff Assistant' })

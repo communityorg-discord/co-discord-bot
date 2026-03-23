@@ -114,12 +114,26 @@ client.on('interactionCreate', async interaction => {
 
     // DM acknowledgement button
     if (interaction.customId.startsWith('dm_ack_')) {
+      const parts = interaction.customId.split('_');
+      // dm_ack_<interactionId> or dm_ack_<interactionId>_<discordId>
+      const moderatorId = parts[2];
+      const recipientId = parts[3] || null;
+
       await interaction.update({
         content: `✅ **Acknowledged.** The sender has been notified that you have read this message.`,
         embeds: [],
         components: []
       });
-      // Optionally notify the sender — logAction already captured the original send
+
+      // Try to notify the original sender via DM
+      try {
+        const sender = await interaction.client.users.fetch(moderatorId).catch(() => null);
+        if (sender) {
+          await sender.send({
+            content: `📧 **Acknowledgement received.** ${recipientId ? `<@${recipientId}>` : 'A recipient'} has confirmed reading your DM.`
+          });
+        }
+      } catch {}
     }
   }
 
