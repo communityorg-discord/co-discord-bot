@@ -104,7 +104,7 @@ export async function execute(interaction) {
         embeds: [buildEmbed()],
         components: emailConfirm ? [new ActionRowBuilder().addComponents(
           new ButtonBuilder()
-            .setCustomId(`dm_ack_${interaction.id}`)
+            .setCustomId(`dm_ack_${interaction.user.id}`)
             .setLabel('Acknowledge & Confirm Read')
             .setStyle(2)
         )] : []

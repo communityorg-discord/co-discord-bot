@@ -112,10 +112,9 @@ client.on('interactionCreate', async interaction => {
       await interaction.update({ content: 'NID submission cancelled.', embeds: [], components: [] });
     }
 
-    // DM acknowledgement button
+    // DM acknowledgement button — dm_ack_<moderatorId> or dm_ack_<moderatorId>_<recipientId>
     if (interaction.customId.startsWith('dm_ack_')) {
       const parts = interaction.customId.split('_');
-      // dm_ack_<interactionId> or dm_ack_<interactionId>_<discordId>
       const moderatorId = parts[2];
       const recipientId = parts[3] || null;
 
@@ -125,7 +124,6 @@ client.on('interactionCreate', async interaction => {
         components: []
       });
 
-      // Try to notify the original sender via DM
       try {
         const sender = await interaction.client.users.fetch(moderatorId).catch(() => null);
         if (sender) {
