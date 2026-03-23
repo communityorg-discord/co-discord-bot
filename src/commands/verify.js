@@ -243,7 +243,11 @@ export async function handleButton(interaction) {
     try {
       const user = await interaction.client.users.fetch(entry.discord_id);
       const inviteLines = [];
+      // Guilds to exclude from invite links ( Appeals Server, etc.)
+      const EXCLUDED_GUILDS = ['1485423163817988186'];
+
       for (const [, guild] of interaction.client.guilds.cache) {
+        if (EXCLUDED_GUILDS.includes(guild.id)) continue;
         try {
           const channel = guild.channels.cache
             .filter(c => c.isTextBased() && c.permissionsFor(guild.members.me)?.has("CreateInstantInvite"))
