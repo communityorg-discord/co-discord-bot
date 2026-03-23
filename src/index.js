@@ -1,6 +1,7 @@
 import express from 'express';
 import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, EmbedBuilder } from 'discord.js';
 import { config } from 'dotenv';
+import { COMMAND_LOG_CHANNEL_ID } from './config.js';
 import { getUserByDiscordId } from './db.js';
 import * as brag from './commands/brag.js';
 import * as leave from './commands/leave.js';
@@ -62,6 +63,27 @@ client.on('interactionCreate', async interaction => {
     if (!command) return;
     try {
       await command.execute(interaction);
+
+      // Log command usage
+      if (COMMAND_LOG_CHANNEL_ID) {
+        const portalUser = getUserByDiscordId(interaction.user.id);
+        const logChannel = await interaction.client.channels.fetch(COMMAND_LOG_CHANNEL_ID).catch(() => null);
+        if (logChannel) {
+          const options = interaction.options?._hoistedOptions?.map(o => `**${o.name}:** ${o.value}`).join('\n') || '';
+          const embed = new EmbedBuilder()
+            .setTitle(`📋 Command Executed`)
+            .setColor(0x5865F2)
+            .addFields(
+              { name: 'Command', value: `/${interaction.commandName}`, inline: true },
+              { name: 'User', value: `${portalUser?.display_name || interaction.user.username} (<@${interaction.user.id}>)`, inline: true },
+              { name: 'Guild', value: interaction.guild?.name || 'DM', inline: true },
+              ...(options ? [{ name: 'Options', value: options, inline: false }] : []),
+            )
+            .setFooter({ text: 'Community Organisation | Staff Assistant' })
+            .setTimestamp();
+          await logChannel.send({ embeds: [embed] }).catch(() => {});
+        }
+      }
     } catch (e) {
       console.error(`[CO Bot] Command error (${interaction.commandName}):`, e.message);
       const msg = { content: '❌ An error occurred. Please try again or contact an administrator.', ephemeral: true };
