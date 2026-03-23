@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canRunCommand, requiresSuperuserWarning } from '../utils/permissions.js';
-import { removeAllStaffRoles, addSuspendedRole } from '../utils/roleManager.js';
+import { removeAllStaffRoles, addSuspendedRole, suspendAcrossGuilds } from '../utils/roleManager.js';
 import { addInfraction, addSuspension } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { getUserByDiscordId } from '../db.js';
@@ -36,6 +36,7 @@ export async function execute(interaction) {
 
   await removeAllStaffRoles(interaction.client, target.id, `Suspended: ${reason}`);
   await addSuspendedRole(interaction.client, target.id);
+  await suspendAcrossGuilds(interaction.client, target.id);
 
   const inf = addInfraction(target.id, 'suspension', reason, interaction.user.id, interaction.user.username);
   addSuspension(target.id, reason, interaction.user.id, expiresAt, inf.lastInsertRowid);

@@ -1,9 +1,10 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canRunCommand, requiresSuperuserWarning, isSuperuser } from '../utils/permissions.js';
-import { removeAllStaffRoles, kickFromAllServers } from '../utils/roleManager.js';
+import { terminateAcrossGuilds } from '../utils/roleManager.js';
 import { addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { getUserByDiscordId } from '../db.js';
+import botDb from '../utils/botDb.js';
 
 export const data = new SlashCommandBuilder()
   .setName('terminate')
@@ -28,8 +29,6 @@ export async function execute(interaction) {
   const portalUser = getUserByDiscordId(target.id);
   await interaction.deferReply();
 
-  await removeAllStaffRoles(interaction.client, target.id, `Terminated: ${reason}`);
-
   try {
     await target.send({
       embeds: [new EmbedBuilder()
@@ -46,7 +45,7 @@ export async function execute(interaction) {
     });
   } catch {}
 
-  await kickFromAllServers(interaction.client, target.id, `Terminated: ${reason}`);
+  await terminateAcrossGuilds(interaction.client, target.id, botDb);
   addInfraction(target.id, 'termination', reason, interaction.user.id, interaction.user.username, null, 0);
 
   await logAction(interaction.client, {

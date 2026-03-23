@@ -1,9 +1,10 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canRunCommand } from '../utils/permissions.js';
-import { removeSuspendedRole, restorePositionRoles } from '../utils/roleManager.js';
+import { removeSuspendedRole, restorePositionRoles, unsuspendAcrossGuilds } from '../utils/roleManager.js';
 import { liftSuspension, getActiveSuspension } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { getUserByDiscordId } from '../db.js';
+import botDb from '../utils/botDb.js';
 
 export const data = new SlashCommandBuilder()
   .setName('unsuspend')
@@ -27,6 +28,7 @@ export async function execute(interaction) {
   await removeSuspendedRole(interaction.client, target.id);
   if (portalUser?.position) await restorePositionRoles(interaction.client, target.id, portalUser.position);
   liftSuspension(target.id);
+  await unsuspendAcrossGuilds(interaction.client, target.id, botDb);
 
   try { await target.send({ content: `✅ Your suspension from Community Organisation has been lifted. Your roles have been restored.` }); } catch {}
 
