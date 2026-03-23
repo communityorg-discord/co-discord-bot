@@ -182,7 +182,6 @@ export async function handleModal(interaction) {
 
   try {
     if (targetUser) {
-      const summary = guildFieldLines.split('\n').slice(0, 20).join('\n');
       await targetUser.send({
         embeds: [new EmbedBuilder()
           .setTitle('🔴 CO Verification Removed')
@@ -190,8 +189,6 @@ export async function handleModal(interaction) {
           .setDescription(`Your CO staff verification has been removed by <@${interaction.user.id}>.`)
           .addFields(
             { name: 'Reason', value: reason, inline: false },
-            { name: 'Servers Processed', value: `${successCount} ✅ | ${partialCount} ⚠️ | ${failedCount} ❌`, inline: false },
-            { name: 'Per-Server Results', value: summary || 'None', inline: false },
           )
           .setFooter({ text: 'Community Organisation | Staff Assistant' })
           .setTimestamp()
