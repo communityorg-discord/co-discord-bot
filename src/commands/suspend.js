@@ -3,6 +3,7 @@ import { canRunCommand } from '../utils/permissions.js';
 import { removeAllStaffRoles, addSuspendedRole, suspendAcrossGuilds } from '../utils/roleManager.js';
 import { addInfraction, addSuspension } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
+import { SUSPEND_UNSUSPEND_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 
 function formatDuration(ms) {
@@ -86,7 +87,8 @@ export async function execute(interaction) {
       { name: '⏱️ Duration', value: durationDisplay, inline: true },
       { name: '📅 Expires', value: expiresDisplay, inline: true },
       { name: '👤 Actioned By', value: `<@${interaction.user.id}> (${interaction.user.username})`, inline: true },
-    ]
+    ],
+    specificChannelId: SUSPEND_UNSUSPEND_LOG_CHANNEL_ID
   });
 
   // Auto-lift if timed

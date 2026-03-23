@@ -4,6 +4,7 @@ import { ALL_SERVER_IDS, APPEALS_SERVER_ID } from '../config.js';
 import { getActiveGlobalBan } from '../utils/botDb.js';
 import db from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
+import { GBAN_UNGBAN_LOG_CHANNEL_ID } from '../config.js';
 
 export const data = new SlashCommandBuilder()
   .setName('gunban')
@@ -49,7 +50,8 @@ export async function execute(interaction) {
     fields: [
       { name: 'Servers Unbanned', value: String(unbannedCount), inline: true },
       { name: 'Servers', value: serverList, inline: false }
-    ]
+    ],
+    specificChannelId: GBAN_UNGBAN_LOG_CHANNEL_ID
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()

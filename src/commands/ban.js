@@ -2,6 +2,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canRunCommand, requiresSuperuserWarning } from '../utils/permissions.js';
 import { addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
+import { BAN_UNBAN_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 
 export const data = new SlashCommandBuilder()
@@ -65,7 +66,8 @@ export async function execute(interaction) {
     fields: [
       { name: 'Case ID', value: `#${caseId}`, inline: true },
       { name: 'Server', value: interaction.guild.name, inline: true }
-    ]
+    ],
+    specificChannelId: BAN_UNBAN_LOG_CHANNEL_ID
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()

@@ -108,11 +108,11 @@ export async function execute(interaction) {
   }
 }
 
-// Button interaction handler — exported so index.js can register it
+// Button interaction handler
 export async function handleButton(interaction) {
   const customId = interaction.customId;
 
-  // Approve
+  // ── Approve ──────────────────────────────────────────────────────────────
   if (customId.startsWith('verify_approve_')) {
     const queueId = customId.replace('verify_approve_', '');
 
@@ -123,7 +123,8 @@ export async function handleButton(interaction) {
     const entry = db.prepare("SELECT * FROM verification_queue WHERE id = ? AND status = 'pending'").get(queueId);
     if (!entry) return interaction.reply({ content: '❌ Request not found or already processed.', ephemeral: true });
 
-    await interaction.deferUpdate();
+    // Use update() to replace the button message with the approval embed
+    const isOfficial = Number(entry.verified_official) === 1;
 
     // Apply roles + nickname across all guilds
     await applyVerification(interaction.client, entry.discord_id, entry.position, entry.requested_nickname);
@@ -132,35 +133,33 @@ export async function handleButton(interaction) {
     db.prepare(`
       INSERT OR REPLACE INTO verified_members (discord_id, portal_user_id, position, employee_number, nickname, verified_at, updated_at)
       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    `).run(entry.discord_id, entry.portal_user_id, entry.position, entry.employee_number, entry.requested_nickname);
+    `).run(entry.discord_id, entry.portal_user_id || null, entry.position, entry.employee_number, entry.requested_nickname);
 
     // Update queue status
     db.prepare("UPDATE verification_queue SET status = 'approved', reviewed_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
       .run(interaction.user.id, queueId);
 
-    // Update the embed
-    const isOfficial = Number(entry.verified_official) === 1;
-    const embed = EmbedBuilder.from(interaction.message.embeds[0])
+    // Update the message to show approval
+    const approvedEmbed = new EmbedBuilder()
       .setColor(0x22c55e)
       .setTitle(`✅ Verification Request #${queueId} — Approved${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
       .addFields({ name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false })
       .addFields({ name: 'Note', value: `Verified - Employee: ${entry.employee_number || 'N/A'}`, inline: false });
 
-    try {
-      await interaction.message.edit({ embeds: [embed], components: [] });
-    } catch (e) {
-      console.warn("[Verify] Could not edit message:", e.message);
-    }
+    await interaction.update({ embeds: [approvedEmbed], components: [] });
 
     // DM the user
     try {
       const user = await interaction.client.users.fetch(entry.discord_id);
       const note = isOfficial ? 'Official Account' : `Employee: ${entry.employee_number || 'N/A'}`;
       await user.send(`✅ Your CO verification has been **approved** by <@${interaction.user.id}>.\n\nYour roles and nickname have been applied across all CO servers.\n**Note:** Verified - ${note}`);
-    } catch {}
+    } catch (e) {
+      console.warn('[Verify] Could not DM user:', e.message);
+    }
+    return;
   }
 
-  // Deny — show modal for reason
+  // ── Deny — show modal for reason ─────────────────────────────────────────
   if (customId.startsWith('verify_deny_')) {
     const queueId = customId.replace('verify_deny_', '');
 
@@ -182,6 +181,7 @@ export async function handleButton(interaction) {
       );
 
     await interaction.showModal(modal);
+    return;
   }
 }
 
@@ -191,28 +191,24 @@ export async function handleModal(interaction) {
   const queueId = interaction.customId.replace('verify_deny_reason_', '');
   const reason = interaction.fields.getTextInputValue('reason');
 
-  await interaction.deferUpdate();
-
   const entry = db.prepare("SELECT * FROM verification_queue WHERE id = ? AND status = 'pending'").get(queueId);
   if (!entry) return;
 
   db.prepare("UPDATE verification_queue SET status = 'denied', reviewed_by = ?, deny_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
     .run(interaction.user.id, reason, queueId);
 
-  const embed = EmbedBuilder.from(interaction.message.embeds[0])
+  const deniedEmbed = new EmbedBuilder()
     .setColor(0xef4444)
     .setTitle(`❌ Verification Request #${queueId} — Denied`)
     .addFields({ name: 'Denied By', value: `<@${interaction.user.id}>`, inline: false })
     .addFields({ name: 'Reason', value: reason, inline: false });
 
-  try {
-      await interaction.message.edit({ embeds: [embed], components: [] });
-    } catch (e) {
-      console.warn("[Verify] Could not edit message:", e.message);
-    }
+  await interaction.update({ embeds: [deniedEmbed], components: [] });
 
   try {
     const user = await interaction.client.users.fetch(entry.discord_id);
     await user.send(`❌ Your CO verification request has been **denied**.\n\n**Reason:** ${reason}\n\nIf you believe this is an error, please contact a superuser.`);
-  } catch {}
+  } catch (e) {
+    console.warn('[Verify] Could not DM user:', e.message);
+  }
 }

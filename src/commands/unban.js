@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canRunCommand } from '../utils/permissions.js';
 import { logAction } from '../utils/logger.js';
+import { BAN_UNBAN_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 
 export const data = new SlashCommandBuilder()
@@ -47,7 +48,8 @@ export async function execute(interaction) {
     color: 0x22C55E,
     fields: [
       { name: 'Server', value: interaction.guild.name, inline: true }
-    ]
+    ],
+    specificChannelId: BAN_UNBAN_LOG_CHANNEL_ID
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()

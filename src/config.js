@@ -11,10 +11,28 @@ export const SUSPENDED_ROLE_ID = process.env.SUSPENDED_ROLE_ID;
 export const UNDER_INVESTIGATION_ROLE_ID = process.env.UNDER_INVESTIGATION_ROLE_ID;
 export const APPEALS_SERVER_ID = process.env.APPEALS_SERVER_ID;
 export const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
-export const MOD_LOG_CHANNEL_ID = process.env.MOD_LOG_CHANNEL_ID;
 export const COMMAND_LOG_CHANNEL_ID = process.env.COMMAND_LOG_CHANNEL_ID;
 export const SUPERUSER_IDS = (process.env.SUPERUSER_IDS || '').split(',').filter(Boolean);
 export const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
+
+// Re-export moderation log channel IDs from dedicated channels config
+export {
+  MOD_LOG_CHANNEL_ID,
+  BAN_UNBAN_LOG_CHANNEL_ID,
+  GBAN_UNGBAN_LOG_CHANNEL_ID,
+  SUSPEND_UNSUSPEND_LOG_CHANNEL_ID,
+  TERMINATE_LOG_CHANNEL_ID,
+  STRIKE_LOG_CHANNEL_ID,
+  INFRACTIONS_CASES_LOG_CHANNEL_ID,
+  INVESTIGATION_LOG_CHANNEL_ID,
+  PURGE_SCRIBE_LOG_CHANNEL_ID,
+  VERIFY_UNVERIFY_LOG_CHANNEL_ID,
+  DM_LOG_CHANNEL_ID,
+  BRAG_LOG_CHANNEL_ID,
+  STAFF_LOG_CHANNEL_ID,
+  USER_LOG_CHANNEL_ID,
+  NID_LOG_CHANNEL_ID,
+} from './config/channels.js';
 
 export const POSITION_ROLES = {
   "Secretary-General": ["Secretary-General", "Authorisation Level 7", "Executive Operations Board", "Board of Directors", "Extended Board of Directors"],
@@ -52,17 +70,3 @@ export const POSITION_ROLES = {
   "Registrar": ["Registrar", "Authorisation Level 1", "Department of General Assembly and Conference Management"],
   "Member of the General Assembly": ["Member of the General Assembly", "Authorisation Level 1", "Department of General Assembly and Conference Management"],
 };
-export const BAN_UNBAN_LOG_CHANNEL_ID = process.env.BAN_UNBAN_LOG_CHANNEL_ID;
-export const GBAN_UNGBAN_LOG_CHANNEL_ID = process.env.GBAN_UNGBAN_LOG_CHANNEL_ID;
-export const SUSPEND_UNSUSPEND_LOG_CHANNEL_ID = process.env.SUSPEND_UNSUSPEND_LOG_CHANNEL_ID;
-export const TERMINATE_LOG_CHANNEL_ID = process.env.TERMINATE_LOG_CHANNEL_ID;
-export const STRIKE_LOG_CHANNEL_ID = process.env.STRIKE_LOG_CHANNEL_ID;
-export const INFRACTIONS_CASES_LOG_CHANNEL_ID = process.env.INFRACTIONS_CASES_LOG_CHANNEL_ID;
-export const INVESTIGATION_LOG_CHANNEL_ID = process.env.INVESTIGATION_LOG_CHANNEL_ID;
-export const PURGE_SCRIBE_LOG_CHANNEL_ID = process.env.PURGE_SCRIBE_LOG_CHANNEL_ID;
-export const VERIFY_UNVERIFY_LOG_CHANNEL_ID = process.env.VERIFY_UNVERIFY_LOG_CHANNEL_ID;
-export const DM_LOG_CHANNEL_ID = process.env.DM_LOG_CHANNEL_ID;
-export const BRAG_LOG_CHANNEL_ID = process.env.BRAG_LOG_CHANNEL_ID;
-export const STAFF_LOG_CHANNEL_ID = process.env.STAFF_LOG_CHANNEL_ID;
-export const USER_LOG_CHANNEL_ID = process.env.USER_LOG_CHANNEL_ID;
-export const NID_LOG_CHANNEL_ID = process.env.NID_LOG_CHANNEL_ID;

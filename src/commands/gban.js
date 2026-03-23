@@ -3,6 +3,7 @@ import { canRunCommand, requiresSuperuserWarning } from '../utils/permissions.js
 import { ALL_SERVER_IDS, APPEALS_SERVER_ID } from '../config.js';
 import { addInfraction, addGlobalBan, getActiveGlobalBan } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
+import { GBAN_UNGBAN_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 
 export const data = new SlashCommandBuilder()
@@ -75,7 +76,8 @@ export async function execute(interaction) {
       { name: 'Servers Banned', value: String(bannedCount), inline: true },
       { name: 'Appealable', value: appealable ? 'Yes' : 'No', inline: true },
       { name: 'Servers', value: serverList, inline: false }
-    ]
+    ],
+    specificChannelId: GBAN_UNGBAN_LOG_CHANNEL_ID
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()
