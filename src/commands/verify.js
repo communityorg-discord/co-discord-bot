@@ -3,6 +3,12 @@ import { getPortalUser, isSuperuser, applyVerification, getOrCreateVerificationC
 import { POSITIONS } from '../utils/positions.js';
 import db from '../utils/botDb.js';
 
+// Official account bypass IDs — can verify as CO | Official Account without portal entry
+const OFFICIAL_BYPASS_IDS = ['878775920180228127', '1355367209249148928'];
+function isOfficialBypass(discordId) {
+  return OFFICIAL_BYPASS_IDS.includes(discordId);
+}
+
 export const data = new SlashCommandBuilder()
   .setName('verify')
   .setDescription('Verify your CO staff identity and apply your roles across all servers')
@@ -24,15 +30,23 @@ export async function execute(interaction) {
     return interaction.editReply({ content: '⏳ You already have a pending verification request. Please wait for it to be reviewed.' });
   }
 
-  // Look up in portal
-  const portalUser = await getPortalUser(discordId);
-  if (!portalUser) {
-    return interaction.editReply({ content: '❌ You are not found in the CO Staff Portal. You must be an active staff member to verify.\n\nIf you believe this is an error, please contact a superuser.' });
-  }
+  // Official account bypass — verify as CO | Official Account without portal
+  const isOfficial = isOfficialBypass(discordId);
+  let portalUser = null;
+  let position = null;
 
-  const position = portalUser.position;
-  if (!position || !POSITIONS[position]) {
-    return interaction.editReply({ content: `❌ Your position **${position || 'Unknown'}** is not recognised in the roles system. Please contact a superuser.` });
+  if (isOfficial) {
+    position = 'CO | Official Account';
+  } else {
+    // Look up in portal
+    portalUser = await getPortalUser(discordId);
+    if (!portalUser) {
+      return interaction.editReply({ content: '❌ You are not found in the CO Staff Portal. You must be an active staff member to verify.\n\nIf you believe this is an error, please contact a superuser.' });
+    }
+    position = portalUser.position;
+    if (!position || !POSITIONS[position]) {
+      return interaction.editReply({ content: `❌ Your position **${position || 'Unknown'}** is not recognised in the roles system. Please contact a superuser.` });
+    }
   }
 
   // Get verification channel
@@ -45,23 +59,32 @@ export async function execute(interaction) {
 
   // Insert into queue
   const result = db.prepare(`
-    INSERT INTO verification_queue (discord_id, guild_id, requested_nickname, portal_user_id, position, employee_number, supervisor_name, channel_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(discordId, interaction.guildId, nickname, portalUser.id, position, portalUser.employee_number || 'N/A', portalUser.supervisor_name || 'None', verifyChannel.id);
+    INSERT INTO verification_queue (discord_id, guild_id, requested_nickname, portal_user_id, position, employee_number, supervisor_name, channel_id, verified_official)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    discordId, interaction.guildId, nickname,
+    isOfficial ? null : portalUser.id,
+    position,
+    isOfficial ? 'N/A' : (portalUser?.employee_number || 'N/A'),
+    isOfficial ? 'None' : (portalUser?.supervisor_name || 'None'),
+    verifyChannel.id,
+    isOfficial ? 1 : 0
+  );
 
   const queueId = result.lastInsertRowid;
 
   // Build approval embed
   const embed = new EmbedBuilder()
-    .setTitle(`Verification Request #${queueId}`)
-    .setColor(0x8B4513)
+    .setTitle(`Verification Request #${queueId}${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
+    .setColor(isOfficial ? 0xFFD700 : 0x8B4513)
     .addFields(
       { name: 'User', value: `<@${discordId}> (${discordId})`, inline: false },
       { name: 'Position Requested', value: position, inline: false },
       { name: 'Nickname Requested', value: nickname, inline: false },
-      { name: 'Supervisor', value: portalUser.supervisor_name || 'None', inline: false },
-      { name: 'Employee Number', value: portalUser.employee_number || 'N/A', inline: false },
+      { name: 'Supervisor', value: isOfficial ? 'None' : (portalUser?.supervisor_name || 'None'), inline: false },
+      { name: 'Employee Number', value: isOfficial ? 'N/A' : (portalUser?.employee_number || 'N/A'), inline: false },
       { name: 'Verification ID', value: `#${queueId}`, inline: false },
+      ...(isOfficial ? [{ name: 'Account Type', value: 'Official Account (Bypass)', inline: false }] : []),
     )
     .setTimestamp();
 
@@ -109,9 +132,10 @@ export async function handleButton(interaction) {
       .run(interaction.user.id, queueId);
 
     // Update the embed
+    const isOfficial = Number(entry.verified_official) === 1;
     const embed = EmbedBuilder.from(interaction.message.embeds[0])
       .setColor(0x22c55e)
-      .setTitle(`✅ Verification Request #${queueId} — Approved`)
+      .setTitle(`✅ Verification Request #${queueId} — Approved${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
       .addFields({ name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false })
       .addFields({ name: 'Note', value: `Verified - Employee: ${entry.employee_number || 'N/A'}`, inline: false });
 
@@ -120,7 +144,8 @@ export async function handleButton(interaction) {
     // DM the user
     try {
       const user = await interaction.client.users.fetch(entry.discord_id);
-      await user.send(`✅ Your CO verification has been **approved** by <@${interaction.user.id}>.\n\nYour roles and nickname have been applied across all CO servers.\n**Note:** Verified - Employee: ${entry.employee_number || 'N/A'}`);
+      const note = isOfficial ? 'Official Account' : `Employee: ${entry.employee_number || 'N/A'}`;
+      await user.send(`✅ Your CO verification has been **approved** by <@${interaction.user.id}>.\n\nYour roles and nickname have been applied across all CO servers.\n**Note:** Verified - ${note}`);
     } catch {}
   }
 
