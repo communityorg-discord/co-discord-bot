@@ -351,13 +351,13 @@ export async function handleButton(interaction) {
         await originalMsg.edit({ embeds: [updatedEmbed], components: [] });
         console.log(`[Verify] Edit successful`);
       } else {
-        console.log(`[Verify] No originalMsg, using editReply`);
-        await interaction.editReply({ content: `✅ Verification **#${queueId}** approved.`, ephemeral: true });
+        console.log(`[Verify] No originalMsg, using editOriginalMessage`);
+        await interaction.editOriginalMessage({ embeds: [updatedEmbed] });
       }
     } catch (e) {
       console.warn(`[Verify] Could not edit message: ${e.message}`);
       try {
-        await interaction.editReply({ content: `✅ Verification **#${queueId}** approved — could not edit original message.`, ephemeral: true });
+        await interaction.editOriginalMessage({ embeds: [updatedEmbed] });
       } catch (_) {}
     }
 
@@ -487,7 +487,7 @@ export async function handleModal(interaction) {
   if (originalMsg) {
     await originalMsg.edit({ embeds: [updatedEmbed], components: [] });
   } else {
-    await interaction.editReply({ embeds: [updatedEmbed] });
+    await interaction.editOriginalMessage({ embeds: [updatedEmbed] });
   }
 
   try {
