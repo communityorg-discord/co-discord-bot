@@ -139,14 +139,24 @@ export async function handleButton(interaction) {
     db.prepare("UPDATE verification_queue SET status = 'approved', reviewed_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
       .run(interaction.user.id, queueId);
 
-    // Update the message to show approval
+    // Send ephemeral reply confirming approval
     const approvedEmbed = new EmbedBuilder()
       .setColor(0x22c55e)
-      .setTitle(`✅ Verification Request #${queueId} — Approved${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
+      .setTitle(`✅ Verification **#${queueId}** Approved${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
+      .setDescription(`Verification approved. <@${entry.discord_id}> can now verify themselves.`)
       .addFields({ name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false })
-      .addFields({ name: 'Note', value: `Verified - Employee: ${entry.employee_number || 'N/A'}`, inline: false });
+      .addFields({ name: 'User', value: `<@${entry.discord_id}>`, inline: false });
 
-    await interaction.update({ embeds: [approvedEmbed], components: [] });
+    await interaction.deferReply({ ephemeral: true });
+
+    const replyEmbed = new EmbedBuilder()
+      .setColor(0x22c55e)
+      .setTitle(`✅ Verification **#${queueId}** Approved${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
+      .setDescription(`Verification approved. <@${entry.discord_id}> can now verify.`)
+      .addFields({ name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false })
+      .addFields({ name: 'User', value: `<@${entry.discord_id}>`, inline: false });
+
+    await interaction.editReply({ embeds: [replyEmbed] });
 
     // DM the user
     try {
@@ -203,7 +213,8 @@ export async function handleModal(interaction) {
     .addFields({ name: 'Denied By', value: `<@${interaction.user.id}>`, inline: false })
     .addFields({ name: 'Reason', value: reason, inline: false });
 
-  await interaction.update({ embeds: [deniedEmbed], components: [] });
+  await interaction.deferReply({ ephemeral: true });
+  await interaction.editReply({ embeds: [deniedEmbed] });
 
   try {
     const user = await interaction.client.users.fetch(entry.discord_id);
