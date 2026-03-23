@@ -141,12 +141,25 @@ export async function handleButton(interaction) {
     db.prepare("UPDATE verification_queue SET status = 'approved', reviewed_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
       .run(interaction.user.id, queueId);
 
-    // Edit the ORIGINAL button message to show the result (same as unverify)
+    // Edit the ORIGINAL button message — rebuild full embed with all original fields + approval fields
+    const fields = [
+        { name: 'User', value: `<@${entry.discord_id}> (${entry.discord_id})`, inline: false },
+        { name: 'Position Requested', value: entry.position, inline: false },
+        { name: 'Nickname Requested', value: entry.requested_nickname, inline: false },
+        { name: 'Supervisor', value: entry.supervisor_name || 'N/A', inline: false },
+        { name: 'Employee Number', value: entry.employee_number || 'N/A', inline: false },
+        { name: 'Verification ID', value: `#${queueId}`, inline: false },
+        { name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false },
+        { name: 'Note', value: `Verified - Employee: ${entry.employee_number || 'N/A'}`, inline: false },
+    ];
+    if (isOfficial) {
+        fields.push({ name: 'Account Type', value: 'Official Account (Bypass)', inline: false });
+    }
     const updatedEmbed = new EmbedBuilder()
       .setColor(0x22c55e)
       .setTitle(`✅ Verification Request #${queueId} — Approved${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
-      .addFields({ name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false })
-      .addFields({ name: 'Note', value: `Verified - Employee: ${entry.employee_number || 'N/A'}`, inline: false });
+      .addFields(...fields)
+      .setTimestamp();
 
     await interaction.message.edit({ embeds: [updatedEmbed], components: [] });
 
@@ -202,14 +215,23 @@ export async function handleModal(interaction) {
   db.prepare("UPDATE verification_queue SET status = 'denied', reviewed_by = ?, deny_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
     .run(interaction.user.id, reason, queueId);
 
-  const deniedEmbed = new EmbedBuilder()
+  const updatedEmbed = new EmbedBuilder()
     .setColor(0xef4444)
     .setTitle(`❌ Verification Request #${queueId} — Denied`)
-    .addFields({ name: 'Denied By', value: `<@${interaction.user.id}>`, inline: false })
-    .addFields({ name: 'Reason', value: reason, inline: false });
+    .addFields(
+      { name: 'User', value: `<@${entry.discord_id}> (${entry.discord_id})`, inline: false },
+      { name: 'Position Requested', value: entry.position, inline: false },
+      { name: 'Nickname Requested', value: entry.requested_nickname, inline: false },
+      { name: 'Supervisor', value: entry.supervisor_name || 'N/A', inline: false },
+      { name: 'Employee Number', value: entry.employee_number || 'N/A', inline: false },
+      { name: 'Verification ID', value: `#${queueId}`, inline: false },
+      { name: 'Denied By', value: `<@${interaction.user.id}>`, inline: false },
+      { name: 'Reason', value: reason, inline: false },
+    )
+    .setTimestamp();
 
   await interaction.deferUpdate();
-  await interaction.message.edit({ embeds: [deniedEmbed], components: [] });
+  await interaction.message.edit({ embeds: [updatedEmbed], components: [] });
 
   try {
     const user = await interaction.client.users.fetch(entry.discord_id);
