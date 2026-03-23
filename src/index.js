@@ -140,25 +140,31 @@ client.on('interactionCreate', async interaction => {
       await interaction.showModal({
         title: 'Add DM Exemption',
         customId: 'dm_exempt_add_modal',
-        components: [{
-          type: 1,
-          components: [{
-            type: 4,
-            style: 1,
-            label: 'User mention or ID',
-            placeholder: '@username or 123456789',
-            customId: 'user_input',
-            maxLength: 50,
-          }, {
-            type: 4,
-            style: 2,
-            label: 'Reason (optional)',
-            placeholder: 'Optional reason',
-            customId: 'reason_input',
-            required: false,
-            maxLength: 200,
-          }]
-        }]
+        components: [
+          {
+            type: 1,
+            components: [{
+              type: 4,
+              style: 1,
+              label: 'User mention or ID',
+              placeholder: '@username or 123456789',
+              customId: 'user_input',
+              maxLength: 50,
+            }]
+          },
+          {
+            type: 1,
+            components: [{
+              type: 4,
+              style: 2,
+              label: 'Reason (optional)',
+              placeholder: 'Optional reason',
+              customId: 'reason_input',
+              required: false,
+              maxLength: 200,
+            }]
+          }
+        ]
       });
       return;
     }
@@ -167,17 +173,19 @@ client.on('interactionCreate', async interaction => {
       await interaction.showModal({
         title: 'Remove DM Exemption',
         customId: 'dm_exempt_remove_modal',
-        components: [{
-          type: 1,
-          components: [{
-            type: 4,
-            style: 1,
-            label: 'User mention or ID',
-            placeholder: '@username or 123456789',
-            customId: 'user_input',
-            maxLength: 50,
-          }]
-        }]
+        components: [
+          {
+            type: 1,
+            components: [{
+              type: 4,
+              style: 1,
+              label: 'User mention or ID',
+              placeholder: '@username or 123456789',
+              customId: 'user_input',
+              maxLength: 50,
+            }]
+          }
+        ]
       });
       return;
     }
