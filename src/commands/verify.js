@@ -96,11 +96,21 @@ export async function execute(interaction) {
       .setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`verify_approve_${queueId}`).setLabel('Confirm').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`verify_approve_${queueId}_0`).setLabel('Confirm (Default)').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`verify_approve_${queueId}_7`).setLabel('Lvl 7').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`verify_approve_${queueId}_6`).setLabel('Lvl 6').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`verify_approve_${queueId}_5`).setLabel('Lvl 5').setStyle(ButtonStyle.Secondary),
+    );
+
+    const row2 = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`verify_approve_${queueId}_4`).setLabel('Lvl 4').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`verify_approve_${queueId}_3`).setLabel('Lvl 3').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`verify_approve_${queueId}_2`).setLabel('Lvl 2').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`verify_approve_${queueId}_1`).setLabel('Lvl 1').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`verify_deny_${queueId}`).setLabel('Deny').setStyle(ButtonStyle.Danger),
     );
 
-    const msg = await verifyChannel.send({ embeds: [embed], components: [row] });
+    const msg = await verifyChannel.send({ embeds: [embed], components: [row, row2] });
 
     // Save message ID
     db.prepare("UPDATE verification_queue SET message_id = ? WHERE id = ?").run(msg.id, queueId);
@@ -154,7 +164,10 @@ export async function handleButton(interaction) {
 
   // ── Approve ──────────────────────────────────────────────────────────────
   if (customId.startsWith('verify_approve_')) {
-    const queueId = customId.replace('verify_approve_', '');
+    // Format: verify_approve_{queueId}_{level}  (level 0 = no override, 1-7 = override)
+    const parts = customId.replace('verify_approve_', '').split('_');
+    const queueId = parts[0];
+    const overrideLevel = parts.length > 1 ? parseInt(parts[1]) : 0;
 
     if (!await isSuperuser(interaction.user.id)) {
       return interaction.reply({ content: '❌ Only superusers can approve verifications.', ephemeral: true });
@@ -179,7 +192,8 @@ export async function handleButton(interaction) {
     }
 
     // Apply roles + nickname across all guilds — get detailed results
-    const results = await applyVerification(interaction.client, entry.discord_id, entry.position, entry.requested_nickname, { isProbation: !!Number(entry.is_probation) });
+    const override = overrideLevel > 0 ? overrideLevel : null;
+    const results = await applyVerification(interaction.client, entry.discord_id, entry.position, entry.requested_nickname, { isProbation: !!Number(entry.is_probation), overrideAuthLevel: override });
 
     // Save to verified_members
     db.prepare(`
@@ -201,13 +215,14 @@ export async function handleButton(interaction) {
       { name: 'Position', value: entry.position, inline: true },
       { name: 'Nickname', value: entry.requested_nickname, inline: true },
       { name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false },
+      { name: 'Auth Level', value: overrideLevel > 0 ? `Override → Level ${overrideLevel}` : 'Default (No Override)', inline: true },
     ];
 
     if (isOfficial) fields.push({ name: 'Account Type', value: 'Official Account (Bypass)', inline: false });
 
     const updatedEmbed = new EmbedBuilder()
       .setColor(0x22C55E)
-      .setTitle(`✅ Verification #${queueId} — Approved${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
+      .setTitle(`✅ Verification #${queueId} — Approved${overrideLevel > 0 ? ` [Lvl ${overrideLevel} Override]` : ''}${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
       .addFields(...fields)
       .setTimestamp();
 
@@ -229,13 +244,14 @@ export async function handleButton(interaction) {
 
     // Log to verify-unverify-logs + full-mod-logs
     await logAction(interaction.client, {
-      action: `✅ Staff Verified${isOfficial ? ' [Official Account]' : ''}`,
+      action: `✅ Staff Verified${overrideLevel > 0 ? ` [Lvl ${overrideLevel} Override]` : ''}${isOfficial ? ' [Official Account]' : ''}`,
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       target: { discordId: entry.discord_id, name: entry.requested_nickname },
       reason: entry.position,
       color: 0x22C55E,
       fields: [
         { name: 'Position', value: entry.position, inline: true },
+        { name: 'Auth Level', value: overrideLevel > 0 ? `Override → Level ${overrideLevel}` : 'Default (No Override)', inline: true },
         { name: 'Nickname', value: entry.requested_nickname, inline: true },
         { name: 'Servers Applied', value: `${successCount} ✅ | ${partialCount} ⚠️ | ${failedCount} ❌`, inline: false },
         { name: 'Per-Server Results', value: guildFieldLines.slice(0, 1024) || 'None', inline: false },
