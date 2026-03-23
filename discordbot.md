@@ -16,7 +16,7 @@
 - Portal API base: `http://localhost:3016/api` — use header `x-bot-secret: process.env.BOT_WEBHOOK_SECRET`
 
 ## Standard Commands
-`bot.js`, `brag.js`, `cases.js`, `election.js`, `gban.js`, `gunban.js`, `infractions.js`, `investigate.js`, `leave.js`, `nid.js`, `staff.js`, `strike.js`, `suspend.js`, `terminate.js`, `unsuspend.js`, `user.js`
+`bot.js`, `brag.js`, `cases.js`, `dm.js`, `gban.js`, `gunban.js`, `infractions.js`, `investigate.js`, `leave.js`, `nid.js`, `purge.js`, `scribe.js`, `staff.js`, `strike.js`, `suspend.js`, `terminate.js`, `unsuspend.js`, `unverify.js`, `user.js`, `verify.js`
 
 ## Critical Rules
 1. **ESM only** — never `require()`, never CommonJS patterns
