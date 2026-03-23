@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
 import { canRunCommand } from '../utils/permissions.js';
 import { getDmExemptions, addDmExemption, removeDmExemption } from '../utils/botDb.js';
 
@@ -10,7 +10,7 @@ export async function execute(interaction) {
   const perm = canRunCommand(interaction.user.id, 5);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply();
 
   const exempts = getDmExemptions();
 
@@ -42,11 +42,11 @@ export async function execute(interaction) {
       new ButtonBuilder()
         .setCustomId('dm_exempt_add')
         .setLabel('Add Exemption')
-        .setStyle(3), // success green
+        .setStyle(3),
       new ButtonBuilder()
         .setCustomId('dm_exempt_remove')
         .setLabel('Remove Exemption')
-        .setStyle(4), // danger red
+        .setStyle(4),
     )
   ];
 

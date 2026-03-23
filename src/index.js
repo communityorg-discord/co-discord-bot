@@ -137,33 +137,37 @@ client.on('interactionCreate', async interaction => {
 
     // DM exempt button handlers
     if (interaction.customId === 'dm_exempt_add') {
-      const { getAllActiveStaff } = await import('./utils/botDb.js');
-      const allStaff = getAllActiveStaff();
+      // Fetch guild members for select menu
+      const guild = interaction.guild;
+      if (!guild) {
+        await interaction.update({ content: '❌ This command must be used in a server.', components: [] });
+        return;
+      }
 
-      const selectOptions = allStaff.slice(0, 25).map(s => {
-        const label = (s.display_name || s.username || 'Unknown').slice(0, 100);
-        const desc = ((s.position || s.department || '').trim() || null);
-        const opt = {
-          label,
-          value: String(s.id)
-        };
-        if (desc) opt.description = desc.slice(0, 100);
-        return opt;
-      });
+      await guild.members.fetch();
 
-      if (selectOptions.length === 0) {
-        await interaction.update({ content: '❌ No staff members found.', components: [] });
+      const members = guild.members.cache
+        .filter(m => !m.user.bot)
+        .map(m => ({
+          label: m.displayName.slice(0, 100),
+          value: m.user.id,
+          description: (m.user.username || '').slice(0, 100) || null
+        }))
+        .slice(0, 25);
+
+      if (members.length === 0) {
+        await interaction.update({ content: '❌ No members found in this server.', components: [] });
         return;
       }
 
       await interaction.update({
-        content: '**Select a staff member to exempt:**',
+        content: '**Select a server member to exempt from mass/team DMs:**',
         components: [
           new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
               .setCustomId('dm_exempt_user_select')
-              .setPlaceholder('Choose a staff member...')
-              .addOptions(selectOptions)
+              .setPlaceholder('Choose a member...')
+              .addOptions(members)
           ),
           new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('dm_exempt_cancel').setLabel('Cancel').setStyle(2)
@@ -195,13 +199,13 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.customId === 'dm_exempt_user_select') {
-      const { addDmExemption, getDmExemptions, getPortalUserById } = await import('./utils/botDb.js');
+      const { addDmExemption, getDmExemptions } = await import('./utils/botDb.js');
 
-      const selectedId = interaction.values[0];
-      const portalUser = getPortalUserById(Number(selectedId));
-      const displayName = portalUser?.display_name || portalUser?.username || selectedId;
+      const discordId = interaction.values[0];
+      const member = interaction.guild?.members.cache.get(discordId);
+      const displayName = member?.displayName || member?.user.username || discordId;
 
-      addDmExemption(portalUser?.discord_id || String(selectedId), displayName, interaction.user.id);
+      addDmExemption(discordId, displayName, interaction.user.id);
 
       const exempts = getDmExemptions();
       const rows = exempts.map(e =>
