@@ -19,86 +19,93 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
-  await interaction.deferReply({ ephemeral: true });
-
-  const discordId = interaction.user.id;
-  const nickname = interaction.options.getString('nickname').trim();
-
-  // Check if already pending
-  const pending = db.prepare("SELECT id FROM verification_queue WHERE discord_id = ? AND status = 'pending'").get(discordId);
-  if (pending) {
-    return interaction.editReply({ content: '⏳ You already have a pending verification request. Please wait for it to be reviewed.' });
-  }
-
-  // Official account bypass — verify as CO | Official Account without portal
-  const isOfficial = isOfficialBypass(discordId);
-  let portalUser = null;
-  let position = null;
-
-  if (isOfficial) {
-    position = 'CO | Official Account';
-  } else {
-    // Look up in portal
-    portalUser = await getPortalUser(discordId);
-    if (!portalUser) {
-      return interaction.editReply({ content: '❌ You are not found in the CO Staff Portal. You must be an active staff member to verify.\n\nIf you believe this is an error, please contact a superuser.' });
-    }
-    position = portalUser.position;
-    if (!position || !POSITIONS[position]) {
-      return interaction.editReply({ content: `❌ Your position **${position || 'Unknown'}** is not recognised in the roles system. Please contact a superuser.` });
-    }
-  }
-
-  // Get verification channel
-  let verifyChannel;
   try {
-    verifyChannel = await getOrCreateVerificationChannel(interaction.client);
-  } catch (e) {
-    return interaction.editReply({ content: '❌ Could not find the verification channel. Please contact a superuser.' });
+    await interaction.deferReply({ ephemeral: true });
+
+    const discordId = interaction.user.id;
+    const nickname = interaction.options.getString('nickname').trim();
+
+    // Check if already pending
+    const pending = db.prepare("SELECT id FROM verification_queue WHERE discord_id = ? AND status = 'pending'").get(discordId);
+    if (pending) {
+      return interaction.editReply({ content: '⏳ You already have a pending verification request. Please wait for it to be reviewed.' });
+    }
+
+    // Official account bypass — verify as CO | Official Account without portal
+    const isOfficial = isOfficialBypass(discordId);
+    let portalUser = null;
+    let position = null;
+
+    if (isOfficial) {
+      position = 'CO | Official Account';
+    } else {
+      // Look up in portal
+      portalUser = await getPortalUser(discordId);
+      if (!portalUser) {
+        return interaction.editReply({ content: '❌ You are not found in the CO Staff Portal. You must be an active staff member to verify.\n\nIf you believe this is an error, please contact a superuser.' });
+      }
+      position = portalUser.position;
+      if (!position || !POSITIONS[position]) {
+        return interaction.editReply({ content: `❌ Your position **${position || 'Unknown'}** is not recognised in the roles system. Please contact a superuser.` });
+      }
+    }
+
+    // Get verification channel
+    let verifyChannel;
+    try {
+      verifyChannel = await getOrCreateVerificationChannel(interaction.client);
+    } catch (e) {
+      return interaction.editReply({ content: '❌ Could not find the verification channel. Please contact a superuser.' });
+    }
+
+    // Insert into queue
+    const result = db.prepare(`
+      INSERT INTO verification_queue (discord_id, guild_id, requested_nickname, portal_user_id, position, employee_number, supervisor_name, channel_id, verified_official)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      discordId, interaction.guildId, nickname,
+      isOfficial ? null : portalUser.id,
+      position,
+      isOfficial ? 'N/A' : (portalUser?.employee_number || 'N/A'),
+      isOfficial ? 'None' : (portalUser?.supervisor_name || 'None'),
+      verifyChannel.id,
+      isOfficial ? 1 : 0
+    );
+
+    const queueId = result.lastInsertRowid;
+
+    // Build approval embed
+    const embed = new EmbedBuilder()
+      .setTitle(`Verification Request #${queueId}${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
+      .setColor(isOfficial ? 0xFFD700 : 0x8B4513)
+      .addFields(
+        { name: 'User', value: `<@${discordId}> (${discordId})`, inline: false },
+        { name: 'Position Requested', value: position, inline: false },
+        { name: 'Nickname Requested', value: nickname, inline: false },
+        { name: 'Supervisor', value: isOfficial ? 'None' : (portalUser?.supervisor_name || 'None'), inline: false },
+        { name: 'Employee Number', value: isOfficial ? 'N/A' : (portalUser?.employee_number || 'N/A'), inline: false },
+        { name: 'Verification ID', value: `#${queueId}`, inline: false },
+        ...(isOfficial ? [{ name: 'Account Type', value: 'Official Account (Bypass)', inline: false }] : []),
+      )
+      .setTimestamp();
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`verify_approve_${queueId}`).setLabel('Confirm').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`verify_deny_${queueId}`).setLabel('Deny').setStyle(ButtonStyle.Danger),
+    );
+
+    const msg = await verifyChannel.send({ embeds: [embed], components: [row] });
+
+    // Save message ID
+    db.prepare("UPDATE verification_queue SET message_id = ? WHERE id = ?").run(msg.id, queueId);
+
+    await interaction.editReply({ content: `✅ Your verification request **#${queueId}** has been submitted and is awaiting approval from a superuser.` });
+  } catch (err) {
+    console.error('[Verify] Error:', err.message);
+    try {
+      await interaction.editReply({ content: '❌ An error occurred while processing your verification. Please try again or contact a superuser.' });
+    } catch (_) {}
   }
-
-  // Insert into queue
-  const result = db.prepare(`
-    INSERT INTO verification_queue (discord_id, guild_id, requested_nickname, portal_user_id, position, employee_number, supervisor_name, channel_id, verified_official)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    discordId, interaction.guildId, nickname,
-    isOfficial ? null : portalUser.id,
-    position,
-    isOfficial ? 'N/A' : (portalUser?.employee_number || 'N/A'),
-    isOfficial ? 'None' : (portalUser?.supervisor_name || 'None'),
-    verifyChannel.id,
-    isOfficial ? 1 : 0
-  );
-
-  const queueId = result.lastInsertRowid;
-
-  // Build approval embed
-  const embed = new EmbedBuilder()
-    .setTitle(`Verification Request #${queueId}${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
-    .setColor(isOfficial ? 0xFFD700 : 0x8B4513)
-    .addFields(
-      { name: 'User', value: `<@${discordId}> (${discordId})`, inline: false },
-      { name: 'Position Requested', value: position, inline: false },
-      { name: 'Nickname Requested', value: nickname, inline: false },
-      { name: 'Supervisor', value: isOfficial ? 'None' : (portalUser?.supervisor_name || 'None'), inline: false },
-      { name: 'Employee Number', value: isOfficial ? 'N/A' : (portalUser?.employee_number || 'N/A'), inline: false },
-      { name: 'Verification ID', value: `#${queueId}`, inline: false },
-      ...(isOfficial ? [{ name: 'Account Type', value: 'Official Account (Bypass)', inline: false }] : []),
-    )
-    .setTimestamp();
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`verify_approve_${queueId}`).setLabel('Confirm').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(`verify_deny_${queueId}`).setLabel('Deny').setStyle(ButtonStyle.Danger),
-  );
-
-  const msg = await verifyChannel.send({ embeds: [embed], components: [row] });
-
-  // Save message ID
-  db.prepare("UPDATE verification_queue SET message_id = ? WHERE id = ?").run(msg.id, queueId);
-
-  await interaction.editReply({ content: `✅ Your verification request **#${queueId}** has been submitted and is awaiting approval from a superuser.` });
 }
 
 // Button interaction handler — exported so index.js can register it
