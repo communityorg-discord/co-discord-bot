@@ -87,7 +87,7 @@ export async function execute(interaction) {
     .setColor(0x5865F2)
     .setDescription(message)
     .addFields({ name: 'From', value: `${senderPortalUser?.display_name || interaction.user.username} — via CO Staff Management`, inline: false })
-    .setFooter({ text: 'Community Organisation | Staff Management' })
+    .setFooter({ text: 'Community Organisation | Staff Assistant' })
     .setTimestamp();
 
   // Single user DM
@@ -110,7 +110,7 @@ export async function execute(interaction) {
         .setTitle('✅ Message Sent')
         .setColor(0x22c55e)
         .setDescription(`Message delivered to **${portalUser?.display_name || target.username}**.`)
-        .setFooter({ text: 'Community Organisation | Staff Management' })
+        .setFooter({ text: 'Community Organisation | Staff Assistant' })
         .setTimestamp()
       ]});
     } catch (e) {
@@ -118,7 +118,7 @@ export async function execute(interaction) {
         .setTitle('❌ Failed to Send')
         .setColor(0xef4444)
         .setDescription(`Could not deliver message to **${portalUser?.display_name || target.username}**. They may have DMs disabled.`)
-        .setFooter({ text: 'Community Organisation | Staff Management' })
+        .setFooter({ text: 'Community Organisation | Staff Assistant' })
         .setTimestamp()
       ]});
     }
@@ -184,7 +184,7 @@ export async function execute(interaction) {
       { name: '👥 Total', value: String(recipients.length), inline: true },
       ...(failedUsers.length > 0 ? [{ name: 'Failed Recipients', value: failedUsers.slice(0, 10).join(', ') + (failedUsers.length > 10 ? ` +${failedUsers.length - 10} more` : ''), inline: false }] : [])
     )
-    .setFooter({ text: 'Community Organisation | Staff Management' })
+    .setFooter({ text: 'Community Organisation | Staff Assistant' })
     .setTimestamp()
   ]});
 }

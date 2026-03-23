@@ -202,7 +202,7 @@ webhookApp.post('/bot/suspend', async (req, res) => {
             { name: '📅 Expires', value: expiresDisplay, inline: true },
             { name: '👤 Actioned By', value: moderatorName || 'Staff Management', inline: true },
           )
-          .setFooter({ text: 'Community Organisation | Staff Management' })
+          .setFooter({ text: 'Community Organisation | Staff Assistant' })
           .setTimestamp()
         ]});
       }
@@ -237,7 +237,7 @@ webhookApp.post('/bot/suspend', async (req, res) => {
             .setTitle('✅ Suspension Lifted')
             .setColor(0x22C55E)
             .setDescription('Your suspension from **Community Organisation** has ended and your roles have been restored.')
-            .setFooter({ text: 'Community Organisation | Staff Management' })
+            .setFooter({ text: 'Community Organisation | Staff Assistant' })
             .setTimestamp()
           ]});
         } catch {}
@@ -278,7 +278,7 @@ webhookApp.post('/bot/unsuspend', async (req, res) => {
         .setColor(0x22C55E)
         .setDescription('Your suspension from **Community Organisation** has ended and your roles have been restored.')
         .addFields({ name: '👤 Actioned By', value: moderatorName || 'Staff Management', inline: true })
-        .setFooter({ text: 'Community Organisation | Staff Management' })
+        .setFooter({ text: 'Community Organisation | Staff Assistant' })
         .setTimestamp()
       ]});
     } catch {}

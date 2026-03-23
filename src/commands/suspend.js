@@ -69,7 +69,7 @@ export async function execute(interaction) {
           { name: '📅 Expires', value: expiresDisplay, inline: true },
           { name: '👤 Actioned By', value: `<@${interaction.user.id}>`, inline: true },
         )
-        .setFooter({ text: 'Community Organisation | Staff Management' })
+        .setFooter({ text: 'Community Organisation | Staff Assistant' })
         .setTimestamp()
       ]
     });
@@ -103,7 +103,7 @@ export async function execute(interaction) {
             .setTitle('✅ Suspension Lifted')
             .setColor(0x22C55E)
             .setDescription(`Your suspension from **Community Organisation** has ended and your roles have been restored.`)
-            .setFooter({ text: 'Community Organisation | Staff Management' })
+            .setFooter({ text: 'Community Organisation | Staff Assistant' })
             .setTimestamp()
           ]
         });
@@ -134,7 +134,7 @@ export async function execute(interaction) {
         { name: '📅 Expires', value: expiresDisplay, inline: true },
         { name: '👤 Actioned By', value: `<@${interaction.user.id}>`, inline: true },
       )
-      .setFooter({ text: 'Community Organisation | Staff Management' })
+      .setFooter({ text: 'Community Organisation | Staff Assistant' })
       .setTimestamp()
     ]
   });
