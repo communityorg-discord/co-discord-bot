@@ -29,6 +29,7 @@ import * as purge from './commands/purge.js';
 import * as scribe from './commands/scribe.js';
 import * as unverify from './commands/unverify.js';
 import * as authorisationOverride from './commands/authorisation-override.js';
+import * as logspanel from './commands/logspanel.js';
 import * as cooldown from './commands/cooldown.js';
 
 config();
@@ -38,7 +39,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, ban, unban, verify, unverify, authorisationOverride, cooldown];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, ban, unban, verify, unverify, authorisationOverride, cooldown, logspanel];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -294,12 +295,14 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isStringSelectMenu()) {
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
     if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
+    if (interaction.customId.startsWith('logspanel_')) return logspanel.handleSelect(interaction);
   }
 
   // Verify/Unverify modal handlers
   if (interaction.isModalSubmit()) {
     if (interaction.customId.startsWith('verify_deny_reason_')) return verifyModal(interaction);
     if (interaction.customId.startsWith('unverify_approve_reason_')) return unverifyModal(interaction);
+    if (interaction.customId.startsWith('logspanel_')) return logspanel.handleModal(interaction);
 
     if (interaction.customId === 'dm_exempt_add_modal') {
       const { addDmExemption, getDmExemptions } = await import('./utils/botDb.js');
