@@ -3,7 +3,7 @@ import db from './botDb.js';
 
 // Apply roles + nickname for a verified member across ALL guilds
 export async function applyVerification(client, discordId, position, nickname) {
-  const roleNames = POSITIONS[position] || [];
+  const roleNames = [...(POSITIONS[position] || []), 'Verified', 'CO Staff'];
   const results = [];
 
   for (const [guildId, guild] of client.guilds.cache) {
