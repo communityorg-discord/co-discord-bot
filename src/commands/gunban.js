@@ -46,7 +46,10 @@ export async function execute(interaction) {
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: userId, name: userId },
     reason, color: 0x22C55E,
-    fields: [{ name: 'Servers Unbanned', value: String(unbannedCount), inline: true }]
+    fields: [
+      { name: 'Servers Unbanned', value: String(unbannedCount), inline: true },
+      { name: 'Servers', value: serverList, inline: false }
+    ]
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()
@@ -56,8 +59,7 @@ export async function execute(interaction) {
     .addFields(
       { name: 'Unbanned From', value: String(unbannedCount), inline: true },
       { name: 'Reason', value: reason, inline: false },
-      { name: 'Moderator', value: interaction.user.username, inline: true },
-      { name: 'Servers', value: serverList, inline: false }
+      { name: 'Moderator', value: interaction.user.username, inline: true }
     )
     .setFooter({ text: 'Community Organisation' })
     .setTimestamp()

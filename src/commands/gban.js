@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { canRunCommand, isSuperuser, requiresSuperuserWarning } from '../utils/permissions.js';
+import { canRunCommand, requiresSuperuserWarning } from '../utils/permissions.js';
 import { ALL_SERVER_IDS, APPEALS_SERVER_ID } from '../config.js';
 import { addInfraction, addGlobalBan, getActiveGlobalBan } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
@@ -49,8 +49,6 @@ export async function execute(interaction) {
   const inf = addInfraction(target.id, 'global_ban', reason, interaction.user.id, interaction.user.username, null, appealable);
   addGlobalBan(target.id, reason, interaction.user.id, appealable);
 
-  const serverList = serverResults.map(s => `${s.success ? '🟢' : '🔴'} ${s.name}`).join('\n');
-
   try {
     await target.send({
       embeds: [new EmbedBuilder()
@@ -66,6 +64,8 @@ export async function execute(interaction) {
     });
   } catch {}
 
+  const serverList = serverResults.map(s => `${s.success ? '🟢' : '🔴'} ${s.name}`).join('\n');
+
   await logAction(interaction.client, {
     action: 'Global Ban',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
@@ -73,7 +73,8 @@ export async function execute(interaction) {
     reason, color: 0x7F1D1D,
     fields: [
       { name: 'Servers Banned', value: String(bannedCount), inline: true },
-      { name: 'Appealable', value: appealable ? 'Yes' : 'No', inline: true }
+      { name: 'Appealable', value: appealable ? 'Yes' : 'No', inline: true },
+      { name: 'Servers', value: serverList, inline: false }
     ]
   });
 
@@ -86,8 +87,7 @@ export async function execute(interaction) {
       { name: 'Banned', value: String(bannedCount), inline: true },
       { name: 'Reason', value: reason, inline: false },
       { name: 'Appealable', value: appealable ? 'Yes' : 'No', inline: true },
-      { name: 'Moderator', value: interaction.user.username, inline: true },
-      { name: 'Servers', value: serverList, inline: false }
+      { name: 'Moderator', value: interaction.user.username, inline: true }
     )
     .setFooter({ text: 'Community Organisation' })
     .setTimestamp()
