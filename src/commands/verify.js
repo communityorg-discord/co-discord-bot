@@ -167,9 +167,11 @@ export async function handleButton(interaction) {
     let originalMsg = null;
     try {
       const channel = await interaction.client.channels.fetch(entry.channel_id);
+      console.log(`[Verify] Fetching message ${entry.message_id} from channel ${entry.channel_id}`);
       originalMsg = await channel.messages.fetch(entry.message_id);
+      console.log(`[Verify] Got originalMsg: ${originalMsg.id}`);
     } catch (e) {
-      console.warn(`[Verify] Could not fetch original message: ${e.message}`);
+      console.warn(`[Verify] Could not fetch original message: ${e.message} (entry msg_id=${entry.message_id} channel=${entry.channel_id})`);
     }
 
     // Apply roles + nickname across all guilds — get detailed results
@@ -207,8 +209,11 @@ export async function handleButton(interaction) {
 
     try {
       if (originalMsg) {
+        console.log(`[Verify] Editing originalMsg ${originalMsg.id}`);
         await originalMsg.edit({ embeds: [updatedEmbed], components: [] });
+        console.log(`[Verify] Edit successful`);
       } else {
+        console.log(`[Verify] No originalMsg, using editReply`);
         await interaction.editReply({ content: `✅ Verification **#${queueId}** approved.`, ephemeral: true });
       }
     } catch (e) {
@@ -234,28 +239,42 @@ export async function handleButton(interaction) {
       specificChannelId: VERIFY_UNVERIFY_LOG_CHANNEL_ID
     });
 
-    // DM the user
+    // DM the user — simple approval with server invite links
     try {
       const user = await interaction.client.users.fetch(entry.discord_id);
-      const summary = guildFieldLines.split('\n').slice(0, 20).join('\n');
-      const note = isOfficial ? 'Official Account' : `Employee: ${entry.employee_number || 'N/A'}`;
+      const inviteLines = [];
+      for (const [, guild] of interaction.client.guilds.cache) {
+        try {
+          const channel = guild.channels.cache
+            .filter(c => c.isTextBased() && c.permissionsFor(guild.members.me)?.has("CreateInstantInvite"))
+            .first();
+          if (channel) {
+            const invite = await channel.createInvite({ maxAge: 86400, maxUses: 1, reason: "Verification approved" });
+            inviteLines.push("[" + guild.name + "](" + invite.url + ")");
+          } else {
+            inviteLines.push("~~" + guild.name + "~~ *(no invite permission)*");
+          }
+        } catch {
+          inviteLines.push("~~" + guild.name + "~~ *(could not create invite)*");
+        }
+      }
+      const note = isOfficial ? "Official Account" : "Employee: " + (entry.employee_number || "N/A");
       await user.send({
         embeds: [new EmbedBuilder()
-          .setTitle('✅ CO Verification Approved')
+          .setTitle("✅ CO Verification Approved")
           .setColor(0x22C55E)
-          .setDescription(`Your CO staff verification has been approved by <@${interaction.user.id}>.`)
+          .setDescription("Your CO staff verification has been approved by <@" + interaction.user.id + ">.\n\nYou now have access to all CO servers.")
           .addFields(
-            { name: 'Position', value: entry.position, inline: true },
-            { name: 'Note', value: `Verified - ${note}`, inline: false },
-            { name: 'Per-Server Results', value: summary || 'None', inline: false },
-            { name: 'Servers Applied', value: `${successCount} ✅ | ${partialCount} ⚠️ | ${failedCount} ❌`, inline: false },
+            { name: "Position", value: entry.position, inline: true },
+            { name: "Status", value: "Verified - " + note, inline: true },
+            { name: "Server Invites (1-day)", value: inviteLines.join("\n") || "No invites available", inline: false },
           )
-          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setFooter({ text: "Community Organisation | Staff Assistant" })
           .setTimestamp()
         ]
       });
     } catch (e) {
-      console.warn('[Verify] Could not DM user:', e.message);
+      console.warn("[Verify] Could not DM user:", e.message);
     }
     return;
   }
