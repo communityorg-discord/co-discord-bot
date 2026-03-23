@@ -167,8 +167,6 @@ export async function handleButton(interaction) {
 
     const isOfficial = Number(entry.verified_official) === 1;
 
-    await interaction.deferUpdate();
-
     const override = overrideLevel;
     const results = await applyVerification(interaction.client, entry.discord_id, entry.position, entry.requested_nickname, { isProbation: !!Number(entry.is_probation), overrideAuthLevel: override });
 
@@ -200,15 +198,27 @@ export async function handleButton(interaction) {
       .addFields(...fields)
       .setTimestamp();
 
+    // Edit the original verification request message
     let originalMsg = null;
     try {
       const channel = await interaction.client.channels.fetch(entry.channel_id);
       originalMsg = await channel.messages.fetch(entry.message_id);
-    } catch (e) {}
+    } catch (e) {
+      console.warn(`[Verify] Could not fetch original message: ${e.message}`);
+    }
 
     if (originalMsg) {
-      await originalMsg.edit({ embeds: [updatedEmbed], components: [] }).catch(() => {});
+      await originalMsg.edit({ embeds: [updatedEmbed], components: [] }).catch(e => console.warn(`[Verify] Could not edit original message: ${e.message}`));
     }
+
+    // Acknowledge the select menu interaction with an ephemeral confirmation
+    const ackEmbed = new EmbedBuilder()
+      .setColor(0x22C55E)
+      .setTitle(`✅ Verification #${queueId} Approved`)
+      .setDescription(`Approved <@${entry.discord_id}> at **Level ${overrideLevel}** override.`)
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [ackEmbed], ephemeral: true });
 
     await logAction(interaction.client, {
       action: `✅ Staff Verified [Lvl ${overrideLevel} Override]${isOfficial ? ' [Official Account]' : ''}`,
