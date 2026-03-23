@@ -82,8 +82,8 @@ export async function execute(interaction) {
         { name: 'User', value: `<@${discordId}> (${discordId})`, inline: false },
         { name: 'Position Requested', value: position, inline: false },
         { name: 'Nickname Requested', value: nickname, inline: false },
-        { name: 'Supervisor', value: isOfficial ? 'None' : (portalUser?.supervisor_name || 'None'), inline: false },
-        { name: 'Employee Number', value: isOfficial ? 'N/A' : (portalUser?.employee_number || 'N/A'), inline: false },
+        { name: 'Supervisor', value: 'N/A', inline: false },
+        { name: 'Employee Number', value: 'CO999998', inline: false },
         { name: 'Verification ID', value: `#${queueId}`, inline: false },
         ...(isOfficial ? [{ name: 'Account Type', value: 'Official Account (Bypass)', inline: false }] : []),
       )
