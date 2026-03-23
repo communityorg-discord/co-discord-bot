@@ -179,7 +179,7 @@ export async function handleButton(interaction) {
     }
 
     // Apply roles + nickname across all guilds — get detailed results
-    const results = await applyVerification(interaction.client, entry.discord_id, entry.position, entry.requested_nickname);
+    const results = await applyVerification(interaction.client, entry.discord_id, entry.position, entry.requested_nickname, { isProbation: !!Number(entry.is_probation) });
 
     // Save to verified_members
     db.prepare(`

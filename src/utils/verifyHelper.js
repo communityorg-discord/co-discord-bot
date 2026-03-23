@@ -5,8 +5,26 @@ import db from './botDb.js';
  * Apply roles + nickname for a verified member across ALL guilds.
  * Returns detailed per-guild results showing roles added/removed and any failures.
  */
-export async function applyVerification(client, discordId, position, nickname, overrideAuthLevel = null) {
-  const roleNames = [...(POSITIONS[position] || []), 'Verified', 'CO Staff'];
+export async function applyVerification(client, discordId, position, nickname, { isProbation = false, overrideAuthLevel = null } = {}) {
+  const baseRoles = [...(POSITIONS[position] || []), 'Verified', 'CO Staff'];
+
+  // If on probation, replace the auth level role with one level lower
+  let roleNames = baseRoles;
+  if (isProbation && !overrideAuthLevel) {
+    const authLevelMatch = baseRoles.find(r => r.startsWith('Authorisation Level '));
+    if (authLevelMatch) {
+      const currentLevel = parseInt(authLevelMatch.replace('Authorisation Level ', ''), 10);
+      const probationLevel = Math.max(1, currentLevel - 1);
+      const probationRole = `Authorisation Level ${probationLevel}`;
+      roleNames = baseRoles.map(r => r === authLevelMatch ? probationRole : r);
+    }
+  }
+
+  // If override is provided, replace auth level role with the override
+  if (overrideAuthLevel) {
+    roleNames = roleNames.map(r => r.startsWith('Authorisation Level ') ? `Authorisation Level ${overrideAuthLevel}` : r);
+  }
+
   const results = [];
 
   for (const [guildId, guild] of client.guilds.cache) {
