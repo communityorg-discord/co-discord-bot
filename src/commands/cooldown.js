@@ -13,6 +13,11 @@ export const data = new SlashCommandBuilder()
       .setMinValue(0)
       .setMaxValue(21600)
   )
+  .addStringOption(opt =>
+    opt.setName('reason')
+      .setDescription('Reason for setting the cooldown')
+      .setRequired(true)
+  )
   .addChannelOption(opt =>
     opt.setName('channel')
       .setDescription('Channel to apply cooldown to (defaults to current channel)')
@@ -28,6 +33,7 @@ export async function execute(interaction) {
 
   const seconds = interaction.options.getInteger('seconds');
   const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+  const reason = interaction.options.getString('reason');
 
   try {
     await targetChannel.setRateLimitPerUser(seconds);
@@ -42,7 +48,8 @@ export async function execute(interaction) {
     .addFields(
       { name: 'Channel', value: `<#${targetChannel.id}>`, inline: true },
       { name: 'Duration', value: durationText, inline: true },
-      { name: 'Set By', value: `<@${interaction.user.id}>`, inline: true }
+      { name: 'Set By', value: `<@${interaction.user.id}>`, inline: true },
+      { name: 'Reason', value: reason, inline: false }
     )
     .setTimestamp();
 
@@ -53,11 +60,12 @@ export async function execute(interaction) {
     action: '⏱️ Channel Cooldown Set',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: targetChannel.id, name: `#${targetChannel.name}` },
-    reason: durationText,
+    reason: reason,
     color: seconds === 0 ? 0x22C55E : 0xF59E0B,
     fields: [
       { name: 'Channel', value: `<#${targetChannel.id}>`, inline: true },
       { name: 'Duration', value: durationText, inline: true },
+      { name: 'Reason', value: reason, inline: false },
     ],
     specificChannelId: COOLDOWN_LOG_CHANNEL_ID
   });
