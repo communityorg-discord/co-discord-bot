@@ -488,12 +488,19 @@ export async function handleModal(interaction) {
   if (originalMsg) {
     await originalMsg.edit({ embeds: [updatedEmbed], components: [] });
   } else {
-    await interaction.editReply({ content: `❌ Verification denied.` });
+    await interaction.editReply({ embeds: [updatedEmbed] });
   }
 
   try {
     const user = await interaction.client.users.fetch(entry.discord_id);
-    await user.send(`❌ Your CO verification request has been **denied**.\n\n**Reason:** ${reason}\n\nIf you believe this is an error, please contact a superuser.`);
+    await user.send({
+      embeds: [new EmbedBuilder()
+        .setColor(0xef4444)
+        .setTitle('❌ CO Verification Denied')
+        .setDescription(`Your CO staff verification request has been denied.\n\n**Reason:** ${reason}\n\nIf you believe this is an error, please contact a superuser.`)
+        .setTimestamp()
+      ]
+    });
   } catch (e) {
     console.warn('[Verify] Could not DM user:', e.message);
   }
