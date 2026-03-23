@@ -79,11 +79,13 @@ export async function execute(interaction) {
 
   // Validate — must provide at least one target
   if (!target && !mass && !team) {
+    interaction._commandFailed = 'No target specified.';
     return interaction.reply({ content: '❌ You must specify a `user`, set `mass: True`, or choose a `team`.', ephemeral: true });
   }
 
   // Mass DM requires superuser
   if (mass && !isSuperuser(interaction.user.id)) {
+    interaction._commandFailed = 'Mass DM requires superuser access.';
     return interaction.reply({ content: '❌ Mass DM requires superuser access.', ephemeral: true });
   }
 
@@ -155,7 +157,8 @@ export async function execute(interaction) {
         ]
       });
     } catch (e) {
-      return interaction.editReply({
+      interaction._commandFailed = e.message;
+      await interaction.followUp({
         embeds: [new EmbedBuilder()
           .setTitle('❌ Failed to Send')
           .setColor(0xef4444)
@@ -163,7 +166,8 @@ export async function execute(interaction) {
           .setFooter({ text: 'Community Organisation | Staff Assistant' })
           .setTimestamp()
         ]
-      });
+      }).catch(() => {});
+      throw e;
     }
   }
 
@@ -186,7 +190,9 @@ export async function execute(interaction) {
   recipients = recipients.filter(r => !isDmExempt(r.discord_id));
 
   if (recipients.length === 0) {
-    return interaction.editReply({ content: `❌ No active staff found for that target.` });
+    interaction._commandFailed = 'No active staff found for that target.';
+    await interaction.followUp({ content: `❌ No active staff found for that target.`, ephemeral: true }).catch(() => {});
+    throw new Error('No recipients');
   }
 
   let sent = 0;

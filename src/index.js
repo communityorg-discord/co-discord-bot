@@ -61,21 +61,22 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isChatInputCommand()) {
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
-    let success = true;
-    let errorMessage = null;
+    let commandError = null;
     try {
       await command.execute(interaction);
     } catch (e) {
-      success = false;
-      errorMessage = e.message;
+      commandError = e.message;
       console.error(`[CO Bot] Command error (${interaction.commandName}):`, e.message);
       const msg = { content: '❌ An error occurred. Please try again or contact an administrator.', ephemeral: true };
       if (interaction.replied || interaction.deferred) {
-        await interaction.followUp(msg);
+        await interaction.followUp(msg).catch(() => {});
       } else {
-        await interaction.reply(msg);
+        await interaction.reply(msg).catch(() => {});
       }
     }
+
+    const success = !commandError && !interaction._commandFailed;
+    const errorMsg = commandError || (typeof interaction._commandFailed === 'string' ? interaction._commandFailed : null);
 
     // Always log the command attempt
     if (COMMAND_LOG_CHANNEL_ID) {
@@ -92,7 +93,7 @@ client.on('interactionCreate', async interaction => {
             { name: 'Guild', value: interaction.guild?.name || 'DM', inline: true },
             { name: 'Status', value: success ? '✅ Success' : '❌ Failed', inline: true },
             ...(options ? [{ name: 'Options', value: options, inline: false }] : []),
-            ...(errorMessage ? [{ name: 'Error', value: errorMessage.slice(0, 500), inline: false }] : []),
+            ...(errorMsg ? [{ name: 'Error', value: String(errorMsg).slice(0, 500), inline: false }] : []),
           )
           .setFooter({ text: 'Community Organisation | Staff Assistant' })
           .setTimestamp();
