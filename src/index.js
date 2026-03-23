@@ -1,3 +1,4 @@
+import express from 'express';
 import { Client, GatewayIntentBits, Collection, REST, Routes } from 'discord.js';
 import { config } from 'dotenv';
 import { getUserByDiscordId } from './db.js';
@@ -135,5 +136,169 @@ client.on('guildMemberAdd', async (member) => {
     console.error('[guildMemberAdd verify error]', e.message);
   }
 });
+
+
+// ============ BOT WEBHOOK SERVER ============
+const webhookApp = express();
+webhookApp.use(express.json());
+
+function verifyBotSecret(req, res) {
+  const secret = req.headers['x-bot-secret'];
+  if (!secret || secret !== process.env.BOT_WEBHOOK_SECRET) {
+    res.status(401).json({ ok: false, error: 'Unauthorised' });
+    return false;
+  }
+  return true;
+}
+
+// POST /bot/suspend
+webhookApp.post('/bot/suspend', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { discordId, reason, duration, moderatorId, moderatorName, targetName } = req.body;
+  if (!discordId) return res.status(400).json({ ok: false, error: 'discordId required' });
+  try {
+    const { suspendAcrossGuilds } = await import('./utils/roleManager.js');
+    const { addInfraction, addSuspension } = await import('./utils/botDb.js');
+    const { logAction } = await import('./utils/logger.js');
+
+    await suspendAcrossGuilds(client, discordId);
+
+    function formatDuration(ms) {
+      if (!ms) return 'Indefinite';
+      const minutes = Math.floor(ms / 60000);
+      const hours = Math.floor(minutes / 60);
+      const days = Math.floor(hours / 24);
+      if (days > 0) return days + ' day' + (days !== 1 ? 's' : '');
+      if (hours > 0) return hours + ' hour' + (hours !== 1 ? 's' : '');
+      if (minutes > 0) return minutes + ' minute' + (minutes !== 1 ? 's' : '');
+      return 'Less than a minute';
+    }
+
+    let durationMs = null;
+    if (duration) {
+      const { default: ms } = await import('ms');
+      durationMs = ms(duration);
+    }
+    const expiresAt = durationMs ? new Date(Date.now() + durationMs).toISOString() : null;
+    const durationDisplay = formatDuration(durationMs);
+    const expiresDisplay = expiresAt ? new Date(expiresAt).toUTCString() : 'Never';
+
+    const inf = addInfraction(discordId, 'suspension', reason, moderatorId || 'PORTAL', moderatorName || 'Portal');
+    addSuspension(discordId, reason, moderatorId || 'PORTAL', expiresAt, inf.lastInsertRowid);
+
+    // DM the user
+    try {
+      const { EmbedBuilder } = await import('discord.js');
+      const user = await client.users.fetch(discordId).catch(() => null);
+      if (user) {
+        await user.send({ embeds: [new EmbedBuilder()
+          .setTitle('🔴 You Have Been Suspended')
+          .setColor(0xEF4444)
+          .setDescription('You have been suspended from **Community Organisation**.\n\nIf you believe this is an error, you may appeal in the Appeals Server.')
+          .addFields(
+            { name: '📋 Reason', value: reason || 'No reason provided', inline: false },
+            { name: '⏱️ Duration', value: durationDisplay, inline: true },
+            { name: '📅 Expires', value: expiresDisplay, inline: true },
+            { name: '👤 Actioned By', value: moderatorName || 'Staff Management', inline: true },
+          )
+          .setFooter({ text: 'Community Organisation | Staff Management' })
+          .setTimestamp()
+        ]});
+      }
+    } catch {}
+
+    await logAction(client, {
+      action: '🔴 Staff Suspended (Portal)',
+      moderator: { discordId: moderatorId || 'PORTAL', name: moderatorName || 'Portal' },
+      target: { discordId, name: targetName || discordId },
+      reason: reason || 'No reason provided',
+      color: 0xEF4444,
+      fields: [
+        { name: '⏱️ Duration', value: durationDisplay, inline: true },
+        { name: '📅 Expires', value: expiresDisplay, inline: true },
+        { name: '👤 Actioned By', value: moderatorName || 'Portal', inline: true },
+        { name: '🌐 Source', value: 'CO Staff Portal — Case Management', inline: true },
+      ]
+    });
+
+    // Auto-lift if timed
+    if (durationMs) {
+      setTimeout(async () => {
+        const { unsuspendAcrossGuilds } = await import('./utils/roleManager.js');
+        const { liftSuspension } = await import('./utils/botDb.js');
+        const botDbMod = await import('./utils/botDb.js');
+        await unsuspendAcrossGuilds(client, discordId, botDbMod.default);
+        liftSuspension(discordId);
+        try {
+          const { EmbedBuilder } = await import('discord.js');
+          const user = await client.users.fetch(discordId).catch(() => null);
+          if (user) await user.send({ embeds: [new EmbedBuilder()
+            .setTitle('✅ Suspension Lifted')
+            .setColor(0x22C55E)
+            .setDescription('Your suspension from **Community Organisation** has ended and your roles have been restored.')
+            .setFooter({ text: 'Community Organisation | Staff Management' })
+            .setTimestamp()
+          ]});
+        } catch {}
+        await logAction(client, {
+          action: '✅ Suspension Lifted (Auto)',
+          moderator: { discordId: 'SYSTEM', name: 'Automated' },
+          target: { discordId, name: targetName || discordId },
+          reason: 'Suspension duration expired',
+          color: 0x22C55E
+        });
+      }, durationMs);
+    }
+
+    res.json({ ok: true, duration: durationDisplay, expires: expiresAt });
+  } catch (e) {
+    console.error('[BOT WEBHOOK /suspend]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// POST /bot/unsuspend
+webhookApp.post('/bot/unsuspend', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { discordId, moderatorName, targetName } = req.body;
+  if (!discordId) return res.status(400).json({ ok: false, error: 'discordId required' });
+  try {
+    const { unsuspendAcrossGuilds } = await import('./utils/roleManager.js');
+    const { liftSuspension } = await import('./utils/botDb.js');
+    const botDbMod = await import('./utils/botDb.js');
+    await unsuspendAcrossGuilds(client, discordId, botDbMod.default);
+    liftSuspension(discordId);
+
+    try {
+      const { EmbedBuilder } = await import('discord.js');
+      const user = await client.users.fetch(discordId).catch(() => null);
+      if (user) await user.send({ embeds: [new EmbedBuilder()
+        .setTitle('✅ Suspension Lifted')
+        .setColor(0x22C55E)
+        .setDescription('Your suspension from **Community Organisation** has ended and your roles have been restored.')
+        .addFields({ name: '👤 Actioned By', value: moderatorName || 'Staff Management', inline: true })
+        .setFooter({ text: 'Community Organisation | Staff Management' })
+        .setTimestamp()
+      ]});
+    } catch {}
+
+    const { logAction } = await import('./utils/logger.js');
+    await logAction(client, {
+      action: '✅ Suspension Lifted (Portal)',
+      moderator: { discordId: 'PORTAL', name: moderatorName || 'Portal' },
+      target: { discordId, name: targetName || discordId },
+      reason: 'Lifted via CO Staff Portal',
+      color: 0x22C55E,
+      fields: [{ name: '🌐 Source', value: 'CO Staff Portal — Case Management', inline: true }]
+    });
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[BOT WEBHOOK /unsuspend]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+webhookApp.listen(3017, () => console.log('[CO Bot] Webhook server listening on port 3017'));
 
 client.login(process.env.DISCORD_BOT_TOKEN);
