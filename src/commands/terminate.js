@@ -26,7 +26,7 @@ export async function execute(interaction) {
   }
 
   const portalUser = getUserByDiscordId(target.id);
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply();
 
   await removeAllStaffRoles(interaction.client, target.id, `Terminated: ${reason}`);
 
@@ -56,5 +56,15 @@ export async function execute(interaction) {
     reason, color: 0x7F1D1D
   });
 
-  await interaction.editReply({ content: `✅ **${portalUser?.display_name || target.username}** has been terminated. Roles removed and kicked from all servers.` });
+  await interaction.editReply({ embeds: [new EmbedBuilder()
+    .setTitle('🔴 Staff Terminated')
+    .setColor(0x7F1D1D)
+    .setDescription(`**${portalUser?.display_name || target.username}** has been terminated.`)
+    .addFields(
+      { name: 'Reason', value: reason, inline: false },
+      { name: 'Moderator', value: interaction.user.username, inline: true }
+    )
+    .setFooter({ text: 'Community Organisation' })
+    .setTimestamp()
+  ]});
 }

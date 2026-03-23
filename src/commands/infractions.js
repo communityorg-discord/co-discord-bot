@@ -36,13 +36,22 @@ export async function execute(interaction) {
       embed.addFields({ name: '🗑️ Deleted Infractions', value: deleted.map(i => `**[Deleted]** \`${i.type}\` — ${i.reason}`).join('\n') });
     }
 
-    await interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.reply({ embeds: [embed] });
 
   } else if (sub === 'delete') {
     if (!isSuperuser(interaction.user.id)) return interaction.reply({ content: '❌ Superuser only.', ephemeral: true });
     const id = interaction.options.getInteger('id');
     const deleted = deleteInfraction(id, interaction.user.id);
     if (!deleted) return interaction.reply({ content: `❌ Infraction #${id} not found.`, ephemeral: true });
-    await interaction.reply({ content: `✅ Infraction #${id} deleted and moved to deleted history.`, ephemeral: true });
+    await interaction.reply({ embeds: [new EmbedBuilder()
+      .setTitle('🗑️ Infraction Deleted')
+      .setColor(0x22C55E)
+      .setDescription(`Infraction #${id} has been deleted and moved to deleted history.`)
+      .addFields(
+        { name: 'Deleted By', value: interaction.user.username, inline: true }
+      )
+      .setFooter({ text: 'Community Organisation' })
+      .setTimestamp()
+    ]});
   }
 }

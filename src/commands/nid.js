@@ -53,5 +53,5 @@ export async function execute(interaction) {
     new ButtonBuilder().setCustomId('nid_cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary)
   );
 
-  await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+  await interaction.reply({ embeds: [embed], components: [row] });
 }

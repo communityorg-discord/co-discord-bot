@@ -41,5 +41,16 @@ export async function execute(interaction) {
     reason, color: 0xF59E0B
   });
 
-  await interaction.reply({ content: `✅ Staff strike issued to **${portalUser?.display_name || target.username}**. Infraction ID: #${inf.lastInsertRowid}`, ephemeral: true });
+  await interaction.reply({ embeds: [new EmbedBuilder()
+    .setTitle('⚠️ Staff Strike Issued')
+    .setColor(0xF59E0B)
+    .setDescription(`Strike issued to **${portalUser?.display_name || target.username}**.`)
+    .addFields(
+      { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },
+      { name: 'Reason', value: reason, inline: false },
+      { name: 'Moderator', value: interaction.user.username, inline: true }
+    )
+    .setFooter({ text: 'Community Organisation' })
+    .setTimestamp()
+  ]});
 }

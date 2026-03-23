@@ -32,7 +32,7 @@ export async function execute(interaction) {
   }
   const expiresAt = duration ? new Date(Date.now() + duration).toISOString() : null;
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply();
 
   await removeAllStaffRoles(interaction.client, target.id, `Suspended: ${reason}`);
   await addSuspendedRole(interaction.client, target.id);
@@ -85,5 +85,16 @@ export async function execute(interaction) {
     }, duration);
   }
 
-  await interaction.editReply({ content: `✅ **${portalUser?.display_name || target.username}** has been suspended${durationStr ? ` for ${durationStr}` : ' indefinitely'}.` });
+  await interaction.editReply({ embeds: [new EmbedBuilder()
+    .setTitle('🔴 Staff Suspended')
+    .setColor(0xEF4444)
+    .setDescription(`**${portalUser?.display_name || target.username}** has been suspended${durationStr ? ` for ${durationStr}` : ' indefinitely'}.`)
+    .addFields(
+      { name: 'Reason', value: reason, inline: false },
+      { name: 'Duration', value: durationStr || 'Indefinite', inline: true },
+      { name: 'Moderator', value: interaction.user.username, inline: true }
+    )
+    .setFooter({ text: 'Community Organisation' })
+    .setTimestamp()
+  ]});
 }

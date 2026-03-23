@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canRunCommand } from '../utils/permissions.js';
 import { removeSuspendedRole, restorePositionRoles } from '../utils/roleManager.js';
 import { liftSuspension, getActiveSuspension } from '../utils/botDb.js';
@@ -22,7 +22,7 @@ export async function execute(interaction) {
 
   if (!suspension) return interaction.reply({ content: `❌ ${target.username} is not currently suspended.`, ephemeral: true });
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply();
 
   await removeSuspendedRole(interaction.client, target.id);
   if (portalUser?.position) await restorePositionRoles(interaction.client, target.id, portalUser.position);
@@ -37,5 +37,15 @@ export async function execute(interaction) {
     reason, color: 0x22C55E
   });
 
-  await interaction.editReply({ content: `✅ **${portalUser?.display_name || target.username}**'s suspension has been lifted and roles restored.` });
+  await interaction.editReply({ embeds: [new EmbedBuilder()
+    .setTitle('✅ Suspension Lifted')
+    .setColor(0x22C55E)
+    .setDescription(`**${portalUser?.display_name || target.username}**'s suspension has been lifted and roles restored.`)
+    .addFields(
+      { name: 'Reason', value: reason, inline: false },
+      { name: 'Moderator', value: interaction.user.username, inline: true }
+    )
+    .setFooter({ text: 'Community Organisation' })
+    .setTimestamp()
+  ]});
 }

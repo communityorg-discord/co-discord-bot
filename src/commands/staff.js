@@ -30,5 +30,5 @@ export async function execute(interaction) {
     .setFooter({ text: 'Community Organisation | Staff Directory' })
   );
 
-  await interaction.reply({ embeds: embeds.slice(0, 3), ephemeral: true });
+  await interaction.reply({ embeds: embeds.slice(0, 3) });
 }

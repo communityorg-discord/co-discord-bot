@@ -28,7 +28,7 @@ export async function execute(interaction) {
   const existing = getActiveGlobalBan(target.id);
   if (existing) return interaction.reply({ content: `❌ ${target.username} already has an active global ban.`, ephemeral: true });
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply();
 
   let bannedCount = 0;
   for (const serverId of ALL_SERVER_IDS) {
@@ -71,5 +71,18 @@ export async function execute(interaction) {
     ]
   });
 
-  await interaction.editReply({ content: `✅ **${target.username}** has been globally banned from ${bannedCount} servers. Infraction ID: #${inf.lastInsertRowid}` });
+  await interaction.editReply({ embeds: [new EmbedBuilder()
+    .setTitle('🔨 Global Ban')
+    .setColor(0x7F1D1D)
+    .setDescription(`**${target.username}** has been globally banned from all CO servers.`)
+    .addFields(
+      { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },
+      { name: 'Servers Banned', value: String(bannedCount), inline: true },
+      { name: 'Reason', value: reason, inline: false },
+      { name: 'Appealable', value: appealable ? 'Yes' : 'No', inline: true },
+      { name: 'Moderator', value: interaction.user.username, inline: true }
+    )
+    .setFooter({ text: 'Community Organisation' })
+    .setTimestamp()
+  ]});
 }

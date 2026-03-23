@@ -37,5 +37,5 @@ export async function execute(interaction) {
     .setFooter({ text: 'Community Organisation | Staff Portal' })
     .setTimestamp();
 
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  await interaction.reply({ embeds: [embed] });
 }

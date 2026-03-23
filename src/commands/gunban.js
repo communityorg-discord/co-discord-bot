@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { isSuperuser } from '../utils/permissions.js';
 import { ALL_SERVER_IDS } from '../config.js';
 import { getActiveGlobalBan } from '../utils/botDb.js';
@@ -17,7 +17,7 @@ export async function execute(interaction) {
   const userId = interaction.options.getString('userid');
   const reason = interaction.options.getString('reason');
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply();
 
   let unbannedCount = 0;
   for (const serverId of ALL_SERVER_IDS) {
@@ -40,5 +40,16 @@ export async function execute(interaction) {
     fields: [{ name: 'Servers Unbanned', value: String(unbannedCount), inline: true }]
   });
 
-  await interaction.editReply({ content: `✅ Global ban removed from <@${userId}> across ${unbannedCount} servers.` });
+  await interaction.editReply({ embeds: [new EmbedBuilder()
+    .setTitle('✅ Global Unban')
+    .setColor(0x22C55E)
+    .setDescription(`Global ban removed from <@${userId}>.`)
+    .addFields(
+      { name: 'Servers Unbanned', value: String(unbannedCount), inline: true },
+      { name: 'Reason', value: reason, inline: false },
+      { name: 'Moderator', value: interaction.user.username, inline: true }
+    )
+    .setFooter({ text: 'Community Organisation' })
+    .setTimestamp()
+  ]});
 }

@@ -44,11 +44,15 @@ export async function execute(interaction) {
     return interaction.reply({ content: `⚠️ **Warning:** You are attempting to moderate a Superuser. This action has been logged.`, ephemeral: true });
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply();
 
   if (sub === 'start') {
     const existing = getActiveInvestigation(target.id);
-    if (existing) return interaction.editReply({ content: `❌ ${target.username} is already under investigation.` });
+    if (existing) return interaction.editReply({ embeds: [new EmbedBuilder()
+      .setTitle('❌ Already Under Investigation')
+      .setColor(0xEF4444)
+      .setDescription(`${target.username} is already under investigation.`)
+    ]});
 
     await removeAllStaffRoles(interaction.client, target.id, `Under Investigation: ${reason}`);
     await addInvestigationRole(interaction.client, target.id);
@@ -77,12 +81,27 @@ export async function execute(interaction) {
       reason, color: 0xF59E0B
     });
 
-    await interaction.editReply({ content: `✅ Investigation started for **${portalUser?.display_name || target.username}**. Staff roles removed, Under Investigation role assigned.` });
+    await interaction.editReply({ embeds: [new EmbedBuilder()
+      .setTitle('🔍 Investigation Started')
+      .setColor(0xF59E0B)
+      .setDescription(`Investigation started for **${portalUser?.display_name || target.username}**.`)
+      .addFields(
+        { name: 'Reason', value: reason, inline: false },
+        { name: 'Moderator', value: interaction.user.username, inline: true },
+        { name: 'Roles', value: 'Staff roles removed, Under Investigation role assigned.', inline: false }
+      )
+      .setFooter({ text: 'Community Organisation' })
+      .setTimestamp()
+    ]});
 
   } else if (sub === 'end') {
     const outcome = interaction.options.getString('outcome');
     const investigation = getActiveInvestigation(target.id);
-    if (!investigation) return interaction.editReply({ content: `❌ ${target.username} is not currently under investigation.` });
+    if (!investigation) return interaction.editReply({ embeds: [new EmbedBuilder()
+      .setTitle('❌ Not Under Investigation')
+      .setColor(0xEF4444)
+      .setDescription(`${target.username} is not currently under investigation.`)
+    ]});
 
     endInvestigation(target.id, outcome);
     await removeInvestigationRole(interaction.client, target.id);
@@ -117,6 +136,17 @@ export async function execute(interaction) {
       reason, color: outcome === 'nfa' ? 0x22C55E : 0xEF4444
     });
 
-    await interaction.editReply({ content: `✅ Investigation ended for **${portalUser?.display_name || target.username}**. Outcome: **${outcomeLabels[outcome]}**.` });
+    await interaction.editReply({ embeds: [new EmbedBuilder()
+      .setTitle('📋 Investigation Ended')
+      .setColor(outcome === 'nfa' ? 0x22C55E : 0xEF4444)
+      .setDescription(`Investigation ended for **${portalUser?.display_name || target.username}**.`)
+      .addFields(
+        { name: 'Outcome', value: outcomeLabels[outcome], inline: true },
+        { name: 'Reason', value: reason, inline: false },
+        { name: 'Moderator', value: interaction.user.username, inline: true }
+      )
+      .setFooter({ text: 'Community Organisation' })
+      .setTimestamp()
+    ]});
   }
 }
