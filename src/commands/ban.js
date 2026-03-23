@@ -22,7 +22,7 @@ export async function execute(interaction) {
   }
 
   const portalUser = getUserByDiscordId(target.id);
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply();
 
   const inf = addInfraction(target.id, 'ban', reason, interaction.user.id, interaction.user.username);
   const caseId = inf.lastInsertRowid;
@@ -48,7 +48,11 @@ export async function execute(interaction) {
   try {
     await interaction.guild.bans.create(target.id, { reason: `Ban | Case #${caseId} | ${reason}` });
   } catch (e) {
-    await interaction.editReply({ content: `❌ Failed to ban ${target.username}: ${e.message}` });
+    await interaction.editReply({ embeds: [new EmbedBuilder()
+      .setTitle('❌ Ban Failed')
+      .setColor(0xEF4444)
+      .setDescription(`Failed to ban **${target.username}**: ${e.message}`)
+    ]});
     return;
   }
 
@@ -64,5 +68,16 @@ export async function execute(interaction) {
     ]
   });
 
-  await interaction.editReply({ content: `✅ **${portalUser?.display_name || target.username}** has been banned from this server. Case ID: #${caseId}` });
+  await interaction.editReply({ embeds: [new EmbedBuilder()
+    .setTitle('🔨 User Banned')
+    .setColor(0x7F1D1D)
+    .setDescription(`**${portalUser?.display_name || target.username}** has been banned from this server.`)
+    .addFields(
+      { name: 'Case ID', value: `#${caseId}`, inline: true },
+      { name: 'Reason', value: reason, inline: false },
+      { name: 'Moderator', value: interaction.user.username, inline: true }
+    )
+    .setFooter({ text: 'Community Organisation' })
+    .setTimestamp()
+  ]});
 }
