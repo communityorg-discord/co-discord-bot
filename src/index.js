@@ -137,7 +137,7 @@ client.on('interactionCreate', async interaction => {
 
     // DM exempt button handlers
     if (interaction.customId === 'dm_exempt_add') {
-      return interaction.showModal({
+      await interaction.showModal({
         title: 'Add DM Exemption',
         customId: 'dm_exempt_add_modal',
         components: [{
@@ -160,10 +160,11 @@ client.on('interactionCreate', async interaction => {
           }]
         }]
       });
+      return;
     }
 
     if (interaction.customId === 'dm_exempt_remove') {
-      return interaction.showModal({
+      await interaction.showModal({
         title: 'Remove DM Exemption',
         customId: 'dm_exempt_remove_modal',
         components: [{
@@ -178,6 +179,7 @@ client.on('interactionCreate', async interaction => {
           }]
         }]
       });
+      return;
     }
   }
 
