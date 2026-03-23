@@ -5,9 +5,9 @@ import { getAuthLevelRole } from '../utils/positions.js';
 export const data = new SlashCommandBuilder()
   .setName('authorisation-override')
   .setDescription('Override a user\'s authorisation level role (superusers only)')
-  .addStringOption(opt =>
+  .addUserOption(opt =>
     opt.setName('user')
-      .setDescription('User mention or ID')
+      .setDescription('Target user')
       .setRequired(true)
   )
   .addIntegerOption(opt =>
@@ -31,14 +31,15 @@ export async function execute(interaction) {
       return interaction.editReply({ content: '❌ Only superusers can use this command.' });
     }
 
-    const userArg = interaction.options.getString('user').replace(/[<@!>]/g, '').trim();
+    const targetUser = interaction.options.getUser('user');
     const newAuthLevel = interaction.options.getInteger('level');
     const reason = interaction.options.getString('reason') || 'Not specified';
 
-    const targetUserId = userArg.replace(/[^0-9]/g, '');
-    if (!targetUserId) {
+    if (!targetUser) {
       return interaction.editReply({ content: '❌ Invalid user. Provide a mention or user ID.' });
     }
+
+    const targetUserId = targetUser.id;
 
     const newAuthLevelRoleName = getAuthLevelRole(newAuthLevel);
 
