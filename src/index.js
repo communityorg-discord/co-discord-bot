@@ -134,12 +134,123 @@ client.on('interactionCreate', async interaction => {
         }
       } catch {}
     }
+
+    // DM exempt button handlers
+    if (interaction.customId === 'dm_exempt_add') {
+      return interaction.showModal({
+        title: 'Add DM Exemption',
+        customId: 'dm_exempt_add_modal',
+        components: [{
+          type: 1,
+          components: [{
+            type: 4,
+            style: 1,
+            label: 'User mention or ID',
+            placeholder: '@username or 123456789',
+            customId: 'user_input',
+            maxLength: 50,
+          }, {
+            type: 4,
+            style: 2,
+            label: 'Reason (optional)',
+            placeholder: 'Optional reason',
+            customId: 'reason_input',
+            required: false,
+            maxLength: 200,
+          }]
+        }]
+      });
+    }
+
+    if (interaction.customId === 'dm_exempt_remove') {
+      return interaction.showModal({
+        title: 'Remove DM Exemption',
+        customId: 'dm_exempt_remove_modal',
+        components: [{
+          type: 1,
+          components: [{
+            type: 4,
+            style: 1,
+            label: 'User mention or ID',
+            placeholder: '@username or 123456789',
+            customId: 'user_input',
+            maxLength: 50,
+          }]
+        }]
+      });
+    }
   }
 
   // Verify/Unverify modal handlers
   if (interaction.isModalSubmit()) {
     if (interaction.customId.startsWith('verify_deny_reason_')) return verifyModal(interaction);
     if (interaction.customId.startsWith('unverify_approve_reason_')) return unverifyModal(interaction);
+
+    if (interaction.customId === 'dm_exempt_add_modal') {
+      const { addDmExemption, getDmExemptions } = await import('./utils/botDb.js');
+      const { getUserByDiscordId } = await import('./db.js');
+      const userInput = interaction.fields.getTextInputValue('user_input');
+      const reason = interaction.fields.getTextInputValue('reason_input') || null;
+
+      // Extract user ID from mention or raw ID
+      const userId = userInput.replace(/<@!?/g, '').replace(/>/g, '').trim();
+      const portalUser = getUserByDiscordId(userId);
+      const displayName = portalUser?.display_name || userInput;
+
+      addDmExemption(userId, displayName, interaction.user.id);
+
+      const exempts = getDmExemptions();
+      const rows = exempts.map(e =>
+        `**${e.display_name || 'Unknown'}** — <@${e.discord_id}>\n   Added by: ${e.exempted_by} · ${new Date(e.created_at).toLocaleDateString('en-GB')}`
+      );
+
+      await interaction.update({
+        content: null,
+        embeds: [new EmbedBuilder()
+          .setTitle(`📋 DM Exemptions (${exempts.length})`)
+          .setColor(0x22c55e)
+          .setDescription(exempts.length > 0 ? rows.join('\n\n') : 'No users are currently exempt.')
+          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setTimestamp()
+        ],
+        components: [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('dm_exempt_add').setLabel('Add Exemption').setStyle(3),
+            new ButtonBuilder().setCustomId('dm_exempt_remove').setLabel('Remove Exemption').setStyle(4),
+          )
+        ]
+      });
+    }
+
+    if (interaction.customId === 'dm_exempt_remove_modal') {
+      const { removeDmExemption, getDmExemptions } = await import('./utils/botDb.js');
+      const userInput = interaction.fields.getTextInputValue('user_input');
+      const userId = userInput.replace(/<@!?/g, '').replace(/>/g, '').trim();
+
+      removeDmExemption(userId);
+
+      const exempts = getDmExemptions();
+      const rows = exempts.map(e =>
+        `**${e.display_name || 'Unknown'}** — <@${e.discord_id}>\n   Added by: ${e.exempted_by} · ${new Date(e.created_at).toLocaleDateString('en-GB')}`
+      );
+
+      await interaction.update({
+        content: null,
+        embeds: [new EmbedBuilder()
+          .setTitle(`📋 DM Exemptions (${exempts.length})`)
+          .setColor(0x22c55e)
+          .setDescription(exempts.length > 0 ? rows.join('\n\n') : 'No users are currently exempt.')
+          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setTimestamp()
+        ],
+        components: [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('dm_exempt_add').setLabel('Add Exemption').setStyle(3),
+            new ButtonBuilder().setCustomId('dm_exempt_remove').setLabel('Remove Exemption').setStyle(4),
+          )
+        ]
+      });
+    }
   }
 });
 
