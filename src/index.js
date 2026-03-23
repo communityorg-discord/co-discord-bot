@@ -346,6 +346,73 @@ client.on('guildMemberAdd', async (member) => {
   }
 });
 
+}
+
+// Message delete log — tracked globally across all servers
+client.on('messageDelete', async (message) => {
+  if (!message || message.author?.bot) return;
+  try {
+    const logChannelId = process.env.LOG_CHANNEL_ID;
+    if (!logChannelId) return;
+
+    const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
+    if (!logChannel) return;
+
+    const content = message.content?.slice(0, 1500) || '*No text content*';
+    const attachments = message.attachments.size > 0 ? `\n📎 ${message.attachments.size} attachment(s)` : '';
+    const jumpLink = message.url ? `\n🔗 [Jump to message](${message.url})` : '';
+
+    const embed = new EmbedBuilder()
+      .setTitle('🗑️ Message Deleted')
+      .setColor(0xef4444)
+      .addFields(
+        { name: '👤 Author', value: `${message.author.username} (<@${message.author.id}>)`, inline: true },
+        { name: '📌 Channel', value: message.channel?.name ? `#${message.channel.name}` : message.channelId, inline: true },
+        { name: '🏠 Server', value: message.guild?.name || 'DM', inline: true },
+        { name: '💬 Content', value: content + attachments + jumpLink, inline: false },
+      )
+      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setTimestamp();
+
+    await logChannel.send({ embeds: [embed] });
+  } catch (e) {
+    console.error('[messageDelete log error]', e.message);
+  }
+});
+
+// Message edit log — tracked globally across all servers
+client.on('messageUpdate', async (oldMessage, newMessage) => {
+  if (!oldMessage || !newMessage || oldMessage.author?.bot) return;
+  if (oldMessage.content === newMessage.content) return;
+  try {
+    const logChannelId = process.env.LOG_CHANNEL_ID;
+    if (!logChannelId) return;
+
+    const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
+    if (!logChannel) return;
+
+    const oldContent = oldMessage.content?.slice(0, 750) || '*No text content*';
+    const newContent = newMessage.content?.slice(0, 750) || '*No text content*';
+    const jumpLink = newMessage.url ? `\n🔗 [Jump to message](${newMessage.url})` : '';
+
+    const embed = new EmbedBuilder()
+      .setTitle('✏️ Message Edited')
+      .setColor(0xf59e0b)
+      .addFields(
+        { name: '👤 Author', value: `${newMessage.author.username} (<@${newMessage.author.id}>)`, inline: true },
+        { name: '📌 Channel', value: newMessage.channel?.name ? `#${newMessage.channel.name}` : newMessage.channelId, inline: true },
+        { name: '🏠 Server', value: newMessage.guild?.name || 'DM', inline: true },
+        { name: '📝 Before', value: oldContent, inline: false },
+        { name: '📝 After', value: newContent + jumpLink, inline: false },
+      )
+      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setTimestamp();
+
+    await logChannel.send({ embeds: [embed] });
+  } catch (e) {
+    console.error('[messageUpdate log error]', e.message);
+  }
+});
 
 // ============ BOT WEBHOOK SERVER ============
 const webhookApp = express();
