@@ -146,7 +146,11 @@ export async function handleButton(interaction) {
       .addFields({ name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false })
       .addFields({ name: 'Note', value: `Verified - Employee: ${entry.employee_number || 'N/A'}`, inline: false });
 
-    await interaction.message.edit({ embeds: [embed], components: [] });
+    try {
+      await interaction.message.edit({ embeds: [embed], components: [] });
+    } catch (e) {
+      console.warn("[Verify] Could not edit message:", e.message);
+    }
 
     // DM the user
     try {
@@ -201,7 +205,11 @@ export async function handleModal(interaction) {
     .addFields({ name: 'Denied By', value: `<@${interaction.user.id}>`, inline: false })
     .addFields({ name: 'Reason', value: reason, inline: false });
 
-  await interaction.message.edit({ embeds: [embed], components: [] });
+  try {
+      await interaction.message.edit({ embeds: [embed], components: [] });
+    } catch (e) {
+      console.warn("[Verify] Could not edit message:", e.message);
+    }
 
   try {
     const user = await interaction.client.users.fetch(entry.discord_id);
