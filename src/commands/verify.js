@@ -112,7 +112,7 @@ export async function execute(interaction) {
       new ButtonBuilder().setCustomId(`verify_deny_${queueId}`).setLabel('Deny').setStyle(ButtonStyle.Danger),
     );
 
-    const msg = await verifyChannel.send({ embeds: [embed], components: [row, row2] });
+    const msg = await verifyChannel.send({ embeds: [embed], components: [row] });
 
     // Save message ID
     db.prepare("UPDATE verification_queue SET message_id = ? WHERE id = ?").run(msg.id, queueId);
