@@ -3,6 +3,7 @@ import { canRunCommand } from '../utils/permissions.js';
 import { removeSuspendedRole, restorePositionRoles, unsuspendAcrossGuilds } from '../utils/roleManager.js';
 import { liftSuspension, getActiveSuspension } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
+import { SUSPEND_UNSUSPEND_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import botDb from '../utils/botDb.js';
 
@@ -36,7 +37,8 @@ export async function execute(interaction) {
     action: 'Suspension Lifted',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: target.id, name: portalUser?.display_name || target.username },
-    reason, color: 0x22C55E
+    reason, color: 0x22C55E,
+    specificChannelId: SUSPEND_UNSUSPEND_LOG_CHANNEL_ID
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()

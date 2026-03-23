@@ -3,6 +3,7 @@ import { canRunCommand, requiresSuperuserWarning } from '../utils/permissions.js
 import { removeAllStaffRoles, addInvestigationRole, removeInvestigationRole, restorePositionRoles } from '../utils/roleManager.js';
 import { startInvestigation, endInvestigation, getActiveInvestigation, addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
+import { INVESTIGATION_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 
 export const data = new SlashCommandBuilder()
@@ -78,7 +79,8 @@ export async function execute(interaction) {
       action: 'Investigation Started',
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       target: { discordId: target.id, name: portalUser?.display_name || target.username },
-      reason, color: 0xF59E0B
+      reason, color: 0xF59E0B,
+      specificChannelId: INVESTIGATION_LOG_CHANNEL_ID
     });
 
     await interaction.editReply({ embeds: [new EmbedBuilder()
@@ -133,7 +135,8 @@ export async function execute(interaction) {
       action: `Investigation Ended — ${outcomeLabels[outcome]}`,
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       target: { discordId: target.id, name: portalUser?.display_name || target.username },
-      reason, color: outcome === 'nfa' ? 0x22C55E : 0xEF4444
+      reason, color: outcome === 'nfa' ? 0x22C55E : 0xEF4444,
+      specificChannelId: INVESTIGATION_LOG_CHANNEL_ID
     });
 
     await interaction.editReply({ embeds: [new EmbedBuilder()

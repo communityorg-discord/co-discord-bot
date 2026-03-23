@@ -3,6 +3,7 @@ import { canRunCommand, requiresSuperuserWarning, isSuperuser } from '../utils/p
 import { terminateAcrossGuilds } from '../utils/roleManager.js';
 import { addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
+import { TERMINATE_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import botDb from '../utils/botDb.js';
 
@@ -52,7 +53,8 @@ export async function execute(interaction) {
     action: 'Staff Terminated',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: target.id, name: portalUser?.display_name || target.username },
-    reason, color: 0x7F1D1D
+    reason, color: 0x7F1D1D,
+    specificChannelId: TERMINATE_LOG_CHANNEL_ID
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()

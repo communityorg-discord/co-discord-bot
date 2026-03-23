@@ -2,6 +2,8 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canRunCommand } from '../utils/permissions.js';
 import { getUserByDiscordId } from '../db.js';
 import { randomBytes } from 'crypto';
+import { logAction } from '../utils/logger.js';
+import { PURGE_SCRIBE_LOG_CHANNEL_ID } from '../config.js';
 
 function generateHTML(messages, channel, guild, moderator, reason) {
   const rows = messages.map(m => {
@@ -196,28 +198,23 @@ export async function execute(interaction) {
     const summaryMsg = await channel.send({ embeds: [summaryEmbed] });
     setTimeout(() => summaryMsg.delete().catch(() => {}), 8000);
 
-    // Log channel
-    const logChannelId = process.env.MOD_LOG_CHANNEL_ID || process.env.LOG_CHANNEL_ID;
-    if (logChannelId) {
-      const logChannel = await interaction.client.channels.fetch(logChannelId).catch(() => null);
-      if (logChannel) {
-        await logChannel.send({ embeds: [new EmbedBuilder()
-          .setTitle('🗑️ Purge Log')
-          .setColor(0xef4444)
-          .addFields(
-            { name: '📌 Channel', value: `<#${channel.id}> (${channel.name})`, inline: true },
-            { name: '🏠 Server', value: interaction.guild.name, inline: true },
-            { name: '👤 Moderator', value: `<@${interaction.user.id}> (${moderatorName})`, inline: true },
-            { name: '🗑️ Deleted', value: `${deleted} message${deleted !== 1 ? 's' : ''}`, inline: true },
-            { name: '📋 Reason', value: reason, inline: true },
-            { name: '📄 Transcript', value: `[View Full Transcript](${transcriptUrl})`, inline: false },
-            ...(targetUser ? [{ name: '🎯 Filtered User', value: `<@${targetUser.id}>`, inline: true }] : []),
-          )
-          .setFooter({ text: 'Community Organisation | Staff Assistant' })
-          .setTimestamp()
-        ]});
-      }
-    }
+    // Log to purge-scribe-logs + full-mod-logs
+    await logAction(interaction.client, {
+      action: '🗑️ Channel Purged',
+      moderator: { discordId: interaction.user.id, name: moderatorName },
+      target: { discordId: targetUser?.id || 'UNKNOWN', name: targetUser ? (getUserByDiscordId(targetUser.id)?.display_name || targetUser.username) : 'Multiple Users' },
+      reason,
+      color: 0xef4444,
+      fields: [
+        { name: 'Channel', value: `<#${channel.id}> (${channel.name})`, inline: true },
+        { name: 'Server', value: interaction.guild.name, inline: true },
+        { name: 'Messages Deleted', value: `${deleted}`, inline: true },
+        { name: 'Transcript', value: `[View Transcript](${transcriptUrl})`, inline: false },
+        ...(targetUser ? [{ name: 'Filtered User', value: `<@${targetUser.id}>`, inline: true }] : []),
+        ...(tooOld > 0 ? [{ name: 'Skipped (14d+)', value: String(tooOld), inline: true }] : []),
+      ],
+      specificChannelId: PURGE_SCRIBE_LOG_CHANNEL_ID
+    });
 
     await interaction.editReply({ embeds: [new EmbedBuilder()
       .setTitle('✅ Purge Complete')

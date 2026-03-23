@@ -2,6 +2,8 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canRunCommand } from '../utils/permissions.js';
 import { getUserByDiscordId } from '../db.js';
 import { randomBytes } from 'crypto';
+import { logAction } from '../utils/logger.js';
+import { PURGE_SCRIBE_LOG_CHANNEL_ID } from '../config.js';
 
 function generateHTML(messages, channel, guild, requestedBy, limit) {
   const rows = messages.map(m => {
@@ -31,17 +33,28 @@ function generateHTML(messages, channel, guild, requestedBy, limit) {
       resolvedContent = resolvedContent.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    const hasContent = resolvedContent.trim().length > 0;
-    const content = hasContent
-      ? resolvedContent
-      : '<em style="color:#666">No text content</em>';
+    // Show content summary if message has no text but has embeds or attachments
+    const hasTextContent = resolvedContent.trim().length > 0;
+    let content;
+    if (hasTextContent) {
+      content = resolvedContent;
+    } else if (m.embeds && m.embeds.size > 0) {
+      const firstEmbed = m.embeds[0];
+      const desc = firstEmbed.description || firstEmbed.title || '[embed]';
+      content = `<em style="color:#666">[Embed] ${desc.slice(0, 120)}</em>`;
+    } else if (m.attachments && m.attachments.size > 0) {
+      const attachmentNames = [...m.attachments.values()].map(a => a.name || a.filename).join(', ');
+      content = `<em style="color:#666">[Attachment(s)] ${attachmentNames}</em>`;
+    } else {
+      content = '<em style="color:#666">No text content</em>';
+    }
     const attachments = [...m.attachments.values()].map(a =>
       a.contentType?.startsWith('image/')
         ? `<img src="${a.url}" style="max-width:300px;max-height:200px;border-radius:4px;margin-top:4px;display:block" />`
         : `<a href="${a.url}" style="color:#7289da">${a.name}</a>`
     ).join('');
-    const embeds = m.embeds.length > 0
-      ? `<div style="border-left:3px solid #7289da;padding:4px 8px;margin-top:4px;color:#aaa;font-size:12px">[${m.embeds.length} embed(s)]</div>`
+    const embeds = m.embeds.size > 0
+      ? `<div style="border-left:3px solid #7289da;padding:4px 8px;margin-top:4px;color:#aaa;font-size:12px">[${m.embeds.size} embed(s)]</div>`
       : '';
     return `
  <div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid #2a2a2a">
@@ -200,27 +213,22 @@ export async function execute(interaction) {
       console.error('[scribe] Transcript save error:', e.message);
     }
 
-    // Post to log channel
-    const logChannelId = process.env.MOD_LOG_CHANNEL_ID || process.env.LOG_CHANNEL_ID;
-    if (logChannelId) {
-      const logChannel = await interaction.client.channels.fetch(logChannelId).catch(() => null);
-      if (logChannel) {
-        await logChannel.send({ embeds: [new EmbedBuilder()
-          .setTitle('📜 Channel Transcribed')
-          .setColor(0x22c55e)
-          .addFields(
-            { name: '📌 Channel', value: `<#${targetChannel.id}> (${targetChannel.name})`, inline: true },
-            { name: '🏠 Server', value: interaction.guild.name, inline: true },
-            { name: '👤 Requested By', value: `<@${interaction.user.id}> (${requestedBy})`, inline: true },
-            { name: '📝 Messages', value: String(allMessages.length), inline: true },
-            { name: '📄 Transcript', value: `[View Transcript](${transcriptUrl})`, inline: false },
-            ...(targetUser ? [{ name: '🎯 Filtered User', value: `<@${targetUser.id}>`, inline: true }] : []),
-          )
-          .setFooter({ text: 'Community Organisation | Staff Assistant' })
-          .setTimestamp()
-        ]});
-      }
-    }
+    // Log to purge-scribe-logs + full-mod-logs
+    await logAction(interaction.client, {
+      action: '📜 Channel Transcribed',
+      moderator: { discordId: interaction.user.id, name: requestedBy },
+      target: { discordId: targetUser?.id || 'UNKNOWN', name: targetUser ? (getUserByDiscordId(targetUser.id)?.display_name || targetUser.username) : 'Multiple Users' },
+      reason: `Channel: #${targetChannel.name}`,
+      color: 0x22c55e,
+      fields: [
+        { name: 'Channel', value: `<#${targetChannel.id}> (${targetChannel.name})`, inline: true },
+        { name: 'Server', value: interaction.guild.name, inline: true },
+        { name: 'Messages Captured', value: String(allMessages.length), inline: true },
+        { name: 'Transcript', value: `[View Transcript](${transcriptUrl})`, inline: false },
+        ...(targetUser ? [{ name: 'Filtered User', value: `<@${targetUser.id}>`, inline: true }] : []),
+      ],
+      specificChannelId: PURGE_SCRIBE_LOG_CHANNEL_ID
+    });
 
     await interaction.editReply({ embeds: [new EmbedBuilder()
       .setTitle('📜 Transcript Generated')

@@ -119,7 +119,8 @@ export async function execute(interaction) {
         fields: [
           { name: '⏱️ Original Duration', value: durationDisplay, inline: true },
           { name: '👤 Originally Actioned By', value: `<@${interaction.user.id}> (${interaction.user.username})`, inline: true },
-        ]
+        ],
+        specificChannelId: SUSPEND_UNSUSPEND_LOG_CHANNEL_ID
       });
     }, duration);
   }

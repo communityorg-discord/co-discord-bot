@@ -2,6 +2,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canRunCommand } from '../utils/permissions.js';
 import { addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
+import { STRIKE_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 
 export const data = new SlashCommandBuilder()
@@ -38,7 +39,8 @@ export async function execute(interaction) {
     action: 'Staff Strike',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: target.id, name: portalUser?.display_name || target.username },
-    reason, color: 0xF59E0B
+    reason, color: 0xF59E0B,
+    specificChannelId: STRIKE_LOG_CHANNEL_ID
   });
 
   await interaction.reply({ embeds: [new EmbedBuilder()

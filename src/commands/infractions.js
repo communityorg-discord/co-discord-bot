@@ -2,6 +2,8 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canRunCommand, isSuperuser } from '../utils/permissions.js';
 import { getInfractions, getDeletedInfractions, deleteInfraction } from '../utils/botDb.js';
 import { getUserByDiscordId } from '../db.js';
+import { logAction } from '../utils/logger.js';
+import { INFRACTIONS_CASES_LOG_CHANNEL_ID } from '../config.js';
 
 export const data = new SlashCommandBuilder()
   .setName('infractions')

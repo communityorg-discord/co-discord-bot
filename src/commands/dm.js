@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder } from 'discord.js';
 import { canRunCommand, isSuperuser } from '../utils/permissions.js';
 import { logAction } from '../utils/logger.js';
+import { DM_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import { isDmExempt } from '../utils/botDb.js';
 import Database from 'better-sqlite3';
@@ -136,7 +137,8 @@ export async function execute(interaction) {
           { name: '📋 Subject', value: subject, inline: false },
           { name: '💬 Message', value: message.length > 200 ? message.slice(0, 200) + '...' : message, inline: false },
           ...(emailConfirm ? [{ name: '📧 Email Confirm', value: 'Recipient must acknowledge', inline: false }] : []),
-        ]
+        ],
+        specificChannelId: DM_LOG_CHANNEL_ID
       });
 
       return interaction.editReply({
@@ -246,7 +248,8 @@ export async function execute(interaction) {
       { name: '👥 Total', value: String(recipients.length), inline: true },
       ...(exemptCount > 0 ? [{ name: '⏭️ Exempt Skipped', value: String(exemptCount), inline: true }] : []),
       ...(emailConfirm ? [{ name: '📧 Email Confirm', value: `${recipients.length} recipients must acknowledge`, inline: false }] : []),
-    ]
+    ],
+    specificChannelId: DM_LOG_CHANNEL_ID
   });
 
   const exemptNote = exemptCount > 0 ? `\n\nℹ️ ${exemptCount} exempt user${exemptCount > 1 ? 's' : ''} skipped (not messaged).` : '';
