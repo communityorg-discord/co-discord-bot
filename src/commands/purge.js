@@ -1,6 +1,7 @@
-import { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canRunCommand } from '../utils/permissions.js';
 import { getUserByDiscordId } from '../db.js';
+import { randomBytes } from 'crypto';
 
 function generateHTML(messages, channel, guild, moderator, reason) {
   const rows = messages.map(m => {
@@ -40,16 +41,17 @@ function generateHTML(messages, channel, guild, moderator, reason) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Purge Log — #${channel.name}</title>
 <style>
- * { box-sizing: border-box; margin: 0; padding: 0; }
- body { background: #1a1a1a; color: #dcddde; font-family: 'Segoe UI', sans-serif; font-size: 14px; padding: 20px; }
- .header { background: #111; border: 1px solid #333; border-radius: 8px; padding: 16px 20px; margin-bottom: 20px; }
- .header h1 { color: #fff; font-size: 18px; margin-bottom: 8px; }
- .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
- .meta-item { background: #222; border-radius: 6px; padding: 8px 12px; }
- .meta-item .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
- .meta-item .value { color: #fff; font-weight: 600; margin-top: 2px; }
- .messages { background: #111; border: 1px solid #333; border-radius: 8px; padding: 0 16px; }
- .count { color: #888; font-size: 12px; margin-bottom: 12px; padding-top: 12px; }
+ * { box-sizing:border-box; margin:0; padding:0; }
+ body { background:#1a1a1a; color:#dcddde; font-family:'Segoe UI',sans-serif; font-size:14px; padding:20px; }
+ .header { background:#111; border:1px solid #333; border-radius:8px; padding:16px 20px; margin-bottom:20px; }
+ .header h1 { color:#fff; font-size:18px; margin-bottom:8px; }
+ .meta { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:8px; }
+ .meta-item { background:#222; border-radius:6px; padding:8px 12px; }
+ .meta-item .label { font-size:11px; color:#888; text-transform:uppercase; letter-spacing:.05em; }
+ .meta-item .value { color:#fff; font-weight:600; margin-top:2px; }
+ .messages { background:#111; border:1px solid #333; border-radius:8px; padding:0 16px; }
+ .count { color:#888; font-size:12px; margin-bottom:12px; padding-top:12px; }
+ .portal-badge { display:inline-block; margin-top:12px; padding:6px 12px; background:#5865f2; color:#fff; border-radius:6px; text-decoration:none; font-size:13px; font-weight:600; }
 </style>
 </head>
 <body>
@@ -63,6 +65,7 @@ function generateHTML(messages, channel, guild, moderator, reason) {
  <div class="meta-item"><div class="label">Reason</div><div class="value">${reason || 'No reason provided'}</div></div>
  <div class="meta-item"><div class="label">Date</div><div class="value">${new Date().toLocaleString('en-GB', { timeZone: 'UTC' })} UTC</div></div>
  </div>
+ <a href="https://portal.communityorg.co.uk" class="portal-badge">CO Staff Portal</a>
 </div>
 <div class="messages">
  <div class="count">${messages.length} message(s) — oldest first</div>
@@ -113,34 +116,57 @@ export async function execute(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
   try {
-    // Fetch messages
     let messages = await channel.messages.fetch({ limit: 100 });
     messages = [...messages.values()];
 
-    // Filter if needed
     if (targetUser) messages = messages.filter(m => m.author.id === targetUser.id);
     if (botsOnly) messages = messages.filter(m => m.author.bot);
-
-    // Limit to requested amount
     messages = messages.slice(0, amount);
 
     if (messages.length === 0) {
       return interaction.editReply({ content: '❌ No messages found matching your filters.' });
     }
 
-    // Filter out messages older than 14 days (Discord limitation)
     const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
     const deletable = messages.filter(m => m.createdTimestamp > twoWeeksAgo);
     const tooOld = messages.length - deletable.length;
-
-    // Sort oldest first for HTML log
     const sortedForLog = [...messages].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 
-    // Generate HTML transcript
+    // Generate unique transcript ID and HTML
+    const transcriptId = randomBytes(8).toString('hex');
     const html = generateHTML(sortedForLog, channel, interaction.guild, moderatorName, reason);
-    const htmlBuffer = Buffer.from(html, 'utf8');
-    const fileName = `purge-${channel.name}-${Date.now()}.html`;
-    const attachment = new AttachmentBuilder(htmlBuffer, { name: fileName });
+    const transcriptUrl = `https://portal.communityorg.co.uk/transcripts/${transcriptId}`;
+
+    // Save transcript to portal
+    try {
+      const res = await fetch('http://localhost:3016/api/transcripts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-bot-secret': process.env.BOT_WEBHOOK_SECRET
+        },
+        body: JSON.stringify({
+          id: transcriptId,
+          type: 'purge',
+          title: `Purge — #${channel.name} — ${new Date().toLocaleDateString('en-GB')}`,
+          html,
+          metadata: {
+            channel: channel.name,
+            channelId: channel.id,
+            guild: interaction.guild.name,
+            guildId: interaction.guild.id,
+            moderator: moderatorName,
+            moderatorId: interaction.user.id,
+            reason,
+            count: messages.length
+          }
+        })
+      });
+      const data = await res.json();
+      if (!data.ok) console.error('[purge] Transcript save failed:', data.error);
+    } catch (e) {
+      console.error('[purge] Transcript save error:', e.message);
+    }
 
     // Delete messages
     let deleted = 0;
@@ -152,7 +178,7 @@ export async function execute(interaction) {
       deleted = result.size;
     }
 
-    // Summary embed for the purged channel
+    // Summary in purged channel (auto-delete after 8s)
     const summaryEmbed = new EmbedBuilder()
       .setTitle('🗑️ Channel Purged')
       .setColor(0xef4444)
@@ -160,23 +186,22 @@ export async function execute(interaction) {
       .addFields(
         { name: '👤 Moderator', value: moderatorName, inline: true },
         { name: '📋 Reason', value: reason, inline: true },
+        { name: '📄 Transcript', value: `[View Transcript](${transcriptUrl})`, inline: false },
         ...(targetUser ? [{ name: '🎯 Filtered User', value: `<@${targetUser.id}>`, inline: true }] : []),
-        ...(botsOnly ? [{ name: '🤖 Filter', value: 'Bots only', inline: true }] : []),
-        ...(tooOld > 0 ? [{ name: '⚠️ Skipped', value: `${tooOld} message(s) older than 14 days`, inline: false }] : [])
+        ...(tooOld > 0 ? [{ name: '⚠️ Skipped', value: `${tooOld} older than 14 days`, inline: false }] : [])
       )
       .setFooter({ text: 'Community Organisation | Staff Assistant' })
       .setTimestamp();
 
-    // Post summary in purged channel (auto-delete after 5s)
     const summaryMsg = await channel.send({ embeds: [summaryEmbed] });
-    setTimeout(() => summaryMsg.delete().catch(() => {}), 5000);
+    setTimeout(() => summaryMsg.delete().catch(() => {}), 8000);
 
-    // Post to log channel with HTML attachment
+    // Log channel
     const logChannelId = process.env.LOG_CHANNEL_ID;
     if (logChannelId) {
       const logChannel = await interaction.client.channels.fetch(logChannelId).catch(() => null);
       if (logChannel) {
-        const logEmbed = new EmbedBuilder()
+        await logChannel.send({ embeds: [new EmbedBuilder()
           .setTitle('🗑️ Purge Log')
           .setColor(0xef4444)
           .addFields(
@@ -185,28 +210,26 @@ export async function execute(interaction) {
             { name: '👤 Moderator', value: `<@${interaction.user.id}> (${moderatorName})`, inline: true },
             { name: '🗑️ Deleted', value: `${deleted} message${deleted !== 1 ? 's' : ''}`, inline: true },
             { name: '📋 Reason', value: reason, inline: true },
+            { name: '📄 Transcript', value: `[View Full Transcript](${transcriptUrl})`, inline: false },
             ...(targetUser ? [{ name: '🎯 Filtered User', value: `<@${targetUser.id}>`, inline: true }] : []),
           )
           .setFooter({ text: 'Community Organisation | Staff Assistant' })
-          .setTimestamp();
-
-        await logChannel.send({ embeds: [logEmbed], files: [attachment] });
+          .setTimestamp()
+        ]});
       }
     }
 
-    await interaction.editReply({
-      embeds: [new EmbedBuilder()
-        .setTitle('✅ Purge Complete')
-        .setColor(0x22c55e)
-        .setDescription(`Successfully deleted **${deleted}** message${deleted !== 1 ? 's' : ''} from <#${channel.id}>.`)
-        .addFields(
-          { name: '📄 Transcript', value: 'HTML log posted to the log channel.', inline: false },
-          ...(tooOld > 0 ? [{ name: '⚠️ Note', value: `${tooOld} message(s) were skipped — older than 14 days (Discord limit).`, inline: false }] : [])
-        )
-        .setFooter({ text: 'Community Organisation | Staff Assistant' })
-        .setTimestamp()
-      ]
-    });
+    await interaction.editReply({ embeds: [new EmbedBuilder()
+      .setTitle('✅ Purge Complete')
+      .setColor(0x22c55e)
+      .setDescription(`Deleted **${deleted}** message${deleted !== 1 ? 's' : ''} from <#${channel.id}>.`)
+      .addFields(
+        { name: '📄 Transcript', value: `[View at portal.communityorg.co.uk](${transcriptUrl})`, inline: false },
+        ...(tooOld > 0 ? [{ name: '⚠️ Note', value: `${tooOld} message(s) skipped — older than 14 days.`, inline: false }] : [])
+      )
+      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setTimestamp()
+    ]});
 
   } catch (e) {
     console.error('[/purge]', e.message);
