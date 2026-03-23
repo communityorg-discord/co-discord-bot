@@ -2,6 +2,7 @@ import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder } fr
 import { canRunCommand, isSuperuser } from '../utils/permissions.js';
 import { logAction } from '../utils/logger.js';
 import { getUserByDiscordId } from '../db.js';
+import { isDmExempt } from '../utils/botDb.js';
 import Database from 'better-sqlite3';
 import { config } from 'dotenv';
 config();
@@ -180,6 +181,10 @@ export async function execute(interaction) {
     ).all(teamDept);
   }
 
+  // Filter out exempt users
+  const exemptCount = recipients.filter(r => isDmExempt(r.discord_id)).length;
+  recipients = recipients.filter(r => !isDmExempt(r.discord_id));
+
   if (recipients.length === 0) {
     return interaction.editReply({ content: `❌ No active staff found for that target.` });
   }
@@ -233,15 +238,19 @@ export async function execute(interaction) {
       { name: '✅ Delivered', value: String(sent), inline: true },
       { name: '❌ Failed', value: String(failed), inline: true },
       { name: '👥 Total', value: String(recipients.length), inline: true },
+      ...(exemptCount > 0 ? [{ name: '⏭️ Exempt Skipped', value: String(exemptCount), inline: true }] : []),
       ...(emailConfirm ? [{ name: '📧 Email Confirm', value: `${recipients.length} recipients must acknowledge`, inline: false }] : []),
     ]
   });
+
+  const exemptNote = exemptCount > 0 ? `\n\nℹ️ ${exemptCount} exempt user${exemptCount > 1 ? 's' : ''} skipped (not messaged).` : '';
 
   await interaction.editReply({ embeds: [new EmbedBuilder()
     .setTitle(mass ? '📩 Mass DM Complete' : `📩 Team DM Complete`)
     .setColor(failed === 0 ? 0x22c55e : 0xf59e0b)
     .setDescription(
       (mass ? `Message sent to all active CO staff.` : `Message sent to **${TEAMS[team]}**.`) +
+      exemptNote +
       (emailConfirm ? `\n\n📧 All recipients must click **Acknowledge & Confirm Read** in their DM.` : '')
     )
     .addFields(

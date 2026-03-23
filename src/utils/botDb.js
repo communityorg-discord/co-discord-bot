@@ -89,9 +89,38 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     active INTEGER DEFAULT 1
   );
+
+  CREATE TABLE IF NOT EXISTS dm_exemptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_id TEXT NOT NULL UNIQUE,
+    display_name TEXT,
+    exempted_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 export default db;
+
+export function addDmExemption(discordId, displayName, exemptedBy) {
+  try {
+    db.prepare('INSERT OR IGNORE INTO dm_exemptions (discord_id, display_name, exempted_by) VALUES (?, ?, ?)').run(discordId, displayName, exemptedBy);
+    return true;
+  } catch { return false; }
+}
+
+export function removeDmExemption(discordId) {
+  const result = db.prepare('DELETE FROM dm_exemptions WHERE discord_id = ?').run(discordId);
+  return result.changes > 0;
+}
+
+export function getDmExemptions() {
+  return db.prepare('SELECT * FROM dm_exemptions ORDER BY created_at DESC').all();
+}
+
+export function isDmExempt(discordId) {
+  const row = db.prepare('SELECT id FROM dm_exemptions WHERE discord_id = ?').get(discordId);
+  return !!row;
+}
 
 export function addInfraction(discordId, type, reason, moderatorId, moderatorName, expiresAt = null, appealable = 1) {
   return db.prepare(`
