@@ -41,7 +41,7 @@ export async function execute(interaction) {
       serverResults.push({ name: guild.name, success: true });
       bannedCount++;
     } catch (e) {
-      serverResults.push({ name: guild?.name || serverId, success: false, reason: e.message });
+      serverResults.push({ name: serverId, success: false, reason: e.message });
       console.error(`[GBan] Failed in server ${serverId}:`, e.message);
     }
   }
