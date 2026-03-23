@@ -6,9 +6,11 @@ config();
 
 function getWeekKey(date = new Date()) {
   const d = new Date(date);
+  const day = d.getDay();
+  const diff = (day === 0 ? -6 : 1) - day;
+  d.setDate(d.getDate() + diff);
   d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - d.getDay() + 1); // Monday
-  return d.toISOString().slice(0, 10).replace(/-/g, '');
+  return d.toISOString().slice(0, 10);
 }
 
 function getLast8Weeks() {
@@ -16,7 +18,14 @@ function getLast8Weeks() {
   for (let i = 0; i < 8; i++) {
     const d = new Date();
     d.setDate(d.getDate() - i * 7);
-    weeks.push({ key: getWeekKey(d), label: new Date(d.setDate(d.getDate() - d.getDay() + 1)).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) });
+    const day = d.getDay();
+    const diff = (day === 0 ? -6 : 1) - day;
+    d.setDate(d.getDate() + diff);
+    d.setHours(0, 0, 0, 0);
+    weeks.push({
+      key: d.toISOString().slice(0, 10),
+      label: d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+    });
   }
   return weeks;
 }
