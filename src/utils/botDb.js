@@ -1,8 +1,11 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { config } from 'dotenv';
+config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const portalDb = new Database(process.env.PORTAL_DB_PATH, { readonly: true });
 const db = new Database(path.join(__dirname, '../../bot-data.db'));
 
 db.exec(`
@@ -191,4 +194,11 @@ export function endInvestigation(discordId, outcome) {
 
 export function getActiveInvestigation(discordId) {
   return db.prepare('SELECT * FROM investigations WHERE discord_id = ? AND active = 1 LIMIT 1').get(discordId);
+}
+
+export function getAllActiveStaff() {
+  return portalDb.prepare(
+    `SELECT id, display_name, full_name, username, position, department, discord_id
+     FROM users WHERE account_status = 'Active' ORDER BY display_name LIMIT 100`
+  ).all();
 }

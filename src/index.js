@@ -1,5 +1,5 @@
 import express from 'express';
-import { Client, GatewayIntentBits, Collection, REST, Routes } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder } from 'discord.js';
 import { config } from 'dotenv';
 import { getUserByDiscordId } from './db.js';
 import * as brag from './commands/brag.js';
@@ -137,33 +137,32 @@ client.on('interactionCreate', async interaction => {
 
     // DM exempt button handlers
     if (interaction.customId === 'dm_exempt_add') {
-      await interaction.showModal({
-        title: 'Add DM Exemption',
-        customId: 'dm_exempt_add_modal',
+      const { getAllActiveStaff } = await import('./utils/botDb.js');
+      const allStaff = getAllActiveStaff();
+
+      const selectOptions = allStaff.map(s => ({
+        label: s.display_name || s.username || 'Unknown',
+        value: String(s.id),
+        description: s.position || s.department || ''
+      }));
+
+      if (selectOptions.length === 0) {
+        await interaction.update({ content: '❌ No staff members found.', components: [] });
+        return;
+      }
+
+      await interaction.update({
+        content: '**Select a staff member to exempt:**',
         components: [
-          {
-            type: 1,
-            components: [{
-              type: 4,
-              style: 1,
-              label: 'User mention or ID',
-              placeholder: '@username or 123456789',
-              customId: 'user_input',
-              maxLength: 50,
-            }]
-          },
-          {
-            type: 1,
-            components: [{
-              type: 4,
-              style: 2,
-              label: 'Reason (optional)',
-              placeholder: 'Optional reason',
-              customId: 'reason_input',
-              required: false,
-              maxLength: 200,
-            }]
-          }
+          new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId('dm_exempt_user_select')
+              .setPlaceholder('Choose a staff member...')
+              .addOptions(selectOptions.slice(0, 25))
+          ),
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('dm_exempt_cancel').setLabel('Cancel').setStyle(2)
+          )
         ]
       });
       return;
@@ -185,6 +184,66 @@ client.on('interactionCreate', async interaction => {
               maxLength: 50,
             }]
           }
+        ]
+      });
+      return;
+    }
+
+    if (interaction.customId === 'dm_exempt_user_select') {
+      const { addDmExemption, getDmExemptions } = await import('./utils/botDb.js');
+      const { getUserById } = await import('./db.js');
+
+      const selectedId = interaction.values[0];
+      const portalUser = getUserById(Number(selectedId));
+      const displayName = portalUser?.display_name || portalUser?.username || selectedId;
+
+      addDmExemption(portalUser?.discord_id || selectedId, displayName, interaction.user.id);
+
+      const exempts = getDmExemptions();
+      const rows = exempts.map(e =>
+        `**${e.display_name || 'Unknown'}** — <@${e.discord_id}>\n   Added by: ${e.exempted_by} · ${new Date(e.created_at).toLocaleDateString('en-GB')}`
+      );
+
+      await interaction.update({
+        content: null,
+        embeds: [new EmbedBuilder()
+          .setTitle(`📋 DM Exemptions (${exempts.length})`)
+          .setColor(0x22c55e)
+          .setDescription(rows.join('\n\n'))
+          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setTimestamp()
+        ],
+        components: [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('dm_exempt_add').setLabel('Add Exemption').setStyle(3),
+            new ButtonBuilder().setCustomId('dm_exempt_remove').setLabel('Remove Exemption').setStyle(4),
+          )
+        ]
+      });
+      return;
+    }
+
+    if (interaction.customId === 'dm_exempt_cancel') {
+      const { getDmExemptions } = await import('./utils/botDb.js');
+      const exempts = getDmExemptions();
+      const rows = exempts.map(e =>
+        `**${e.display_name || 'Unknown'}** — <@${e.discord_id}>\n   Added by: ${e.exempted_by} · ${new Date(e.created_at).toLocaleDateString('en-GB')}`
+      );
+
+      await interaction.update({
+        content: null,
+        embeds: [new EmbedBuilder()
+          .setTitle(`📋 DM Exemptions (${exempts.length})`)
+          .setColor(0x5865F2)
+          .setDescription(rows.join('\n\n'))
+          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setTimestamp()
+        ],
+        components: [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('dm_exempt_add').setLabel('Add Exemption').setStyle(3),
+            new ButtonBuilder().setCustomId('dm_exempt_remove').setLabel('Remove Exemption').setStyle(4),
+          )
         ]
       });
       return;

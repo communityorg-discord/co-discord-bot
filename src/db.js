@@ -8,6 +8,10 @@ export function getUserByDiscordId(discordId) {
   return db.prepare('SELECT * FROM users WHERE discord_id = ?').get(String(discordId));
 }
 
+export function getUserById(userId) {
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+}
+
 export function getBragStatus(userId) {
   // brag_reports uses discord_id not user_id — get user first
   const user = db.prepare('SELECT discord_id FROM users WHERE id = ?').get(userId);
