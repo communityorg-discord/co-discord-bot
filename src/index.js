@@ -19,6 +19,10 @@ import * as botInfo from './commands/bot.js';
 import * as election from './commands/election.js';
 import * as ban from './commands/ban.js';
 import * as unban from './commands/unban.js';
+import { handleButton as verifyButton, handleModal as verifyModal } from './commands/verify.js';
+import { handleButton as unverifyButton, handleModal as unverifyModal } from './commands/unverify.js';
+import * as verify from './commands/verify.js';
+import * as unverify from './commands/unverify.js';
 
 config();
 
@@ -27,7 +31,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, election, ban, unban];
+const commands = [brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, election, ban, unban, verify, unverify];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -65,6 +69,10 @@ client.on('interactionCreate', async interaction => {
   }
 
   if (interaction.isButton()) {
+    // Verify/Unverify button handlers
+    if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
+    if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
+
     if (interaction.customId.startsWith('nid_confirm_')) {
       const [, , userId, actionType] = interaction.customId.split('_');
       const supervisor = getUserByDiscordId(interaction.user.id);
@@ -99,6 +107,31 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId === 'nid_cancel') {
       await interaction.update({ content: 'NID submission cancelled.', embeds: [], components: [] });
     }
+  }
+
+  // Verify/Unverify modal handlers
+  if (interaction.isModalSubmit()) {
+    if (interaction.customId.startsWith('verify_deny_reason_')) return verifyModal(interaction);
+    if (interaction.customId.startsWith('unverify_approve_reason_')) return unverifyModal(interaction);
+  }
+});
+
+// Auto-apply roles when a verified member joins any server
+client.on('guildMemberAdd', async (member) => {
+  try {
+    const { default: botDb } = await import('./utils/botDb.js');
+    const verified = botDb.prepare("SELECT * FROM verified_members WHERE discord_id = ?").get(member.user.id);
+    if (!verified) return;
+
+    const { applyVerification } = await import('./utils/verifyHelper.js');
+    const { POSITIONS } = await import('./utils/positions.js');
+    const roleNames = POSITIONS[verified.position] || [];
+    const toAssign = member.guild.roles.cache.filter(r => roleNames.includes(r.name));
+    if (toAssign.size > 0) await member.roles.add(toAssign).catch(() => {});
+    await member.setNickname(verified.nickname || null).catch(() => {});
+    console.log('[Verify] Auto-applied roles for', member.user.tag, 'on join to', member.guild.name);
+  } catch (e) {
+    console.error('[guildMemberAdd verify error]', e.message);
   }
 });
 
