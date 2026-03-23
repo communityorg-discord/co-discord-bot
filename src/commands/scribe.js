@@ -217,7 +217,7 @@ export async function execute(interaction) {
     await logAction(interaction.client, {
       action: '📜 Channel Transcribed',
       moderator: { discordId: interaction.user.id, name: requestedBy },
-      target: { discordId: targetUser?.id || 'UNKNOWN', name: targetUser ? (getUserByDiscordId(targetUser.id)?.display_name || targetUser.username) : 'Multiple Users' },
+      target: { discordId: targetUser?.id || 'MULTIPLE', name: targetUser ? (getUserByDiscordId(targetUser.id)?.display_name || targetUser.username) : 'All messages' },
       reason: `Channel: #${targetChannel.name}`,
       color: 0x22c55e,
       fields: [
