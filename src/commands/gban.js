@@ -30,21 +30,26 @@ export async function execute(interaction) {
 
   await interaction.deferReply();
 
+  const serverResults = [];
   let bannedCount = 0;
   for (const serverId of ALL_SERVER_IDS) {
     if (serverId === APPEALS_SERVER_ID) continue;
     try {
       const guild = await interaction.client.guilds.fetch(serverId).catch(() => null);
-      if (!guild) continue;
+      if (!guild) { serverResults.push({ name: serverId, success: false, reason: 'Guild not found' }); continue; }
       await guild.bans.create(target.id, { reason: `Global Ban: ${reason}` });
+      serverResults.push({ name: guild.name, success: true });
       bannedCount++;
     } catch (e) {
+      serverResults.push({ name: guild?.name || serverId, success: false, reason: e.message });
       console.error(`[GBan] Failed in server ${serverId}:`, e.message);
     }
   }
 
   const inf = addInfraction(target.id, 'global_ban', reason, interaction.user.id, interaction.user.username, null, appealable);
   addGlobalBan(target.id, reason, interaction.user.id, appealable);
+
+  const serverList = serverResults.map(s => `${s.success ? '🟢' : '🔴'} ${s.name}`).join('\n');
 
   try {
     await target.send({
@@ -75,13 +80,14 @@ export async function execute(interaction) {
   await interaction.editReply({ embeds: [new EmbedBuilder()
     .setTitle('🔨 Global Ban')
     .setColor(0x7F1D1D)
-    .setDescription(`**${target.username}** has been globally banned from all CO servers.`)
+    .setDescription(`**${target.username}** has been globally banned.`)
     .addFields(
       { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },
-      { name: 'Servers Banned', value: String(bannedCount), inline: true },
+      { name: 'Banned', value: String(bannedCount), inline: true },
       { name: 'Reason', value: reason, inline: false },
       { name: 'Appealable', value: appealable ? 'Yes' : 'No', inline: true },
-      { name: 'Moderator', value: interaction.user.username, inline: true }
+      { name: 'Moderator', value: interaction.user.username, inline: true },
+      { name: 'Servers', value: serverList, inline: false }
     )
     .setFooter({ text: 'Community Organisation' })
     .setTimestamp()

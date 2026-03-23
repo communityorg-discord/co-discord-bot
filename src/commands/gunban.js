@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { isSuperuser } from '../utils/permissions.js';
-import { ALL_SERVER_IDS } from '../config.js';
+import { ALL_SERVER_IDS, APPEALS_SERVER_ID } from '../config.js';
 import { getActiveGlobalBan } from '../utils/botDb.js';
 import db from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
@@ -19,18 +19,27 @@ export async function execute(interaction) {
 
   await interaction.deferReply();
 
+  const serverResults = [];
   let unbannedCount = 0;
   for (const serverId of ALL_SERVER_IDS) {
+    if (serverId === APPEALS_SERVER_ID) continue;
     try {
       const guild = await interaction.client.guilds.fetch(serverId).catch(() => null);
-      if (!guild) continue;
-      await guild.bans.remove(userId, reason).catch(() => {});
+      if (!guild) { serverResults.push({ name: serverId, success: false, reason: 'Guild not found' }); continue; }
+      const banEntry = await guild.bans.fetch(userId).catch(() => null);
+      if (!banEntry) { serverResults.push({ name: guild.name, success: false, reason: 'Not banned here' }); continue; }
+      await guild.bans.remove(userId, reason);
+      serverResults.push({ name: guild.name, success: true });
       unbannedCount++;
-    } catch {}
+    } catch (e) {
+      serverResults.push({ name: guild?.name || serverId, success: false, reason: e.message });
+    }
   }
 
   db.prepare('UPDATE global_bans SET active = 0 WHERE discord_id = ? AND active = 1').run(userId);
   db.prepare('UPDATE infractions SET active = 0 WHERE discord_id = ? AND type = ? AND active = 1').run(userId, 'global_ban');
+
+  const serverList = serverResults.map(s => `${s.success ? '🟢' : '🔴'} ${s.name}`).join('\n');
 
   await logAction(interaction.client, {
     action: 'Global Unban',
@@ -45,9 +54,10 @@ export async function execute(interaction) {
     .setColor(0x22C55E)
     .setDescription(`Global ban removed from <@${userId}>.`)
     .addFields(
-      { name: 'Servers Unbanned', value: String(unbannedCount), inline: true },
+      { name: 'Unbanned From', value: String(unbannedCount), inline: true },
       { name: 'Reason', value: reason, inline: false },
-      { name: 'Moderator', value: interaction.user.username, inline: true }
+      { name: 'Moderator', value: interaction.user.username, inline: true },
+      { name: 'Servers', value: serverList, inline: false }
     )
     .setFooter({ text: 'Community Organisation' })
     .setTimestamp()
