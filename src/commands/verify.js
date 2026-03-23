@@ -245,7 +245,7 @@ export async function handleButton(interaction) {
       specificChannelId: VERIFY_UNVERIFY_LOG_CHANNEL_ID
     });
 
-    // DM the user
+    // DM the user — welcome message with 7-day invite links
     try {
       const user = await interaction.client.users.fetch(entry.discord_id);
       const inviteLines = [];
@@ -255,21 +255,21 @@ export async function handleButton(interaction) {
         try {
           const channel = guild.channels.cache.filter(c => c.isTextBased() && c.permissionsFor(guild.members.me)?.has("CreateInstantInvite")).first();
           if (channel) {
-            const invite = await channel.createInvite({ maxAge: 86400, maxUses: 1, reason: "Verification approved" });
+            const invite = await channel.createInvite({ maxAge: 604800, maxUses: 1, reason: "Verification approved — 7-day invite" });
             inviteLines.push("[" + guild.name + "](" + invite.url + ")");
           }
         } catch {}
       }
-      const note = isOfficial ? "Official Account" : "Employee: " + (entry.employee_number || "N/A");
+
       await user.send({
         embeds: [new EmbedBuilder()
-          .setTitle("✅ CO Verification Approved")
+          .setTitle("🏛️ Welcome to the Community Organisation!")
           .setColor(0x22C55E)
-          .setDescription("Your CO staff verification has been approved by <@" + interaction.user.id + ">.\n\nYou now have access to all CO servers.")
+          .setDescription("Hello and welcome to Community Organisation! We're delighted to have you on board. Here's key info to help you settle in:\n\n**Onboarding**\nPlease ensure your supervisor has your current email. We recommend a Google account email (@gmail.com), as we use Google Drive for documentation and policies.\n\nTo get your CO email set up, please contact a member of the EOB team directly.\n\nThe DMSPC Email (**dmspc@communityorg.co.uk**) is your contact for accessing and updating your personnel file.\n\n**CO Utilities**\nAll staff are required to use the Staff Portal for leave requests, performance tracking (BRAG), and accessing your staff records.\n\n**Policies**\nBy joining, you agree to follow all Community Organisation policies, available on Google Drive and CO Utilities. If unsure, ask your supervisor. You are also expected to:\n• Check for policy updates regularly\n• Read all official communications\n\nLinked below are invites to all servers you are required to join. **These invites will expire in 7 days.**")
           .addFields(
-            { name: "Position", value: entry.position, inline: true },
-            { name: "Status", value: "Verified - " + note, inline: true },
-            { name: "Server Invites (1-day)", value: inviteLines.join("\n") || "No invites available", inline: false },
+            { name: "📌 Server Invites", value: inviteLines.join("\n") || "No invites available", inline: false },
+            { name: "Your Position", value: entry.position, inline: true },
+            { name: "Approved By", value: `<@${interaction.user.id}>`, inline: true },
           )
           .setFooter({ text: "Community Organisation | Staff Assistant" })
           .setTimestamp()
@@ -378,11 +378,10 @@ export async function handleButton(interaction) {
       specificChannelId: VERIFY_UNVERIFY_LOG_CHANNEL_ID
     });
 
-    // DM the user — simple approval with server invite links
+    // DM the user — welcome message with 7-day invite links
     try {
       const user = await interaction.client.users.fetch(entry.discord_id);
       const inviteLines = [];
-      // Guilds to exclude from invite links ( Appeals Server, etc.)
       const EXCLUDED_GUILDS = ['1485423163817988186'];
 
       for (const [, guild] of interaction.client.guilds.cache) {
@@ -392,7 +391,7 @@ export async function handleButton(interaction) {
             .filter(c => c.isTextBased() && c.permissionsFor(guild.members.me)?.has("CreateInstantInvite"))
             .first();
           if (channel) {
-            const invite = await channel.createInvite({ maxAge: 86400, maxUses: 1, reason: "Verification approved" });
+            const invite = await channel.createInvite({ maxAge: 604800, maxUses: 1, reason: "Verification approved — 7-day invite" });
             inviteLines.push("[" + guild.name + "](" + invite.url + ")");
           } else {
             inviteLines.push("~~" + guild.name + "~~ *(no invite permission)*");
@@ -401,16 +400,16 @@ export async function handleButton(interaction) {
           inviteLines.push("~~" + guild.name + "~~ *(could not create invite)*");
         }
       }
-      const note = isOfficial ? "Official Account" : "Employee: " + (entry.employee_number || "N/A");
+
       await user.send({
         embeds: [new EmbedBuilder()
-          .setTitle("✅ CO Verification Approved")
+          .setTitle("🏛️ Welcome to the Community Organisation!")
           .setColor(0x22C55E)
-          .setDescription("Your CO staff verification has been approved by <@" + interaction.user.id + ">.\n\nYou now have access to all CO servers.")
+          .setDescription("Hello and welcome to Community Organisation! We're delighted to have you on board. Here's key info to help you settle in:\n\n**Onboarding**\nPlease ensure your supervisor has your current email. We recommend a Google account email (@gmail.com), as we use Google Drive for documentation and policies.\n\nTo get your CO email set up, please contact a member of the EOB team directly.\n\nThe DMSPC Email (**dmspc@communityorg.co.uk**) is your contact for accessing and updating your personnel file.\n\n**CO Utilities**\nAll staff are required to use the Staff Portal for leave requests, performance tracking (BRAG), and accessing your staff records.\n\n**Policies**\nBy joining, you agree to follow all Community Organisation policies, available on Google Drive and CO Utilities. If unsure, ask your supervisor. You are also expected to:\n• Check for policy updates regularly\n• Read all official communications\n\nLinked below are invites to all servers you are required to join. **These invites will expire in 7 days.**")
           .addFields(
-            { name: "Position", value: entry.position, inline: true },
-            { name: "Status", value: "Verified - " + note, inline: true },
-            { name: "Server Invites (1-day)", value: inviteLines.join("\n") || "No invites available", inline: false },
+            { name: "📌 Server Invites", value: inviteLines.join("\n") || "No invites available", inline: false },
+            { name: "Your Position", value: entry.position, inline: true },
+            { name: "Approved By", value: `<@${interaction.user.id}>`, inline: true },
           )
           .setFooter({ text: "Community Organisation | Staff Assistant" })
           .setTimestamp()
