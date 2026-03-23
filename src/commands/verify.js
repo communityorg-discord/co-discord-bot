@@ -155,6 +155,7 @@ export async function handleButton(interaction) {
 
   // ── Auth Override select menu ─────────────────────────────────────────────
   if (customId.startsWith('verify_auth_select_')) {
+    try {
     const queueId = customId.replace('verify_auth_select_', '');
     const overrideLevel = parseInt(interaction.values[0]);
 
@@ -164,6 +165,8 @@ export async function handleButton(interaction) {
 
     const entry = db.prepare("SELECT * FROM verification_queue WHERE id = ? AND status = 'pending'").get(queueId);
     if (!entry) return interaction.reply({ content: '❌ Request not found or already processed.', ephemeral: true });
+
+    await interaction.deferUpdate();
 
     const isOfficial = Number(entry.verified_official) === 1;
 
@@ -218,7 +221,6 @@ export async function handleButton(interaction) {
       .setDescription(`Approved <@${entry.discord_id}> at **Level ${overrideLevel}** override.`)
       .setTimestamp();
 
-    await interaction.deferReply();
     await interaction.editReply({ embeds: [ackEmbed] });
 
     await logAction(interaction.client, {
@@ -270,6 +272,12 @@ export async function handleButton(interaction) {
       console.warn("[Verify] Could not DM user:", e.message);
     }
     return;
+    } catch (e) {
+      console.error('[Verify Auth Select] error:', e.message, e.stack);
+      try {
+        await interaction.editReply({ content: '❌ An error occurred processing your selection.' });
+      } catch (_) {}
+    }
   }
 
   // ── Auth Override button — show ephemeral select menu ──────────────────
