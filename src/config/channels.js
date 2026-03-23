@@ -15,3 +15,7 @@ export const BRAG_LOG_CHANNEL_ID = '1485677765838766080'; // brag-logs
 export const STAFF_LOG_CHANNEL_ID = '1485677766803325135'; // staff-logs
 export const USER_LOG_CHANNEL_ID = '1485677768577515714'; // user-logs
 export const NID_LOG_CHANNEL_ID = '1485677770104242358'; // nid-logs
+
+// Message activity log channels
+export const MESSAGE_DELETE_LOG_CHANNEL_ID = '1485707247551119550'; // deleted message logs
+export const MESSAGE_EDIT_LOG_CHANNEL_ID = '1485707229754818692'; // edited message logs
