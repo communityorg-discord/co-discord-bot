@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canRunCommand, isSuperuser, requiresSuperuserWarning } from '../utils/permissions.js';
-import { ALL_SERVER_IDS } from '../config.js';
+import { ALL_SERVER_IDS, APPEALS_SERVER_ID } from '../config.js';
 import { addInfraction, addGlobalBan, getActiveGlobalBan } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { getUserByDiscordId } from '../db.js';
@@ -32,6 +32,7 @@ export async function execute(interaction) {
 
   let bannedCount = 0;
   for (const serverId of ALL_SERVER_IDS) {
+    if (serverId === APPEALS_SERVER_ID) continue;
     try {
       const guild = await interaction.client.guilds.fetch(serverId).catch(() => null);
       if (!guild) continue;
