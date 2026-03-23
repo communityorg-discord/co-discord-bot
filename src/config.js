@@ -34,6 +34,7 @@ export {
   NID_LOG_CHANNEL_ID,
   MESSAGE_DELETE_LOG_CHANNEL_ID,
   MESSAGE_EDIT_LOG_CHANNEL_ID,
+  FULL_MESSAGE_LOGS_CHANNEL_ID,
 } from './config/channels.js';
 
 export const POSITION_ROLES = {

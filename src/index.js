@@ -1,7 +1,7 @@
 import express from 'express';
 import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, EmbedBuilder } from 'discord.js';
 import { config } from 'dotenv';
-import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, MOD_LOG_CHANNEL_ID } from './config.js';
+import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID } from './config.js';
 import { getUserByDiscordId } from './db.js';
 import * as brag from './commands/brag.js';
 import * as leave from './commands/leave.js';
@@ -385,8 +385,7 @@ client.on('messageDelete', async (message) => {
   if (!message || message.author?.bot) return;
   try {
     const deleteChannelId = MESSAGE_DELETE_LOG_CHANNEL_ID;
-    const fullModLogChannelId = MOD_LOG_CHANNEL_ID;
-    if (!deleteChannelId && !fullModLogChannelId) return;
+    if (!deleteChannelId && !FULL_MESSAGE_LOGS_CHANNEL_ID) return;
 
     const content = message.content?.slice(0, 1500) || '*No text content*';
     const attachments = message.attachments.size > 0 ? `\n📎 ${message.attachments.size} attachment(s)` : '';
@@ -409,10 +408,10 @@ client.on('messageDelete', async (message) => {
       const deleteChannel = await client.channels.fetch(deleteChannelId).catch(() => null);
       if (deleteChannel) await deleteChannel.send({ embeds: [embed] });
     }
-    // Also send to full-mod-logs
-    if (fullModLogChannelId) {
-      const fullModChannel = await client.channels.fetch(fullModLogChannelId).catch(() => null);
-      if (fullModChannel) await fullModChannel.send({ embeds: [embed] });
+    // Also send to full-message-logs
+    if (FULL_MESSAGE_LOGS_CHANNEL_ID) {
+      const fullMsgChannel = await client.channels.fetch(FULL_MESSAGE_LOGS_CHANNEL_ID).catch(() => null);
+      if (fullMsgChannel) await fullMsgChannel.send({ embeds: [embed] });
     }
   } catch (e) {
     console.error('[messageDelete log error]', e.message);
@@ -425,8 +424,7 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
   if (oldMessage.content === newMessage.content) return;
   try {
     const editChannelId = MESSAGE_EDIT_LOG_CHANNEL_ID;
-    const fullModLogChannelId = MOD_LOG_CHANNEL_ID;
-    if (!editChannelId && !fullModLogChannelId) return;
+    if (!editChannelId && !FULL_MESSAGE_LOGS_CHANNEL_ID) return;
 
     const oldContent = oldMessage.content?.slice(0, 750) || '*No text content*';
     const newContent = newMessage.content?.slice(0, 750) || '*No text content*';
@@ -450,10 +448,10 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
       const editChannel = await client.channels.fetch(editChannelId).catch(() => null);
       if (editChannel) await editChannel.send({ embeds: [embed] });
     }
-    // Also send to full-mod-logs
-    if (fullModLogChannelId) {
-      const fullModChannel = await client.channels.fetch(fullModLogChannelId).catch(() => null);
-      if (fullModChannel) await fullModChannel.send({ embeds: [embed] });
+    // Also send to full-message-logs
+    if (FULL_MESSAGE_LOGS_CHANNEL_ID) {
+      const fullMsgChannel = await client.channels.fetch(FULL_MESSAGE_LOGS_CHANNEL_ID).catch(() => null);
+      if (fullMsgChannel) await fullMsgChannel.send({ embeds: [embed] });
     }
   } catch (e) {
     console.error('[messageUpdate log error]', e.message);
