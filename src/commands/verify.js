@@ -186,24 +186,27 @@ export async function handleButton(interaction) {
       { name: 'Position', value: entry.position, inline: true },
       { name: 'Nickname', value: entry.requested_nickname, inline: true },
       { name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false },
-      { name: 'Servers Applied', value: `${successCount} ✅ | ${partialCount} ⚠️ | ${failedCount} ❌`, inline: false },
-      { name: 'Per-Server Results', value: guildFieldLines.slice(0, 1024) || 'None', inline: false },
     ];
 
     if (isOfficial) fields.push({ name: 'Account Type', value: 'Official Account (Bypass)', inline: false });
 
     const updatedEmbed = new EmbedBuilder()
-      .setColor(failedCount > 0 ? 0xF59E0B : 0x22C55E)
+      .setColor(0x22C55E)
       .setTitle(`✅ Verification #${queueId} — Approved${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
       .addFields(...fields)
       .setTimestamp();
 
     try {
-      await interaction.message.edit({ embeds: [updatedEmbed], components: [] });
+      if (originalMsg) {
+        await originalMsg.edit({ embeds: [updatedEmbed], components: [] });
+      } else {
+        await interaction.editReply({ content: `✅ Verification **#${queueId}** approved.`, ephemeral: true });
+      }
     } catch (e) {
       console.warn(`[Verify] Could not edit message: ${e.message}`);
-      // Fallback: acknowledge via editReply
-      await interaction.editReply({ content: `✅ Verification **#${queueId}** approved — could not edit original message.`, ephemeral: true });
+      try {
+        await interaction.editReply({ content: `✅ Verification **#${queueId}** approved — could not edit original message.`, ephemeral: true });
+      } catch (_) {}
     }
 
     // Log to verify-unverify-logs + full-mod-logs

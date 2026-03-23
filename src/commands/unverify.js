@@ -153,15 +153,13 @@ export async function handleModal(interaction) {
   const failedCount = results.filter(r => !r.success).length;
 
   const updatedEmbed = new EmbedBuilder()
-    .setColor(failedCount > 0 ? 0xF59E0B : 0xef4444)
+    .setColor(0xef4444)
     .setTitle(`🔴 Unverification Request #${queueId} — Completed`)
     .addFields(
       { name: 'User', value: `<@${entry.discord_id}> (${entry.discord_id})`, inline: false },
       { name: 'Previous Position', value: entry.position || 'Unknown', inline: true },
       { name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false },
       { name: 'Reason', value: reason, inline: false },
-      { name: 'Servers Processed', value: `${successCount} ✅ | ${partialCount} ⚠️ | ${failedCount} ❌`, inline: false },
-      { name: 'Per-Server Results', value: guildFieldLines.slice(0, 1024) || 'None', inline: false },
     )
     .setTimestamp();
 
