@@ -123,7 +123,9 @@ export async function handleButton(interaction) {
     const entry = db.prepare("SELECT * FROM verification_queue WHERE id = ? AND status = 'pending'").get(queueId);
     if (!entry) return interaction.reply({ content: '❌ Request not found or already processed.', ephemeral: true });
 
-    // Use update() to replace the button message with the approval embed
+    // Defer immediately — do slow work after to avoid 3s timeout
+    await interaction.deferReply({ ephemeral: true });
+
     const isOfficial = Number(entry.verified_official) === 1;
 
     // Apply roles + nickname across all guilds
@@ -139,16 +141,6 @@ export async function handleButton(interaction) {
     db.prepare("UPDATE verification_queue SET status = 'approved', reviewed_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
       .run(interaction.user.id, queueId);
 
-    // Send ephemeral reply confirming approval
-    const approvedEmbed = new EmbedBuilder()
-      .setColor(0x22c55e)
-      .setTitle(`✅ Verification **#${queueId}** Approved${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
-      .setDescription(`Verification approved. <@${entry.discord_id}> can now verify themselves.`)
-      .addFields({ name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false })
-      .addFields({ name: 'User', value: `<@${entry.discord_id}>`, inline: false });
-
-    await interaction.deferReply({ ephemeral: true });
-
     const replyEmbed = new EmbedBuilder()
       .setColor(0x22c55e)
       .setTitle(`✅ Verification **#${queueId}** Approved${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
@@ -162,7 +154,10 @@ export async function handleButton(interaction) {
     try {
       const user = await interaction.client.users.fetch(entry.discord_id);
       const note = isOfficial ? 'Official Account' : `Employee: ${entry.employee_number || 'N/A'}`;
-      await user.send(`✅ Your CO verification has been **approved** by <@${interaction.user.id}>.\n\nYour roles and nickname have been applied across all CO servers.\n**Note:** Verified - ${note}`);
+      await user.send(`✅ Your CO verification has been **approved** by <@${interaction.user.id}>.
+
+Your roles and nickname have been applied across all CO servers.
+**Note:** Verified - ${note}`);
     } catch (e) {
       console.warn('[Verify] Could not DM user:', e.message);
     }
