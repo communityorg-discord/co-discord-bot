@@ -39,3 +39,7 @@ export const POSITIONS = {
 };
 
 export const ALL_MANAGED_ROLES = [...new Set(Object.values(POSITIONS).flat())];
+
+export function getAuthLevelRole(level) {
+  return `Authorisation Level ${level}`;
+}
