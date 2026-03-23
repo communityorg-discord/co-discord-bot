@@ -18,7 +18,7 @@ export async function logAction(client, { action, moderator, target, reason, col
     .setTitle(`📋 ${action}`)
     .setColor(color)
     .addFields(
-      { name: 'Target', value: target ? `<@${target.discordId || target}> ${target.name ? `(${target.name})` : ''}` : 'Unknown', inline: true },
+      { name: 'Target', value: target ? (target.discordId === 'MULTIPLE' ? target.name : `<@${target.discordId || target}> ${target.name ? `(${target.name})` : ''}`) : 'Unknown', inline: true },
       { name: 'Moderator', value: moderator ? `<@${moderator.discordId || moderator}> ${moderator.name ? `(${moderator.name})` : ''}` : 'Unknown', inline: true },
       { name: 'Reason', value: reason || 'No reason provided', inline: false },
       ...fields
