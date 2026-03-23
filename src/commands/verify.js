@@ -163,6 +163,15 @@ export async function handleButton(interaction) {
 
     await interaction.deferUpdate();
 
+    // Fetch the original message using stored message_id (interaction.message may be stale)
+    let originalMsg = null;
+    try {
+      const channel = await interaction.client.channels.fetch(entry.channel_id);
+      originalMsg = await channel.messages.fetch(entry.message_id);
+    } catch (e) {
+      console.warn(`[Verify] Could not fetch original message: ${e.message}`);
+    }
+
     // Apply roles + nickname across all guilds — get detailed results
     const results = await applyVerification(interaction.client, entry.discord_id, entry.position, entry.requested_nickname);
 
@@ -304,8 +313,21 @@ export async function handleModal(interaction) {
     )
     .setTimestamp();
 
+  // Fetch the original message using stored message_id
+  let originalMsg = null;
+  try {
+    const channel = await interaction.client.channels.fetch(entry.channel_id);
+    originalMsg = await channel.messages.fetch(entry.message_id);
+  } catch (e) {
+    console.warn(`[Verify] Could not fetch original message for deny: ${e.message}`);
+  }
+
   await interaction.deferUpdate();
-  await interaction.message.edit({ embeds: [updatedEmbed], components: [] });
+  if (originalMsg) {
+    await originalMsg.edit({ embeds: [updatedEmbed], components: [] });
+  } else {
+    await interaction.editReply({ content: `❌ Verification denied.` });
+  }
 
   try {
     const user = await interaction.client.users.fetch(entry.discord_id);
