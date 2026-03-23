@@ -350,7 +350,6 @@ client.on('guildMemberAdd', async (member) => {
   }
 });
 
-}
 
 // Message delete log — tracked globally across all servers
 client.on('messageDelete', async (message) => {
