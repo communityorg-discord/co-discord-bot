@@ -6,6 +6,7 @@ export const GBAN_UNGBAN_LOG_CHANNEL_ID = '1485677749979975690'; // gban-ungban-
 export const SUSPEND_UNSUSPEND_LOG_CHANNEL_ID = '1485677751456370790'; // suspend-unsuspend-logs
 export const TERMINATE_LOG_CHANNEL_ID = '1485677753029361789'; // terminate-logs
 export const STRIKE_LOG_CHANNEL_ID = '1485677754635784203'; // strike-logs
+export const AUTH_OVERRIDE_LOG_CHANNEL_ID = '1485677762994896906'; // auth-override-logs
 export const INFRACTIONS_CASES_LOG_CHANNEL_ID = '1485677756112175300'; // infractions-cases-logs
 export const INVESTIGATION_LOG_CHANNEL_ID = '1485677757827518536'; // investigation-logs
 export const PURGE_SCRIBE_LOG_CHANNEL_ID = '1485677759308239009'; // purge-scribe-logs

@@ -1,6 +1,8 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { isSuperuser } from '../utils/verifyHelper.js';
 import { getAuthLevelRole } from '../utils/positions.js';
+import { logAction } from '../utils/logger.js';
+import { AUTH_OVERRIDE_LOG_CHANNEL_ID } from '../config.js';
 
 export const data = new SlashCommandBuilder()
   .setName('authorisation-override')
@@ -53,6 +55,7 @@ export async function execute(interaction) {
 
     let updated = 0;
     const results = [];
+    let previousLevel = null;
 
     for (const guildId of GUILD_IDS) {
       try {
@@ -64,6 +67,7 @@ export async function execute(interaction) {
 
         const oldAuthRole = member.roles.cache.find(r => r.name.startsWith('Authorisation Level '));
         if (oldAuthRole) {
+          if (previousLevel === null) previousLevel = parseInt(oldAuthRole.name.replace('Authorisation Level ', ''));
           await member.roles.remove(oldAuthRole).catch(e => console.warn(`[Auth Override] Remove error ${guild.name}: ${e.message}`));
           results.push(`🔄 ${guild.name}: removed ${oldAuthRole.name}`);
         }
@@ -94,6 +98,23 @@ export async function execute(interaction) {
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
+
+    // Log to auth-override channel
+    await logAction(interaction.client, {
+      action: `🔐 Auth Override: Level ${previousLevel || 'None'} → Level ${newAuthLevel}`,
+      moderator: { discordId: interaction.user.id, name: interaction.user.username },
+      target: { discordId: targetUserId, name: targetUser.username },
+      reason,
+      color: updated > 0 ? 0x22c55e : 0xef4444,
+      fields: [
+        { name: 'Target', value: `<@${targetUserId}>`, inline: true },
+        { name: 'Previous Level', value: previousLevel ? `Level ${previousLevel}` : 'None', inline: true },
+        { name: 'New Level', value: newAuthLevelRoleName, inline: true },
+        { name: 'Servers Updated', value: `${updated}/${GUILD_IDS.length}`, inline: true },
+        { name: 'Results', value: results.join('\n').slice(0, 1024) || 'None', inline: false },
+      ],
+      specificChannelId: AUTH_OVERRIDE_LOG_CHANNEL_ID,
+    });
   } catch (err) {
     console.error('[Auth Override] Error:', err.message);
     try {
