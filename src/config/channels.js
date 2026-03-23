@@ -21,3 +21,6 @@ export const NID_LOG_CHANNEL_ID = '1485677770104242358'; // nid-logs
 export const MESSAGE_DELETE_LOG_CHANNEL_ID = '1485707247551119550'; // deleted message logs
 export const MESSAGE_EDIT_LOG_CHANNEL_ID = '1485707229754818692'; // edited message logs
 export const FULL_MESSAGE_LOGS_CHANNEL_ID = '1485660587349512452'; // full-message-logs
+
+// Cooldown log channel
+export const COOLDOWN_LOG_CHANNEL_ID = '1485785753349914775'; // cooldown-logs

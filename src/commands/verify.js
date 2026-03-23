@@ -201,22 +201,20 @@ export async function handleButton(interaction) {
       .addFields(...fields)
       .setTimestamp();
 
-    // Edit the original verification request message
+    // Edit the original verification request message to show override result and remove buttons
     let originalMsg = null;
     try {
       const channel = await interaction.client.channels.fetch(entry.channel_id);
-      console.log(`[Verify Auth Select] channel=${entry.channel_id} msg_id=${entry.message_id}`);
       originalMsg = await channel.messages.fetch(entry.message_id);
-      console.log(`[Verify Auth Select] fetched originalMsg id=${originalMsg.id}`);
     } catch (e) {
       console.warn(`[Verify Auth Select] Could not fetch original message: ${e.message} (channel=${entry.channel_id} msg=${entry.message_id})`);
     }
 
     if (originalMsg) {
-      console.log(`[Verify Auth Select] editing originalMsg to show override`);
-      await originalMsg.edit({ embeds: [updatedEmbed], components: [] }).catch(e => console.warn(`[Verify Auth Select] Could not edit original message: ${e.message}`));
-    } else {
-      console.warn(`[Verify Auth Select] originalMsg was null, skipping edit`);
+      // Clear components so the Confirm/Deny buttons can't fire a second verification
+      await originalMsg.edit({ embeds: [updatedEmbed], components: [] }).catch(e =>
+        console.warn(`[Verify Auth Select] Could not edit original message: ${e.message}`)
+      );
     }
 
     // Acknowledge the select menu interaction with an ephemeral confirmation
@@ -290,6 +288,21 @@ export async function handleButton(interaction) {
     const queueId = customId.replace('verify_auth_override_', '');
     if (!await isSuperuser(interaction.user.id)) {
       return interaction.reply({ content: '❌ Only superusers can use this.', ephemeral: true });
+    }
+
+    const entry = db.prepare("SELECT * FROM verification_queue WHERE id = ?").get(queueId);
+    if (!entry) return interaction.reply({ content: '❌ Request not found.', ephemeral: true });
+
+    // Immediately clear original buttons to prevent double-verify race condition
+    try {
+      const channel = await interaction.client.channels.fetch(entry.channel_id);
+      const origMsg = await channel.messages.fetch(entry.message_id);
+      const waitEmbed = new EmbedBuilder(origMsg.embeds[0]?.toJSON() || {}).setDescription(
+        (origMsg.embeds[0]?.data?.description || '') + '\n\n⏳ *Awaiting authorisation level override selection...*'
+      );
+      await origMsg.edit({ embeds: [waitEmbed], components: [] });
+    } catch (e) {
+      console.warn(`[Auth Override] Could not clear original buttons: ${e.message}`);
     }
 
     const overrideRow = new ActionRowBuilder().addComponents(

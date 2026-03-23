@@ -29,6 +29,7 @@ import * as purge from './commands/purge.js';
 import * as scribe from './commands/scribe.js';
 import * as unverify from './commands/unverify.js';
 import * as authorisationOverride from './commands/authorisation-override.js';
+import * as cooldown from './commands/cooldown.js';
 
 config();
 
@@ -37,7 +38,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, ban, unban, verify, unverify, authorisationOverride];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, ban, unban, verify, unverify, authorisationOverride, cooldown];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
