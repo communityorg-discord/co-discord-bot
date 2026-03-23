@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { getPortalUser, isSuperuser, applyVerification, getOrCreateVerificationChannel } from '../utils/verifyHelper.js';
-import { POSITIONS } from '../utils/positions.js';
+import { POSITIONS, getAuthLevelRole } from '../utils/positions.js';
 import db from '../utils/botDb.js';
 import { VERIFY_UNVERIFY_LOG_CHANNEL_ID } from '../config.js';
 import { logAction } from '../utils/logger.js';
@@ -60,10 +60,13 @@ export async function execute(interaction) {
       return interaction.editReply({ content: '❌ Could not find the verification channel. Please contact a superuser.' });
     }
 
+    // Determine if user is on probation
+    const isProbation = !isOfficial && portalUser?.on_probation === true;
+
     // Insert into queue
     const result = db.prepare(`
-      INSERT INTO verification_queue (discord_id, guild_id, requested_nickname, portal_user_id, position, employee_number, supervisor_name, channel_id, verified_official)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO verification_queue (discord_id, guild_id, requested_nickname, portal_user_id, position, employee_number, supervisor_name, channel_id, verified_official, is_probation)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       discordId, interaction.guildId, nickname,
       isOfficial ? null : portalUser.id,
@@ -71,7 +74,8 @@ export async function execute(interaction) {
       isOfficial ? 'N/A' : (portalUser?.employee_number || 'N/A'),
       isOfficial ? 'None' : (portalUser?.supervisor_name || 'None'),
       verifyChannel.id,
-      isOfficial ? 1 : 0
+      isOfficial ? 1 : 0,
+      isProbation ? 1 : 0
     );
 
     const queueId = result.lastInsertRowid;

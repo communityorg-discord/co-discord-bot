@@ -5,7 +5,7 @@ import db from './botDb.js';
  * Apply roles + nickname for a verified member across ALL guilds.
  * Returns detailed per-guild results showing roles added/removed and any failures.
  */
-export async function applyVerification(client, discordId, position, nickname) {
+export async function applyVerification(client, discordId, position, nickname, overrideAuthLevel = null) {
   const roleNames = [...(POSITIONS[position] || []), 'Verified', 'CO Staff'];
   const results = [];
 
