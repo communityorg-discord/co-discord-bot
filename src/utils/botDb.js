@@ -202,3 +202,7 @@ export function getAllActiveStaff() {
      FROM users WHERE account_status = 'Active' ORDER BY display_name LIMIT 100`
   ).all();
 }
+
+export function getPortalUserById(userId) {
+  return portalDb.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+}

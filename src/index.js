@@ -195,14 +195,13 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.customId === 'dm_exempt_user_select') {
-      const { addDmExemption, getDmExemptions } = await import('./utils/botDb.js');
-      const { getUserById } = await import('./db.js');
+      const { addDmExemption, getDmExemptions, getPortalUserById } = await import('./utils/botDb.js');
 
       const selectedId = interaction.values[0];
-      const portalUser = getUserById(Number(selectedId));
+      const portalUser = getPortalUserById(Number(selectedId));
       const displayName = portalUser?.display_name || portalUser?.username || selectedId;
 
-      addDmExemption(portalUser?.discord_id || selectedId, displayName, interaction.user.id);
+      addDmExemption(portalUser?.discord_id || String(selectedId), displayName, interaction.user.id);
 
       const exempts = getDmExemptions();
       const rows = exempts.map(e =>
