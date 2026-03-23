@@ -205,13 +205,18 @@ export async function handleButton(interaction) {
     let originalMsg = null;
     try {
       const channel = await interaction.client.channels.fetch(entry.channel_id);
+      console.log(`[Verify Auth Select] channel=${entry.channel_id} msg_id=${entry.message_id}`);
       originalMsg = await channel.messages.fetch(entry.message_id);
+      console.log(`[Verify Auth Select] fetched originalMsg id=${originalMsg.id}`);
     } catch (e) {
-      console.warn(`[Verify] Could not fetch original message: ${e.message}`);
+      console.warn(`[Verify Auth Select] Could not fetch original message: ${e.message} (channel=${entry.channel_id} msg=${entry.message_id})`);
     }
 
     if (originalMsg) {
-      await originalMsg.edit({ embeds: [updatedEmbed], components: [] }).catch(e => console.warn(`[Verify] Could not edit original message: ${e.message}`));
+      console.log(`[Verify Auth Select] editing originalMsg to show override`);
+      await originalMsg.edit({ embeds: [updatedEmbed], components: [] }).catch(e => console.warn(`[Verify Auth Select] Could not edit original message: ${e.message}`));
+    } else {
+      console.warn(`[Verify Auth Select] originalMsg was null, skipping edit`);
     }
 
     // Acknowledge the select menu interaction with an ephemeral confirmation

@@ -107,14 +107,8 @@ client.on('interactionCreate', async interaction => {
     // Verify/Unverify button handlers
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
     if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
-  }
 
-  if (interaction.isStringSelectMenu()) {
-    // Verify/Unverify select menu handlers
-    if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
-    if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
-  }
-
+    // NID button handlers
     if (interaction.customId.startsWith('nid_confirm_')) {
       const [, , userId, actionType] = interaction.customId.split('_');
       const supervisor = getUserByDiscordId(interaction.user.id);
@@ -293,6 +287,13 @@ client.on('interactionCreate', async interaction => {
       });
       return;
     }
+  }
+
+  // String select menu handlers
+  if (interaction.isStringSelectMenu()) {
+    if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
+    if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
+  }
 
   // Verify/Unverify modal handlers
   if (interaction.isModalSubmit()) {
