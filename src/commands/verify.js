@@ -198,7 +198,13 @@ export async function handleButton(interaction) {
       .addFields(...fields)
       .setTimestamp();
 
-    await interaction.message.edit({ embeds: [updatedEmbed], components: [] });
+    try {
+      await interaction.message.edit({ embeds: [updatedEmbed], components: [] });
+    } catch (e) {
+      console.warn(`[Verify] Could not edit message: ${e.message}`);
+      // Fallback: acknowledge via editReply
+      await interaction.editReply({ content: `✅ Verification **#${queueId}** approved — could not edit original message.`, ephemeral: true });
+    }
 
     // Log to verify-unverify-logs + full-mod-logs
     await logAction(interaction.client, {
