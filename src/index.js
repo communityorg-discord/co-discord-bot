@@ -17,6 +17,7 @@ import * as strike from './commands/strike.js';
 import * as user from './commands/user.js';
 import * as botInfo from './commands/bot.js';
 import * as election from './commands/election.js';
+import * as ban from './commands/ban.js';
 
 config();
 
@@ -25,7 +26,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, election];
+const commands = [brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, election, ban];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
