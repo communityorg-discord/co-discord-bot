@@ -3,7 +3,10 @@ config();
 
 export const STAFF_HQ_ID = process.env.STAFF_HQ_ID;
 export const NETWORK_SERVER_IDS = (process.env.NETWORK_SERVER_IDS || '').split(',').filter(Boolean);
-export const ALL_SERVER_IDS = [STAFF_HQ_ID, ...NETWORK_SERVER_IDS];
+export const ALL_SERVER_IDS = [
+  ...(STAFF_HQ_ID ? [STAFF_HQ_ID] : []),
+  ...NETWORK_SERVER_IDS
+];
 export const SUSPENDED_ROLE_ID = process.env.SUSPENDED_ROLE_ID;
 export const UNDER_INVESTIGATION_ROLE_ID = process.env.UNDER_INVESTIGATION_ROLE_ID;
 export const APPEALS_SERVER_ID = process.env.APPEALS_SERVER_ID;
