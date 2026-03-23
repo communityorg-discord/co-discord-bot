@@ -100,7 +100,7 @@ export async function execute(interaction) {
         .setCustomId(`verify_auth_${queueId}`)
         .setPlaceholder('Select authorisation level...')
         .addOptions([
-          { label: 'No Override (Use Default)', value: `0` },
+          { label: 'No Override (Use Default)', value: '0' },
           { label: 'Authorisation Level 7', value: '7' },
           { label: 'Authorisation Level 6', value: '6' },
           { label: 'Authorisation Level 5', value: '5' },
@@ -108,11 +108,14 @@ export async function execute(interaction) {
           { label: 'Authorisation Level 3', value: '3' },
           { label: 'Authorisation Level 2', value: '2' },
           { label: 'Authorisation Level 1', value: '1' },
-        ]),
+        ])
+    );
+
+    const row2 = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`verify_deny_${queueId}`).setLabel('Deny').setStyle(ButtonStyle.Danger),
     );
 
-    const msg = await verifyChannel.send({ embeds: [embed], components: [row] });
+    const msg = await verifyChannel.send({ embeds: [embed], components: [row, row2] });
 
     // Save message ID
     db.prepare("UPDATE verification_queue SET message_id = ? WHERE id = ?").run(msg.id, queueId);
