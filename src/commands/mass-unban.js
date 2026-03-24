@@ -26,7 +26,7 @@ export async function execute(interaction) {
     return interaction.reply({ content: '❌ Only superusers can use this command.', ephemeral: true });
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply();
 
   const scope = interaction.options.getString('scope');
   const reason = interaction.options.getString('reason');
