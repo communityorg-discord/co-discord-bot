@@ -240,6 +240,9 @@ export async function handleButton(interaction) {
         { name: 'Per-Server Results', value: guildFieldLines.slice(0, 1024) || 'None', inline: false },
       ],
       specificChannelId: VERIFY_UNVERIFY_LOG_CHANNEL_ID
+    guildId: interaction.guildId,
+    logType: 'verification.verify_unverify',
+    globalLogType: 'global_verification',
     });
 
     // DM the user

@@ -41,6 +41,9 @@ export async function execute(interaction) {
     target: { discordId: target.id, name: portalUser?.display_name || target.username },
     reason, color: 0xF59E0B,
     specificChannelId: STRIKE_LOG_CHANNEL_ID
+    guildId: interaction.guildId,
+    logType: 'moderation.strike',
+    globalLogType: 'global_moderation',
   });
 
   await interaction.reply({ embeds: [new EmbedBuilder()

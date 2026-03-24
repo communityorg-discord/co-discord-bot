@@ -139,6 +139,9 @@ export async function execute(interaction) {
           ...(emailConfirm ? [{ name: '📧 Email Confirm', value: 'Recipient must acknowledge', inline: false }] : []),
         ],
         specificChannelId: DM_LOG_CHANNEL_ID
+    guildId: interaction.guildId,
+    logType: 'verification.dm',
+    globalLogType: 'global_verification',
       });
 
       return interaction.editReply({

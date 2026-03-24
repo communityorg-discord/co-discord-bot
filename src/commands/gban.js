@@ -78,6 +78,9 @@ export async function execute(interaction) {
       { name: 'Servers', value: serverList, inline: false }
     ],
     specificChannelId: GBAN_UNGBAN_LOG_CHANNEL_ID
+    guildId: interaction.guildId,
+    logType: 'moderation.gban_ungban',
+    globalLogType: 'global_moderation',
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()

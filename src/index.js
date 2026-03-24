@@ -500,6 +500,11 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
       const perGuildChannel = await client.channels.fetch(perGuildChannelId).catch(() => null);
       if (perGuildChannel) await perGuildChannel.send({ embeds: [embed] });
     }
+    // Also send to global message log channel
+    if (globalChannelId) {
+      const globalChannel = await client.channels.fetch(globalChannelId).catch(() => null);
+      if (globalChannel) await globalChannel.send({ embeds: [embed] });
+    }
   } catch (e) {
     console.error('[messageUpdate log error]', e.message);
   }

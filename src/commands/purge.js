@@ -214,6 +214,9 @@ export async function execute(interaction) {
         ...(tooOld > 0 ? [{ name: 'Skipped (14d+)', value: String(tooOld), inline: true }] : []),
       ],
       specificChannelId: PURGE_SCRIBE_LOG_CHANNEL_ID
+    guildId: interaction.guildId,
+    logType: 'moderation.purge_scribe',
+    globalLogType: 'global_moderation',
     });
 
     await interaction.editReply({ embeds: [new EmbedBuilder()

@@ -49,7 +49,10 @@ export async function execute(interaction) {
     fields: [
       { name: 'Server', value: interaction.guild.name, inline: true }
     ],
-    specificChannelId: BAN_UNBAN_LOG_CHANNEL_ID
+    specificChannelId: BAN_UNBAN_LOG_CHANNEL_ID,
+    guildId: interaction.guildId,
+    logType: 'moderation.ban_unban',
+    globalLogType: 'global_moderation'
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()

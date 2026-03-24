@@ -39,6 +39,9 @@ export async function execute(interaction) {
     target: { discordId: target.id, name: portalUser?.display_name || target.username },
     reason, color: 0x22C55E,
     specificChannelId: SUSPEND_UNSUSPEND_LOG_CHANNEL_ID
+    guildId: interaction.guildId,
+    logType: 'moderation.suspend_unsuspend',
+    globalLogType: 'global_moderation',
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()

@@ -68,5 +68,8 @@ export async function execute(interaction) {
       { name: 'Reason', value: reason, inline: false },
     ],
     specificChannelId: COOLDOWN_LOG_CHANNEL_ID
+    guildId: interaction.guildId,
+    logType: 'moderation.cooldown',
+    globalLogType: 'global_moderation',
   });
 }

@@ -89,6 +89,9 @@ export async function execute(interaction) {
       { name: '👤 Actioned By', value: `<@${interaction.user.id}> (${interaction.user.username})`, inline: true },
     ],
     specificChannelId: SUSPEND_UNSUSPEND_LOG_CHANNEL_ID
+    guildId: interaction.guildId,
+    logType: 'moderation.suspend_unsuspend',
+    globalLogType: 'global_moderation',
   });
 
   // Auto-lift if timed
