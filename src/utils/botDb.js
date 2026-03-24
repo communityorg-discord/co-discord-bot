@@ -130,7 +130,14 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (panel_id) REFERENCES ticket_panels(id)
   );
-`);
+
+
+  CREATE TABLE IF NOT EXISTS log_config (id INTEGER PRIMARY KEY, guild_id TEXT, channel_id TEXT, event_type TEXT);
+  CREATE TABLE IF NOT EXISTS bot_config (id INTEGER PRIMARY KEY, key TEXT UNIQUE, value TEXT);
+  CREATE TABLE IF NOT EXISTS verified_members (id INTEGER PRIMARY KEY, discord_id TEXT UNIQUE, portal_id INTEGER, position TEXT, auth_level INTEGER, verified_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS verification_queue (id INTEGER PRIMARY KEY, discord_id TEXT, portal_id INTEGER, requested_at DATETIME DEFAULT CURRENT_TIMESTAMP, status TEXT DEFAULT 'pending');
+  CREATE TABLE IF NOT EXISTS banned_users (id INTEGER PRIMARY KEY, discord_id TEXT, reason TEXT, banned_by TEXT, banned_at DATETIME DEFAULT CURRENT_TIMESTAMP, unban_at DATETIME, active INTEGER DEFAULT 1);
+  CREATE TABLE IF NOT EXISTS guild_settings (id INTEGER PRIMARY KEY, guild_id TEXT UNIQUE, key TEXT, value TEXT);`);
 
 // Migration: add ticket_count column if missing (existing DBs)
 try {

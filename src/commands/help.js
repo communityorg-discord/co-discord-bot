@@ -11,15 +11,15 @@ const COMMAND_DATA = {
   },
   'authorisation-override': {
     name: 'authorisation-override',
-    description: 'Override a staff member\'s authorisation level across all servers.',
+    description: "Override a staff member's authorisation level across all servers.",
     category: 'Superuser',
     usage: '/authorisation-override <user> <level> [reason]',
     example: '/authorisation-override @JohnDoe 5 Promoted to Director',
-    details: 'Replaces the target user\'s current Authorisation Level role with the specified level (1–7) across all CO servers. Does not affect their position role. Requires superuser.',
+    details: "Replaces the target user's current Authorisation Level role with the specified level (1-7) across all CO servers. Does not affect their position role. Requires superuser.",
   },
   unverify: {
     name: 'unverify',
-    description: 'Revoke a verified staff member\'s access.',
+    description: "Revoke a verified staff member's access.",
     category: 'Superuser',
     usage: '/unverify <user>',
     example: '/unverify @JohnDoe',
@@ -35,7 +35,7 @@ const COMMAND_DATA = {
   },
   infractions: {
     name: 'infractions',
-    description: 'View a staff member\'s infraction history.',
+    description: "View a staff member's infraction history.",
     category: 'Moderation',
     usage: '/infractions [user]',
     example: '/infractions @JohnDoe',
@@ -43,7 +43,7 @@ const COMMAND_DATA = {
   },
   suspend: {
     name: 'suspend',
-    description: 'Suspend a staff member\'s access temporarily.',
+    description: "Suspend a staff member's access temporarily.",
     category: 'Moderation',
     usage: '/suspend <user> <reason>',
     example: '/suspend @JohnDoe Under investigation',
@@ -75,7 +75,7 @@ const COMMAND_DATA = {
   },
   terminate: {
     name: 'terminate',
-    description: 'Terminate a staff member\'s employment.',
+    description: "Terminate a staff member's employment.",
     category: 'HR',
     usage: '/terminate <user> <reason>',
     example: '/terminate @JohnDoe Gross misconduct',
@@ -119,7 +119,7 @@ const COMMAND_DATA = {
     category: 'HR',
     usage: '/brag <user> <rating> [notes]',
     example: '/brag @JohnDoe 5 Exceeded all targets this quarter',
-    details: 'Logs a BRAG rating (1–5) for the staff member. Rating descriptions: 1=Needs Improvement, 2=Developing, 3=Meets Expectations, 4=Exceeds, 5=Outstanding. Requires staff role.',
+    details: 'Logs a BRAG rating (1-5) for the staff member. Rating descriptions: 1=Needs Improvement, 2=Developing, 3=Meets Expectations, 4=Exceeds, 5=Outstanding. Requires staff role.',
   },
   'dm-exempt': {
     name: 'dm-exempt',
@@ -183,7 +183,7 @@ const COMMAND_DATA = {
     category: 'Moderation',
     usage: '/gunban <user_id> [reason]',
     example: '/gunban 723199054514749450 Appeal successful',
-    details: 'Removes the user\'s global ban from all CO servers. Requires superuser + Staff role.',
+    details: "Removes the user's global ban from all CO servers. Requires superuser + Staff role.",
   },
   help: {
     name: 'help',
@@ -203,16 +203,16 @@ const CATEGORIES = [
   { name: 'Utility', emoji: '🔧', description: 'General utility commands' },
 ];
 
-export default [
-  new SlashCommandBuilder()
-    .setName('help')
-    .setDescription('Show help for all commands or a specific command.')
-    .addStringOption(opt =>
-      opt.setName('command')
-        .setDescription('The command to get help for (e.g. verify, strike)')
-        .setRequired(false)
-    ),
-].map(cmd => ({ data: cmd, execute: async (interaction) => {
+export const data = new SlashCommandBuilder()
+  .setName('help')
+  .setDescription('Show help for all commands or a specific command.')
+  .addStringOption(opt =>
+    opt.setName('command')
+      .setDescription('The command to get help for (e.g. verify, strike)')
+      .setRequired(false)
+  );
+
+export async function execute(interaction) {
   const commandName = interaction.options.getString('command');
 
   if (commandName) {
@@ -236,7 +236,7 @@ export default [
         .setDescription(cmd.details)
         .setColor(0x5865F2)
         .addFields(
-          { name: 'Category', value: `${category?.emoji} ${cmd.category}`, inline: true },
+          { name: 'Category', value: `${category?.emoji || '📝'} ${cmd.category}`, inline: true },
           { name: 'Usage', value: `\`${cmd.usage}\``, inline: false },
           { name: 'Example', value: cmd.example, inline: false },
         )
@@ -268,4 +268,4 @@ export default [
   }
 
   return interaction.reply({ embeds: [embed], ephemeral: true });
-} }));
+}

@@ -41,6 +41,12 @@ import { handleTicketOptionsButton, handleTicketOptionsModal } from './commands/
 import * as ticketOptions from './commands/ticket-options.js';
 
 config();
+import { logRoleAction } from './utils/logger.js';
+
+if (!process.env.BOT_WEBHOOK_SECRET) {
+  console.error('[FATAL] BOT_WEBHOOK_SECRET is not set. Webhook server will not start.');
+  process.exit(1);
+}
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent]
@@ -65,6 +71,83 @@ client.once('ready', async () => {
   } catch (e) {
     console.error('[CO Bot] Failed to register commands:', e.message);
   }
+
+  // C-05: Re-schedule timed suspensions and bans on startup
+  const { default: db, getActiveSuspension, liftSuspension, getActiveGlobalBan } = await import('./utils/botDb.js');
+  const { unsuspendAcrossGuilds } = await import('./utils/roleManager.js');
+  const { EmbedBuilder } = await import('discord.js');
+
+  // Suspensions
+  const activeSuspensions = db.prepare("SELECT * FROM suspensions WHERE expires_at IS NOT NULL AND active = 1").all();
+  for (const sus of activeSuspensions) {
+    const expiresAt = new Date(sus.expires_at).getTime();
+    if (expiresAt > Date.now()) {
+      const remaining = expiresAt - Date.now();
+      console.log('[C-05] Scheduling suspension lift for', sus.discord_id, 'in', Math.round(remaining / 1000 / 60), 'mins');
+      setTimeout(async () => {
+        try {
+          await unsuspendAcrossGuilds(client, sus.discord_id);
+          liftSuspension(sus.discord_id);
+          const user = await client.users.fetch(sus.discord_id).catch(() => null);
+          if (user) await user.send({ embeds: [new EmbedBuilder().setTitle('✅ Suspension Lifted').setColor(0x22C55E).setDescription('Your suspension from **Community Organisation** has ended and your roles have been restored.').setFooter({ text: 'Community Organisation | Staff Assistant' }).setTimestamp()] }).catch(() => {});
+          const { logAction } = await import('./utils/logger.js');
+          await logAction(client, { action: '✅ Suspension Lifted (Auto)', moderator: { discordId: 'SYSTEM', name: 'Automated' }, target: { discordId: sus.discord_id, name: sus.discord_id }, reason: 'Suspension duration expired', color: 0x22C55E });
+        } catch (e) { console.error('[C-05 suspension lift error]', e.message); }
+      }, remaining);
+    } else {
+      await unsuspendAcrossGuilds(client, sus.discord_id);
+      liftSuspension(sus.discord_id);
+    }
+  }
+
+  // Bans
+  const activeBans = db.prepare("SELECT * FROM banned_users WHERE unban_at IS NOT NULL AND active = 1").all();
+  for (const ban of activeBans) {
+    const unbanAt = new Date(ban.unban_at).getTime();
+    if (unbanAt > Date.now()) {
+      const remaining = unbanAt - Date.now();
+      console.log('[C-05] Scheduling ban lift for', ban.discord_id, 'in', Math.round(remaining / 1000 / 60), 'mins');
+      setTimeout(async () => {
+        try {
+          const GUILD_IDS = ['1485422910972760176','1485423163817988186','1485423682980675729','1485423935569920135','1485424535405723729'];
+          for (const gid of GUILD_IDS) {
+            const g = await client.guilds.fetch(gid).catch(() => null);
+            if (g) await g.members.unban(ban.discord_id, 'Temporary ban expired').catch(() => {});
+          }
+          db.prepare("DELETE FROM banned_users WHERE discord_id = ? AND unban_at IS NOT NULL").run(ban.discord_id);
+          const { logAction } = await import('./utils/logger.js');
+          await logAction(client, { action: '✅ Temp Ban Expired — Auto Unbanned', moderator: { discordId: 'SYSTEM', name: 'Auto (Duration Expired)' }, target: { discordId: ban.discord_id, name: ban.discord_id }, reason: 'Temp ban expired', color: 0x22c55e });
+        } catch (e) { console.error('[C-05 ban lift error]', e.message); }
+      }, remaining);
+    }
+  }
+
+  // Safety net: run every 60 seconds
+  setInterval(async () => {
+    try {
+      const now = Date.now();
+      const expiredSuspensions = db.prepare("SELECT * FROM suspensions WHERE expires_at IS NOT NULL AND active = 1 AND expires_at <= ?").all(new Date(now).toISOString());
+      for (const sus of expiredSuspensions) {
+        await unsuspendAcrossGuilds(client, sus.discord_id);
+        liftSuspension(sus.discord_id);
+        const user = await client.users.fetch(sus.discord_id).catch(() => null);
+        if (user) await user.send({ embeds: [new EmbedBuilder().setTitle('✅ Suspension Lifted').setColor(0x22C55E).setDescription('Your suspension has ended.').setFooter({ text: 'Community Organisation | Staff Assistant' }).setTimestamp()] }).catch(() => {});
+      }
+      const expiredBans = db.prepare("SELECT * FROM banned_users WHERE unban_at IS NOT NULL AND active = 1 AND unban_at <= ?").all(new Date(now).toISOString());
+      for (const ban of expiredBans) {
+        const GUILD_IDS = ['1485422910972760176','1485423163817988186','1485423682980675729','1485423935569920135','1485424535405723729'];
+        for (const gid of GUILD_IDS) {
+          const g = await client.guilds.fetch(gid).catch(() => null);
+          if (g) await g.members.unban(ban.discord_id, 'Temporary ban expired').catch(() => {});
+        }
+        db.prepare("DELETE FROM banned_users WHERE discord_id = ? AND unban_at IS NOT NULL").run(ban.discord_id);
+      }
+      if (expiredSuspensions.length > 0 || expiredBans.length > 0) {
+        console.log('[C-05 safety net] Processed', expiredSuspensions.length, 'suspensions and', expiredBans.length, 'bans');
+      }
+    } catch (e) { console.error('[C-05 safety net error]', e.message); }
+  }, 60000);
+
 });
 
 client.on('interactionCreate', async interaction => {
@@ -634,52 +717,51 @@ client.on('roleUpdate', async (oldRole, newRole) => {
 });
 
 // Member role added
-client.on('guildMemberRoleAdd', async (member, roles) => {
+// Member roles updated (added or removed)
+client.on('guildMemberUpdate', async (oldMember, newMember) => {
   try {
-    if (!member || !member.guild || member.user?.bot) return;
-    const guildId = member.guild.id;
-    const roleNames = roles.map(r => r.name).join(', ');
+    if (!oldMember || !newMember || newMember.user?.bot) return;
+    const guildId = newMember.guild.id;
 
-    await logRoleAction(member.client, {
-      action: 'Member Role Added',
-      target: { discordId: member.user.id, name: member.user.username },
-      moderator: null,
-      color: 0x22C55E,
-      fields: [
-        { name: 'Member', value: `<@${member.user.id}>`, inline: true },
-        { name: 'Roles Added', value: roleNames, inline: false },
-        { name: 'Server', value: member.guild.name, inline: false },
-      ],
-      roleLogType: 'member_role_add',
-      guildId
-    });
+    const oldRoles = oldMember.roles.cache;
+    const newRoles = newMember.roles.cache;
+
+    const addedRoles = newRoles.filter(r => !oldRoles.has(r.id));
+    const removedRoles = oldRoles.filter(r => !newRoles.has(r.id));
+
+    for (const role of addedRoles.values()) {
+      await logRoleAction(newMember.client, {
+        action: 'Member Role Added',
+        target: { discordId: newMember.user.id, name: newMember.user.username },
+        moderator: null,
+        color: 0x22C55E,
+        fields: [
+          { name: 'Member', value: `<@${newMember.user.id}>`, inline: true },
+          { name: 'Role Added', value: role.name, inline: false },
+          { name: 'Server', value: newMember.guild.name, inline: false },
+        ],
+        roleLogType: 'member_role_add',
+        guildId
+      });
+    }
+
+    for (const role of removedRoles.values()) {
+      await logRoleAction(newMember.client, {
+        action: 'Member Role Removed',
+        target: { discordId: newMember.user.id, name: newMember.user.username },
+        moderator: null,
+        color: 0xEF4444,
+        fields: [
+          { name: 'Member', value: `<@${newMember.user.id}>`, inline: true },
+          { name: 'Role Removed', value: role.name, inline: false },
+          { name: 'Server', value: newMember.guild.name, inline: false },
+        ],
+        roleLogType: 'member_role_remove',
+        guildId
+      });
+    }
   } catch (e) {
-    console.error('[guildMemberRoleAdd log error]', e.message);
-  }
-});
-
-// Member role removed
-client.on('guildMemberRoleRemove', async (member, roles) => {
-  try {
-    if (!member || !member.guild || member.user?.bot) return;
-    const guildId = member.guild.id;
-    const roleNames = roles.map(r => r.name).join(', ');
-
-    await logRoleAction(member.client, {
-      action: 'Member Role Removed',
-      target: { discordId: member.user.id, name: member.user.username },
-      moderator: null,
-      color: 0xEF4444,
-      fields: [
-        { name: 'Member', value: `<@${member.user.id}>`, inline: true },
-        { name: 'Roles Removed', value: roleNames, inline: false },
-        { name: 'Server', value: member.guild.name, inline: false },
-      ],
-      roleLogType: 'member_role_remove',
-      guildId
-    });
-  } catch (e) {
-    console.error('[guildMemberRoleRemove log error]', e.message);
+    console.error('[guildMemberUpdate log error]', e.message);
   }
 });
 
@@ -689,8 +771,8 @@ webhookApp.use(express.json());
 
 function verifyBotSecret(req, res) {
   const secret = req.headers['x-bot-secret'];
-  if (!secret || secret !== process.env.BOT_WEBHOOK_SECRET) {
-    res.status(401).json({ ok: false, error: 'Unauthorised' });
+  if (!secret || !process.env.BOT_WEBHOOK_SECRET || secret !== process.env.BOT_WEBHOOK_SECRET) {
+    res.status(401).json({ error: 'Unauthorised' });
     return false;
   }
   return true;
