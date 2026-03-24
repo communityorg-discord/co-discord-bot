@@ -157,6 +157,8 @@ export async function execute(interaction) {
 // ─── Show Inbox (email list) ──────────────────────────────────────────────────
 
 async function showInbox(interaction, inbox, discordUserId, discordRoleIds, page) {
+  // Defer if not already deferred (handles calls from button/select handlers)
+  await interaction.deferReply().catch(() => {});
   // Re-verify access on every call
   const verified = await verifyAccess(inbox.inbox_id, discordUserId, discordRoleIds);
   if (!verified) {
@@ -444,6 +446,7 @@ export async function handleInboxInteraction(interaction) {
 // ─── Show Email Detail ────────────────────────────────────────────────────────
 
 async function showEmail(interaction, inbox, uid, discordUserId, discordRoleIds, page) {
+  await interaction.deferReply().catch(() => {});
   const verified = await verifyAccess(inbox.inbox_id, discordUserId, discordRoleIds);
   if (!verified) {
     return interaction.editReply({ content: '❌ Access denied.' });
