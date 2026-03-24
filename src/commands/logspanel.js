@@ -16,6 +16,7 @@ const CATEGORIES = {
       investigation: { label: 'Investigation Logs' },
       purge_scribe: { label: 'Purge/Scribe Logs' },
       cooldown: { label: 'Cooldown Logs' },
+      mass_unban: { label: 'Mass Unban Logs' },
     }
   },
   verification: {

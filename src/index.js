@@ -32,6 +32,7 @@ import * as unverify from './commands/unverify.js';
 import * as authorisationOverride from './commands/authorisation-override.js';
 import * as logspanel from './commands/logspanel.js';
 import * as cooldown from './commands/cooldown.js';
+import * as massUnban from './commands/mass-unban.js';
 import * as createTicketPanel from './commands/create-ticket-panel.js';
 import * as ticketPanelSend from './commands/ticket-panel-send.js';
 import { handleTicketButton } from './commands/ticket-panel-send.js';
@@ -43,7 +44,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, ban, unban, verify, unverify, authorisationOverride, cooldown, logspanel, createTicketPanel, ticketPanelSend];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, ban, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }

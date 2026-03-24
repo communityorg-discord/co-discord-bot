@@ -37,6 +37,7 @@ export {
   FULL_MESSAGE_LOGS_CHANNEL_ID,
   AUTH_OVERRIDE_LOG_CHANNEL_ID,
   COOLDOWN_LOG_CHANNEL_ID,
+  MASS_UNBAN_LOG_CHANNEL_ID,
 } from './config/channels.js';
 
 export const POSITION_ROLES = {
