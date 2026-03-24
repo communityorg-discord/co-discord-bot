@@ -53,6 +53,25 @@ const CACHE_TTL_MS = 60_000; // 1 minute
  * Fetch email accounts from Google Sheet (IMAP credentials only).
  * Cached for CACHE_TTL_MS to avoid hammering the API.
  */
+
+export async function testImapConnection(config) {
+  return new Promise((resolve, reject) => {
+    const imap = new Imap({
+      user: config.user,
+      password: config.password,
+      host: config.host,
+      port: config.port,
+      tls: config.secure,
+      tlsOptions: { rejectUnauthorized: false },
+      connTimeout: 8000,
+      authTimeout: 8000,
+    });
+    imap.once('ready', () => { imap.end(); resolve(true); });
+    imap.once('error', (err) => reject(err));
+    imap.connect();
+  });
+}
+
 export async function fetchEmailConfig() {
   const now = Date.now();
   if (cachedConfig && now - cacheTime < CACHE_TTL_MS) return cachedConfig;

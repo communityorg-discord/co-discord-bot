@@ -151,3 +151,80 @@ export async function updateNotifEmbed(client, inboxId, uid) {
 }
 
 export { buildEmailNotifEmbed, buildEmailNotifButtons, generateReplyCode };
+
+export async function pollPersonalInboxes(client) {
+  try {
+    const { getAllPersonalEmailSetups, isPersonalEmailSeen, markPersonalEmailSeen } = await import('../utils/botDb.js');
+    const { fetchInboxEmails } = await import('./emailService.js');
+    const setups = getAllPersonalEmailSetups();
+
+    for (const setup of setups) {
+      try {
+        const fakeInbox = {
+          inbox_id: `personal_${setup.discord_id}`,
+          name: 'Personal Inbox',
+          emoji: '📧',
+          imap: {
+            host: setup.imap_host,
+            port: setup.imap_port,
+            user: setup.co_email,
+            password: setup.imap_password,
+            secure: setup.imap_port === 993,
+          },
+          folders: { inbox: 'INBOX' },
+        };
+
+        const result = await fetchInboxEmails(fakeInbox, 0, 10).catch(() => null);
+        if (!result || result.emails.length === 0) continue;
+
+        const user = await client.users.fetch(setup.discord_id).catch(() => null);
+        if (!user) continue;
+
+        for (const email of result.emails) {
+          if (isPersonalEmailSeen(setup.discord_id, email.uid)) continue;
+
+          const subject = email.headers?.subject?.[0] || '(no subject)';
+          const from = email.headers?.from?.[0] || 'Unknown';
+          const date = email.headers?.date?.[0] ? new Date(email.headers.date[0]).toLocaleString('en-GB') : '';
+          const to = email.headers?.to?.[0] || setup.co_email;
+
+          const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import('discord.js');
+
+          const embed = new EmbedBuilder()
+            .setTitle(`📧 ${subject.slice(0, 240)}`)
+            .setColor(0x1a73e8)
+            .addFields(
+              { name: '📤 From', value: from.slice(0, 100), inline: true },
+              { name: '📥 To', value: to.slice(0, 100), inline: true },
+              { name: '📅 Date', value: date, inline: false },
+              { name: '📭 Status', value: 'No replies yet', inline: false },
+            )
+            .setFooter({ text: `Personal Inbox | UID: ${email.uid}` })
+            .setTimestamp();
+
+          const buttons = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`inbox_personal_reply|${setup.discord_id}|${email.uid}`)
+              .setLabel('↩️ Reply')
+              .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+              .setCustomId(`inbox_personal_forward|${setup.discord_id}|${email.uid}`)
+              .setLabel('↪️ Forward')
+              .setStyle(ButtonStyle.Secondary),
+          );
+
+          await user.send({ embeds: [embed], components: [buttons] }).catch(e =>
+            console.error(`[Personal Poller] Failed to DM ${setup.discord_id}:`, e.message)
+          );
+
+          markPersonalEmailSeen(setup.discord_id, email.uid, subject, from);
+          console.log(`[Personal Poller] Notified ${setup.discord_id} — ${subject}`);
+        }
+      } catch (e) {
+        console.error(`[Personal Poller] Error for ${setup.discord_id}:`, e.message);
+      }
+    }
+  } catch (e) {
+    console.error('[Personal Poller] Fatal:', e.message);
+  }
+}

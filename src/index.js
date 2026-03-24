@@ -34,6 +34,7 @@ import * as unverify from './commands/unverify.js';
 import * as authorisationOverride from './commands/authorisation-override.js';
 import * as logspanel from './commands/logspanel.js';
 import * as inbox from './commands/inbox.js';
+import * as setupEmail from './commands/setup-email.js';
 import * as inboxReply from './commands/inbox-reply.js';
 import * as cooldown from './commands/cooldown.js';
 import * as massUnban from './commands/mass-unban.js';
@@ -63,7 +64,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, untimeout, kick, serverban, help, inbox, inboxReply];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, untimeout, kick, serverban, help, inbox, inboxReply, setupEmail];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -234,6 +235,10 @@ client.once('ready', async () => {
   const { pollAllInboxes } = await import('./services/emailPoller.js');
   setInterval(() => pollAllInboxes(client), 60 * 1000);
   console.log('[Email Poller] Started — polling every 60 seconds');
+
+  const { pollPersonalInboxes } = await import('./services/emailPoller.js');
+  setInterval(() => pollPersonalInboxes(client), 60 * 1000);
+  console.log('[Personal Email Poller] Started');
 
 });
 

@@ -157,6 +157,28 @@ db.exec(`
     UNIQUE(inbox_id, uid)
   );
 
+  CREATE TABLE IF NOT EXISTS personal_email_setup (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_id TEXT NOT NULL UNIQUE,
+    co_email TEXT NOT NULL,
+    imap_password TEXT NOT NULL,
+    imap_host TEXT DEFAULT 'mail.mybustimes.cc',
+    imap_port INTEGER DEFAULT 993,
+    enabled INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS personal_email_seen (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_id TEXT NOT NULL,
+    uid INTEGER NOT NULL,
+    subject TEXT,
+    from_address TEXT,
+    notified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(discord_id, uid)
+  );
+
   CREATE TABLE IF NOT EXISTS inbox_replies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     reply_code TEXT NOT NULL UNIQUE,
@@ -457,5 +479,34 @@ export function getReply(replyCode) {
 
 export function getRepliesForEmail(inboxId, uid) {
   return db.prepare('SELECT * FROM inbox_replies WHERE inbox_id = ? AND uid = ? ORDER BY replied_at ASC').all(inboxId, uid);
+}
+
+// ── Personal Email Setup ─────────────────────────────────────────────────────
+
+export function savePersonalEmailSetup(discordId, coEmail, password) {
+  db.prepare(`INSERT INTO personal_email_setup (discord_id, co_email, imap_password)
+    VALUES (?, ?, ?)
+    ON CONFLICT(discord_id) DO UPDATE SET co_email = excluded.co_email, imap_password = excluded.imap_password, updated_at = CURRENT_TIMESTAMP`
+  ).run(discordId, coEmail, password);
+}
+
+export function getPersonalEmailSetup(discordId) {
+  return db.prepare('SELECT * FROM personal_email_setup WHERE discord_id = ? AND enabled = 1').get(discordId);
+}
+
+export function getAllPersonalEmailSetups() {
+  return db.prepare('SELECT * FROM personal_email_setup WHERE enabled = 1').all();
+}
+
+export function isPersonalEmailSeen(discordId, uid) {
+  return !!db.prepare('SELECT id FROM personal_email_seen WHERE discord_id = ? AND uid = ?').get(discordId, uid);
+}
+
+export function markPersonalEmailSeen(discordId, uid, subject, fromAddress) {
+  db.prepare('INSERT OR IGNORE INTO personal_email_seen (discord_id, uid, subject, from_address) VALUES (?, ?, ?, ?)').run(discordId, uid, subject, fromAddress);
+}
+
+export function removePersonalEmailSetup(discordId) {
+  db.prepare('UPDATE personal_email_setup SET enabled = 0 WHERE discord_id = ?').run(discordId);
 }
 
