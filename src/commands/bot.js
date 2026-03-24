@@ -1,6 +1,8 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 
 const startTime = Date.now();
+const botVersion = 'v1.1.0';
+const botPhase = 'V1.0-1.1';
 
 const STAFF_IDS = [
   '723199054514749450', // Dion M.
@@ -15,10 +17,8 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   await interaction.deferReply();
 
-  const uptime = Math.floor((Date.now() - startTime) / 1000);
-  const hours = Math.floor(uptime / 3600);
-  const minutes = Math.floor((uptime % 3600) / 60);
-  const seconds = uptime % 60;
+  const uptimeSeconds = Math.floor((Date.now() - startTime) / 1000);
+  const startTimestamp = Math.floor(startTime / 1000);
 
   // Fetch all members concurrently
   const memberMap = await fetchMembers(interaction, STAFF_IDS);
@@ -26,29 +26,25 @@ export async function execute(interaction) {
   const formatMember = (id) => {
     const member = memberMap.get(id);
     const nickname = member?.nickname || member?.user?.globalName || member?.user?.username || `Unknown`;
-    return `${nickname} | ${id}`;
+    return `<@${id}> ( ${id} )`;
   };
 
   // All three users in every category
   const staffList = STAFF_IDS.map(id => formatMember(id)).join('\n');
 
   const embed = new EmbedBuilder()
-    .setTitle('🤖 CO Staff Bot')
-    .setColor(0x5865F2)
+    .setTitle('Bot Information')
+    .setColor(0x000000)
     .setThumbnail(interaction.client.user.displayAvatarURL())
     .addFields(
+      { name: 'Version', value: botVersion, inline: true },
+      { name: 'Uptime', value: `<t:${startTimestamp}:R>`, inline: true },
+      { name: '\u200B', value: '\u200B', inline: false },
       { name: 'Developer', value: staffList, inline: false },
       { name: 'Internal Bot Management', value: staffList, inline: false },
       { name: 'Superusers', value: staffList, inline: false },
-      { name: 'Internal Bot Staff', value: staffList, inline: false }
-    )
-    .addFields(
-      { name: '\u200B', value: '\u200B' },
-      { name: 'Version', value: 'v1.1.0', inline: true },
-      { name: 'Phase', value: 'V1.0-1.1', inline: true },
-      { name: 'Uptime', value: `${hours}h ${minutes}m ${seconds}s`, inline: true },
-      { name: 'Servers', value: String(interaction.client.guilds.cache.size), inline: true },
-      { name: 'Ping', value: `${interaction.client.ws.ping}ms`, inline: true }
+      { name: 'Internal Bot Staff', value: staffList, inline: false },
+      { name: 'Total Staff Count', value: String(STAFF_IDS.length), inline: false }
     )
     .setFooter({ text: 'Community Organisation | Internal Bot' })
     .setTimestamp();
