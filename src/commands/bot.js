@@ -2,12 +2,11 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 
 const startTime = Date.now();
 
-const STAFF_IDS = {
-  developer: '723199054514749450',
-  internalBotManagement: '415922272956710912',
-  superusers: '1013486189891817563',
-  internalBotStaff: '723199054514749450',
-};
+const STAFF_IDS = [
+  '723199054514749450', // Dion M.
+  '415922272956710912', // Evan S.
+  '1013486189891817563', // penguin
+];
 
 export const data = new SlashCommandBuilder()
   .setName('bot')
@@ -21,8 +20,8 @@ export async function execute(interaction) {
   const minutes = Math.floor((uptime % 3600) / 60);
   const seconds = uptime % 60;
 
-  // Fetch all IDs concurrently
-  const memberMap = await fetchMembers(interaction, Object.values(STAFF_IDS));
+  // Fetch all members concurrently
+  const memberMap = await fetchMembers(interaction, STAFF_IDS);
 
   const formatMember = (id) => {
     const member = memberMap.get(id);
@@ -30,15 +29,18 @@ export async function execute(interaction) {
     return `${nickname} | ${id}`;
   };
 
+  // All three users in every category
+  const staffList = STAFF_IDS.map(id => formatMember(id)).join('\n');
+
   const embed = new EmbedBuilder()
     .setTitle('🤖 CO Staff Bot')
     .setColor(0x5865F2)
     .setThumbnail(interaction.client.user.displayAvatarURL())
     .addFields(
-      { name: 'Developer', value: formatMember(STAFF_IDS.developer), inline: false },
-      { name: 'Internal Bot Management', value: formatMember(STAFF_IDS.internalBotManagement), inline: false },
-      { name: 'Superusers', value: formatMember(STAFF_IDS.superusers), inline: false },
-      { name: 'Internal Bot Staff', value: formatMember(STAFF_IDS.internalBotStaff), inline: false }
+      { name: 'Developer', value: staffList, inline: false },
+      { name: 'Internal Bot Management', value: staffList, inline: false },
+      { name: 'Superusers', value: staffList, inline: false },
+      { name: 'Internal Bot Staff', value: staffList, inline: false }
     )
     .addFields(
       { name: '\u200B', value: '\u200B' },
