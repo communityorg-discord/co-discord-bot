@@ -20,6 +20,7 @@ import * as infractions from './commands/infractions.js';
 import * as strike from './commands/strike.js';
 import * as user from './commands/user.js';
 import * as botInfo from './commands/bot.js';
+import * as help from './commands/help.js';
 import * as ban from './commands/ban.js';
 import * as unban from './commands/unban.js';
 import { handleButton as verifyButton, handleModal as verifyModal, handleSelect as verifySelect } from './commands/verify.js';
@@ -61,7 +62,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, untimeout, kick, serverban, inbox];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, untimeout, kick, serverban, help, inbox];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }

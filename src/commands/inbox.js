@@ -14,13 +14,19 @@ const PAGE_SIZE = 8;
 
 /** Safely reply to an interaction — uses editReply if deferred, followUp otherwise. */
 async function safeReply(interaction, opts) {
-  if (interaction.deferred) {
-    return interaction.editReply(opts);
-  }
+  console.log('[safeReply] deferred=' + interaction.deferred + ' replied=' + interaction.replied);
   try {
-    return interaction.editReply(opts);
-  } catch {
-    return interaction.followUp({ ...opts, ephemeral: opts.ephemeral ?? true });
+    if (interaction.deferred) {
+      const r = await interaction.editReply(opts);
+      console.log('[safeReply] editReply ok');
+      return r;
+    }
+    const r = await interaction.editReply(opts);
+    console.log('[safeReply] editReply ok (not deferred)');
+    return r;
+  } catch (e) {
+    console.log('[safeReply] error:', e.message);
+    return interaction.followUp({ ...opts, ephemeral: true });
   }
 }
 
