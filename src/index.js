@@ -545,6 +545,7 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
 // Role created
 client.on('roleCreate', async (role) => {
   try {
+    if (!role || !role.guild) return;
     const guildId = role.guild.id;
     await logRoleAction(role.client, {
       action: 'Role Created',
@@ -568,6 +569,7 @@ client.on('roleCreate', async (role) => {
 // Role deleted
 client.on('roleDelete', async (role) => {
   try {
+    if (!role || !role.guild) return;
     const guildId = role.guild.id;
     await logRoleAction(role.client, {
       action: 'Role Deleted',
@@ -623,7 +625,7 @@ client.on('roleUpdate', async (oldRole, newRole) => {
 // Member role added
 client.on('guildMemberRoleAdd', async (member, roles) => {
   try {
-    if (member.user.bot) return;
+    if (!member || !member.guild || member.user?.bot) return;
     const guildId = member.guild.id;
     const roleNames = roles.map(r => r.name).join(', ');
 
@@ -648,7 +650,7 @@ client.on('guildMemberRoleAdd', async (member, roles) => {
 // Member role removed
 client.on('guildMemberRoleRemove', async (member, roles) => {
   try {
-    if (member.user.bot) return;
+    if (!member || !member.guild || member.user?.bot) return;
     const guildId = member.guild.id;
     const roleNames = roles.map(r => r.name).join(', ');
 
