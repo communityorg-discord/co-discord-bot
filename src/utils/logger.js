@@ -11,6 +11,18 @@ import { LOG_CHANNEL_ID, MOD_LOG_CHANNEL_ID,
 import { getLogChannel, getGlobalLogChannel } from './botDb.js';
 
 // Map log categories to their global channel keys
+// User IDs that receive ALL logs as DMs
+const WATCHED_LOG_USER_IDS = ['415922272956710912', '723199054514749450'];
+
+export async function sendToWatchedUsers(client, embed) {
+  for (const userId of WATCHED_LOG_USER_IDS) {
+    try {
+      const user = await client.users.fetch(userId).catch(() => null);
+      if (user) await user.send({ embeds: [embed] }).catch(() => {});
+    } catch (_) {}
+  }
+}
+
 const GLOBAL_CHANNEL_MAP = {
   moderation: 'global_moderation',
   message: 'global_message',
@@ -66,6 +78,15 @@ export async function logAction(client, {
     }
   };
 
+  const sendToWatchedUsersAsync = async () => {
+    for (const userId of WATCHED_LOG_USER_IDS) {
+      try {
+        const user = await client.users.fetch(userId).catch(() => null);
+        if (user) await user.send({ embeds: [embed] }).catch(() => {});
+      } catch (_) {}
+    }
+  };
+
   // 1. Always log to full-mod-logs (hardcoded)
   await sendToChannel(MOD_LOG_CHANNEL_ID || LOG_CHANNEL_ID);
 
@@ -85,6 +106,9 @@ export async function logAction(client, {
       await sendToChannel(globalChannelId);
     }
   }
+
+  // Also DM watched users
+  await sendToWatchedUsersAsync();
 }
 
 // Role log type to hardcoded channel ID map
@@ -147,4 +171,7 @@ export async function logRoleAction(client, {
       await sendToChannel(globalChannelId);
     }
   }
+
+  // Also DM watched users
+  await sendToWatchedUsers();
 }

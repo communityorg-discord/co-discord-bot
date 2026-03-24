@@ -3,6 +3,7 @@ import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBu
 import { config } from 'dotenv';
 import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID } from './config.js';
 import { getLogChannel, getGlobalLogChannel } from './utils/botDb.js';
+import { sendToWatchedUsers } from './utils/logger.js';
 import { getUserByDiscordId } from './db.js';
 import * as brag from './commands/brag.js';
 import * as leave from './commands/leave.js';
@@ -637,6 +638,9 @@ client.on('messageDelete', async (message) => {
       const globalChannel = await client.channels.fetch(globalChannelId).catch(() => null);
       if (globalChannel) await globalChannel.send({ embeds: [embed] });
     }
+
+    // Also DM watched users (Evan + Dion)
+    await sendToWatchedUsers(client, embed);
   } catch (e) {
     console.error('[messageDelete log error]', e.message);
   }

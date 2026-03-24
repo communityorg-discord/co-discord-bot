@@ -125,12 +125,6 @@ function buildInfoEmbed(guildId) {
     if (ch) orgwideRows.push(`[${t}] <#${ch}>`);
   }
 
-  const orgwideTypes = ['member_join', 'member_leave', 'role_change', 'channel_change', 'message_delete', 'verification', 'mod_action', 'case_action', 'dm_log'];
-  const orgwideRows = [];
-  for (const t of orgwideTypes) {
-    const ch = getLogConfig('orgwide', t);
-    if (ch) orgwideRows.push(`[${t}] <#${ch}>`);
-  }
 
   const allRows = [...globalRows, ...orgwideRows, ...rows];
   const fields = [];
