@@ -535,6 +535,136 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
   }
 });
 
+// ============ ROLE MANAGEMENT LOGGING ============
+
+// Role created
+client.on('roleCreate', async (role) => {
+  try {
+    const guildId = role.guild.id;
+    await logRoleAction(role.client, {
+      action: 'Role Created',
+      target: `@${role.name}`,
+      moderator: null,
+      color: 0x22C55E,
+      fields: [
+        { name: 'Role Name', value: role.name, inline: true },
+        { name: 'Role ID', value: role.id, inline: true },
+        { name: 'Color', value: role.hexColor === '#000000' ? 'Default' : role.hexColor, inline: true },
+        { name: 'Server', value: role.guild.name, inline: false },
+      ],
+      roleLogType: 'role_create',
+      guildId
+    });
+  } catch (e) {
+    console.error('[roleCreate log error]', e.message);
+  }
+});
+
+// Role deleted
+client.on('roleDelete', async (role) => {
+  try {
+    const guildId = role.guild.id;
+    await logRoleAction(role.client, {
+      action: 'Role Deleted',
+      target: `@${role.name}`,
+      moderator: null,
+      color: 0xEF4444,
+      fields: [
+        { name: 'Role Name', value: role.name, inline: true },
+        { name: 'Role ID', value: role.id, inline: true },
+        { name: 'Color', value: role.hexColor === '#000000' ? 'Default' : role.hexColor, inline: true },
+        { name: 'Server', value: role.guild.name, inline: false },
+      ],
+      roleLogType: 'role_delete',
+      guildId
+    });
+  } catch (e) {
+    console.error('[roleDelete log error]', e.message);
+  }
+});
+
+// Role updated (name, color, permissions, etc.)
+client.on('roleUpdate', async (oldRole, newRole) => {
+  try {
+    const changes = [];
+    if (oldRole.name !== newRole.name) changes.push(`Name: "${oldRole.name}" → "${newRole.name}"`);
+    if (oldRole.hexColor !== newRole.hexColor) changes.push(`Color: ${oldRole.hexColor || 'Default'} → ${newRole.hexColor || 'Default'}`);
+    if (oldRole.position !== newRole.position) changes.push(`Position: ${oldRole.position} → ${newRole.position}`);
+    if (oldRole.permissions.bitfield !== newRole.permissions.bitfield) changes.push(`Permissions changed`);
+
+    if (changes.length === 0) return; // No meaningful changes
+
+    const guildId = newRole.guild.id;
+    const isPermissionChange = oldRole.permissions.bitfield !== newRole.permissions.bitfield;
+
+    await logRoleAction(newRole.client, {
+      action: 'Role Updated',
+      target: `@${newRole.name}`,
+      moderator: null,
+      color: 0xF59E0B,
+      fields: [
+        { name: 'Role', value: `<@&${newRole.id}>`, inline: true },
+        { name: 'Server', value: newRole.guild.name, inline: true },
+        { name: 'Changes', value: changes.join('\n'), inline: false },
+      ],
+      roleLogType: isPermissionChange ? 'role_permission' : 'role_update',
+      guildId
+    });
+  } catch (e) {
+    console.error('[roleUpdate log error]', e.message);
+  }
+});
+
+// Member role added
+client.on('guildMemberRoleAdd', async (member, roles) => {
+  try {
+    if (member.user.bot) return;
+    const guildId = member.guild.id;
+    const roleNames = roles.map(r => r.name).join(', ');
+
+    await logRoleAction(member.client, {
+      action: 'Member Role Added',
+      target: { discordId: member.user.id, name: member.user.username },
+      moderator: null,
+      color: 0x22C55E,
+      fields: [
+        { name: 'Member', value: `<@${member.user.id}>`, inline: true },
+        { name: 'Roles Added', value: roleNames, inline: false },
+        { name: 'Server', value: member.guild.name, inline: false },
+      ],
+      roleLogType: 'member_role_add',
+      guildId
+    });
+  } catch (e) {
+    console.error('[guildMemberRoleAdd log error]', e.message);
+  }
+});
+
+// Member role removed
+client.on('guildMemberRoleRemove', async (member, roles) => {
+  try {
+    if (member.user.bot) return;
+    const guildId = member.guild.id;
+    const roleNames = roles.map(r => r.name).join(', ');
+
+    await logRoleAction(member.client, {
+      action: 'Member Role Removed',
+      target: { discordId: member.user.id, name: member.user.username },
+      moderator: null,
+      color: 0xEF4444,
+      fields: [
+        { name: 'Member', value: `<@${member.user.id}>`, inline: true },
+        { name: 'Roles Removed', value: roleNames, inline: false },
+        { name: 'Server', value: member.guild.name, inline: false },
+      ],
+      roleLogType: 'member_role_remove',
+      guildId
+    });
+  } catch (e) {
+    console.error('[guildMemberRoleRemove log error]', e.message);
+  }
+});
+
 // ============ BOT WEBHOOK SERVER ============
 const webhookApp = express();
 webhookApp.use(express.json());

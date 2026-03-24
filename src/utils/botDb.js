@@ -125,6 +125,31 @@ db.exec(`
     panel_id INTEGER NOT NULL,
     discord_channel_id TEXT NOT NULL UNIQUE,
     user_id TEXT NOT NULL,
+    claimed_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (panel_id) REFERENCES ticket_panels(id)
+  );
+`);
+
+// Migration: add ticket_count column if missing (existing DBs)
+try {
+  db.prepare('SELECT ticket_count FROM ticket_panels LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE ticket_panels ADD COLUMN ticket_count INTEGER DEFAULT 0');
+}
+
+// Migration: add claimed_by column if missing
+try {
+  db.prepare('SELECT claimed_by FROM ticket_channels LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE ticket_channels ADD COLUMN claimed_by TEXT');
+}
+
+  CREATE TABLE IF NOT EXISTS ticket_channels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    panel_id INTEGER NOT NULL,
+    discord_channel_id TEXT NOT NULL UNIQUE,
+    user_id TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (panel_id) REFERENCES ticket_panels(id)
   );

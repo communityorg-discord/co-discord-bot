@@ -44,6 +44,18 @@ const CATEGORIES = {
       user: { label: 'User Logs' },
       nid: { label: 'NID Logs' },
     }
+  },
+  role_management: {
+    label: 'Role Management',
+    emoji: '🎭',
+    types: {
+      role_create: { label: 'Role Created Logs' },
+      role_delete: { label: 'Role Deleted Logs' },
+      role_update: { label: 'Role Updated Logs' },
+      role_permission: { label: 'Role Permission Update Logs' },
+      member_role_add: { label: 'Member Role Added Logs' },
+      member_role_remove: { label: 'Member Role Removed Logs' },
+    }
   }
 };
 
@@ -63,6 +75,11 @@ const GLOBAL_CATEGORIES = {
     label: 'Global Verification',
     emoji: '🌐',
     description: 'All verify/unverify actions from all servers sent to one channel'
+  },
+  global_role_management: {
+    label: 'Global Role Management',
+    emoji: '🌐',
+    description: 'All role management actions from all servers sent to one channel'
   }
 };
 

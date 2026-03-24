@@ -1,5 +1,13 @@
 import { EmbedBuilder } from 'discord.js';
-import { LOG_CHANNEL_ID, MOD_LOG_CHANNEL_ID } from '../config.js';
+import { LOG_CHANNEL_ID, MOD_LOG_CHANNEL_ID,
+  ROLE_CREATE_LOG_CHANNEL_ID,
+  ROLE_DELETE_LOG_CHANNEL_ID,
+  ROLE_UPDATE_LOG_CHANNEL_ID,
+  ROLE_PERMISSION_LOG_CHANNEL_ID,
+  MEMBER_ROLE_ADD_LOG_CHANNEL_ID,
+  MEMBER_ROLE_REMOVE_LOG_CHANNEL_ID,
+  ROLE_ALL_LOG_CHANNEL_ID
+} from '../config.js';
 import { getLogChannel, getGlobalLogChannel } from './botDb.js';
 
 // Map log categories to their global channel keys
@@ -7,6 +15,7 @@ const GLOBAL_CHANNEL_MAP = {
   moderation: 'global_moderation',
   message: 'global_message',
   verification: 'global_verification',
+  role_management: 'global_role_management',
 };
 
 /**
@@ -70,6 +79,68 @@ export async function logAction(client, {
     await sendToChannel(perGuildChannelId);
 
     // 4. Also log to global category channel — ALL logs of this category go to one channel
+    const globalChannelKey = GLOBAL_CHANNEL_MAP[category];
+    if (globalChannelKey) {
+      const globalChannelId = getGlobalLogChannel(globalChannelKey);
+      await sendToChannel(globalChannelId);
+    }
+  }
+}
+
+// Role log type to hardcoded channel ID map
+const ROLE_CHANNEL_MAP = {
+  role_create: ROLE_CREATE_LOG_CHANNEL_ID,
+  role_delete: ROLE_DELETE_LOG_CHANNEL_ID,
+  role_update: ROLE_UPDATE_LOG_CHANNEL_ID,
+  role_permission: ROLE_PERMISSION_LOG_CHANNEL_ID,
+  member_role_add: MEMBER_ROLE_ADD_LOG_CHANNEL_ID,
+  member_role_remove: MEMBER_ROLE_REMOVE_LOG_CHANNEL_ID,
+};
+
+/**
+ * Send a role management log embed.
+ * Routes to: all-role-management-logs + specific hardcoded channel + per-guild panel channel + global role management channel
+ */
+export async function logRoleAction(client, {
+  action, target, moderator,
+  color = 0x9B59B6, fields = [],
+  roleLogType, // e.g. 'role_create', 'role_delete', 'member_role_add', etc.
+  guildId
+}) {
+  const embed = new EmbedBuilder()
+    .setTitle(`🎭 ${action}`)
+    .setColor(color)
+    .addFields(
+      ...(target ? [{ name: 'Target', value: typeof target === 'string' ? target : `<@${target.discordId || target}>`, inline: true }] : []),
+      ...(moderator ? [{ name: 'Moderator', value: `<@${moderator.discordId || moderator}>`, inline: true }] : []),
+      ...fields
+    )
+    .setTimestamp()
+    .setFooter({ text: 'Community Organisation | Role Management Log' });
+
+  const sendToChannel = async (channelId) => {
+    if (!channelId) return;
+    try {
+      const channel = await client.channels.fetch(channelId).catch(() => null);
+      if (channel) await channel.send({ embeds: [embed] });
+    } catch (e) {
+      console.error(`[Logger] Failed to send role log to ${channelId}:`, e.message);
+    }
+  };
+
+  // 1. Always log to all-role-management-logs
+  await sendToChannel(ROLE_ALL_LOG_CHANNEL_ID);
+
+  // 2. Also log to the specific hardcoded channel
+  await sendToChannel(ROLE_CHANNEL_MAP[roleLogType]);
+
+  // 3. Also log to per-guild panel-configured channel
+  if (guildId && roleLogType) {
+    const [category, type] = `role_management.${roleLogType}`.split('.');
+    const perGuildChannelId = getLogChannel(guildId, category, type);
+    await sendToChannel(perGuildChannelId);
+
+    // 4. Also log to global role management channel
     const globalChannelKey = GLOBAL_CHANNEL_MAP[category];
     if (globalChannelKey) {
       const globalChannelId = getGlobalLogChannel(globalChannelKey);
