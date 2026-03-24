@@ -85,9 +85,9 @@ async function setupEmailNotificationChannels(client) {
     }
 
     const inboxChannels = [
-      { inboxId: 'eob', name: 'eob-inbox' },
-      { inboxId: 'bod', name: 'bod-inbox' },
-      { inboxId: 'ebod', name: 'ebod-inbox' },
+      { inboxId: 'executive_operations', name: 'eob-inbox' },
+      { inboxId: 'board_of_directors', name: 'bod-inbox' },
+      { inboxId: 'extended_board', name: 'ebod-inbox' },
       { inboxId: 'dss', name: 'dss-inbox' },
       { inboxId: 'dmspc', name: 'dmspc-inbox' },
       { inboxId: 'ic', name: 'ic-inbox' },
