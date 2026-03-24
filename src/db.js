@@ -32,7 +32,7 @@ export function getStaffByName(query) {
   return db.prepare(`
     SELECT id, display_name, full_name, username, position, department, discord_id
     FROM users 
-    WHERE account_status = 'active'
+    WHERE lower(account_status) = 'active'
     AND (display_name LIKE ? OR full_name LIKE ? OR username LIKE ?)
     LIMIT 5
   `).all(`%${query}%`, `%${query}%`, `%${query}%`);

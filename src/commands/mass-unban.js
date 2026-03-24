@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { isSuperuser } from '../utils/verifyHelper.js';
-import { ALL_SERVER_IDS } from '../config.js';
+import { ALL_SERVER_IDS, MASS_UNBAN_LOG_CHANNEL_ID } from '../config.js';
 import { logAction } from '../utils/logger.js';
 
 export const data = new SlashCommandBuilder()

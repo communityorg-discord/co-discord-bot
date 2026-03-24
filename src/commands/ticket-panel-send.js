@@ -325,7 +325,7 @@ export async function handleTicketChannelButton(interaction) {
 
     await logAction(interaction.client, {
       action: '📌 Ticket Claimed',
-      target: { discordId: ticket.discord_id, name: ticket.discord_id },
+      target: { discordId: ticket.user_id, name: ticket.user_id },
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       color: 0xF59E0B,
       description: `Ticket claimed by <@${interaction.user.id}>`,

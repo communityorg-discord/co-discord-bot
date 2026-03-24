@@ -98,7 +98,7 @@ export async function handleTicketOptionsButton(interaction) {
   if (!ticket) return interaction.editReply({ content: '❌ Ticket not found in database.' });
 
   const isClaimer = ticket.claimed_by === interaction.user.id;
-  const isSuper = (await import('../utils/permissions.js', { assert: { type: 'json' } })).isSuperuser(interaction.user.id);
+  const isSuper = await isSuperuser(interaction.user.id);
   const auth = await canRunCommand(interaction.user.id, 5);
 
   if (action === 'close') {

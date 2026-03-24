@@ -1,6 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canRunCommand } from '../utils/permissions.js';
-import { removeSuspendedRole, restorePositionRoles, unsuspendAcrossGuilds } from '../utils/roleManager.js';
 import { liftSuspension, getActiveSuspension } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { SUSPEND_UNSUSPEND_LOG_CHANNEL_ID } from '../config.js';
@@ -26,8 +25,6 @@ export async function execute(interaction) {
 
   await interaction.deferReply();
 
-  await removeSuspendedRole(interaction.client, target.id);
-  if (portalUser?.position) await restorePositionRoles(interaction.client, target.id, portalUser.position);
   liftSuspension(target.id);
   await unsuspendAcrossGuilds(interaction.client, target.id, botDb);
 
