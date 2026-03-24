@@ -222,6 +222,14 @@ export async function pollPersonalInboxes(client) {
         }
       } catch (e) {
         console.error(`[Personal Poller] Error for ${setup.discord_id}:`, e.message);
+        if (e.message?.toLowerCase().includes('auth') || e.message?.toLowerCase().includes('login') || e.message?.toLowerCase().includes('password')) {
+          try {
+            const user = await client.users.fetch(setup.discord_id).catch(() => null);
+            if (user) await user.send(`⚠️ **Email monitoring error** — Could not connect to \`${setup.co_email}\`: \`${e.message}\`
+
+Please run \`/setup-email configure\` to update your password.`).catch(() => {});
+          } catch { /* ignore */ }
+        }
       }
     }
   } catch (e) {
