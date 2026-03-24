@@ -538,12 +538,131 @@ export async function handleInboxInteraction(interaction) {
   }
 }
 
+export async function handleNotifButton(interaction) {
+  const { customId } = interaction;
+  const parts = customId.split('|');
+  const action = parts[0];
+  const inboxId = parts[1];
+  const uid = parseInt(parts[2]);
+  const discordUserId = interaction.user.id;
+  const discordRoleIds = interaction.member?.roles?.cache?.map(r => r.id) || [];
+
+  const config = await fetchEmailConfig();
+  const inbox = config[inboxId];
+  if (!inbox) return interaction.reply({ content: '❌ Inbox not found.', ephemeral: true });
+
+  const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
+  if (!verified) return interaction.reply({ content: '❌ Access denied.', ephemeral: true });
+
+  if (action === 'inbox_notif_view') {
+    await interaction.deferReply({ ephemeral: true });
+    return showEmail(interaction, inbox, uid, discordUserId, discordRoleIds, 0);
+  }
+
+  if (action === 'inbox_notif_reply') {
+    let original = {};
+    try {
+      original = await Promise.race([
+        fetchEmailBody(inbox, uid),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
+      ]);
+    } catch { /* use empty pre-fill */ }
+
+    const replySubject = original.subject
+      ? (original.subject.startsWith('Re:') ? original.subject : `Re: ${original.subject}`)
+      : '';
+    const replyTo = original.from?.address || '';
+
+    const modal = new ModalBuilder()
+      .setCustomId(`inbox_notif_reply_send|${inboxId}|${uid}`)
+      .setTitle('↩️ Reply to Email');
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId('reply_to').setLabel('To').setStyle(1)
+          .setValue(replyTo).setPlaceholder('recipient@example.com').setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId('reply_subject').setLabel('Subject').setStyle(1)
+          .setValue(replySubject).setPlaceholder('Re: ...').setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId('reply_body').setLabel('Message').setStyle(2)
+          .setPlaceholder('Write your reply...').setRequired(true)
+      ),
+    );
+    await interaction.showModal(modal);
+  }
+
+  if (action === 'inbox_notif_forward') {
+    const modal = new ModalBuilder()
+      .setCustomId(`inbox_notif_forward_send|${inboxId}|${uid}`)
+      .setTitle('↪️ Forward Email');
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId('forward_to').setLabel('To').setStyle(1)
+          .setPlaceholder('recipient@example.com').setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId('forward_subject').setLabel('Subject').setStyle(1)
+          .setPlaceholder('Fwd: ...').setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId('forward_body').setLabel('Additional message').setStyle(2)
+          .setPlaceholder('Add a note...').setRequired(false)
+      ),
+    );
+    await interaction.showModal(modal);
+  }
+}
+
+
 export async function handleInboxModal(interaction) {
   try {
     const { customId } = interaction;
     if (!customId?.startsWith('inbox_')) return;
     const parts = customId.split('|');
     const actionFull = parts[0];
+
+    if (actionFull === 'inbox_notif_reply_send' || actionFull === 'inbox_notif_forward_send') {
+      const inboxId = parts[1];
+      const uid = parseInt(parts[2]);
+      const discordUserId = interaction.user.id;
+      const discordRoleIds = interaction.member?.roles?.cache?.map(r => r.id) || [];
+
+      const config = await fetchEmailConfig();
+      const inbox = config[inboxId];
+      if (!inbox) return interaction.reply({ content: '❌ Inbox not found.', ephemeral: true });
+
+      const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
+      if (!verified) return interaction.reply({ content: '❌ Access denied.', ephemeral: true });
+
+      const isReply = actionFull === 'inbox_notif_reply_send';
+      const to = interaction.fields.getTextInputValue(isReply ? 'reply_to' : 'forward_to');
+      const subject = interaction.fields.getTextInputValue(isReply ? 'reply_subject' : 'forward_subject');
+      const body = interaction.fields.getTextInputValue(isReply ? 'reply_body' : 'forward_body');
+
+      try {
+        const { sendReply, getSenderInfo } = await import('../services/emailService.js');
+        const { saveReply } = await import('../utils/botDb.js');
+        const { updateNotifEmbed, generateReplyCode } = await import('../services/emailPoller.js');
+
+        await sendReply(inbox, { to, subject, body }, discordUserId);
+
+        const { displayName } = getSenderInfo(discordUserId);
+        const replyCode = generateReplyCode();
+        saveReply(replyCode, inboxId, uid, discordUserId, displayName || interaction.user.username, to, subject, body);
+
+        await updateNotifEmbed(interaction.client, inboxId, uid);
+
+        await interaction.reply({
+          content: `✅ ${isReply ? 'Reply' : 'Forward'} sent to **${to}**.\n📋 Reply code: \`${replyCode}\` — use \`/inbox-reply ${replyCode}\` to view.`,
+          ephemeral: true
+        });
+      } catch (err) {
+        await interaction.reply({ content: `⚠️ Failed to send: \`${err.message}\``, ephemeral: true });
+      }
+      return;
+    }
 
     if (actionFull === 'inbox_compose_submit') {
       const inboxId = parts[1];
