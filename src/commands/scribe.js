@@ -38,7 +38,7 @@ function generateHTML(messages, channel, guild, requestedBy, limit) {
     let content;
     if (hasTextContent) {
       content = resolvedContent;
-    } else if (m.embeds && m.embeds.size > 0) {
+    } else if (m.embeds && m.embeds.length > 0) {
       const firstEmbed = m.embeds[0];
       const desc = firstEmbed.description || firstEmbed.title || '[embed]';
       content = `<em style="color:#666">[Embed] ${desc.slice(0, 120)}</em>`;
@@ -53,8 +53,8 @@ function generateHTML(messages, channel, guild, requestedBy, limit) {
         ? `<img src="${a.url}" style="max-width:300px;max-height:200px;border-radius:4px;margin-top:4px;display:block" />`
         : `<a href="${a.url}" style="color:#7289da">${a.name}</a>`
     ).join('');
-    const embeds = m.embeds.size > 0
-      ? `<div style="border-left:3px solid #7289da;padding:4px 8px;margin-top:4px;color:#aaa;font-size:12px">[${m.embeds.size} embed(s)]</div>`
+    const embeds = m.embeds.length > 0
+      ? `<div style="border-left:3px solid #7289da;padding:4px 8px;margin-top:4px;color:#aaa;font-size:12px">[${m.embeds.length} embed(s)]</div>`
       : '';
     return `
  <div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid #2a2a2a">
