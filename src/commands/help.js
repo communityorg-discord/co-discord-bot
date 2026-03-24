@@ -59,11 +59,11 @@ const COMMAND_DATA = {
   },
   ban: {
     name: 'ban',
-    description: 'Permanently ban a user from all CO servers.',
+    description: 'Permanently or temporarily ban a user from all CO servers.',
     category: 'Moderation',
-    usage: '/ban <user> [reason]',
-    example: '/ban @JohnDoe Policy violation',
-    details: 'Bans the user from all CO servers and logs the ban. Requires superuser and staff role.',
+    usage: '/ban <user> [reason] [duration]',
+    example: '/ban @JohnDoe Policy violation 7d\n/ban @JohnDoe Spam 1h',
+    details: 'Bans the user from all CO servers. If duration is provided (e.g. 30s, 5m, 2h, 1d), they are auto-unbanned when it expires. Permanent if no duration. Requires superuser and staff role.',
   },
   unban: {
     name: 'unban',

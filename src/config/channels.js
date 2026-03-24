@@ -25,3 +25,12 @@ export const FULL_MESSAGE_LOGS_CHANNEL_ID = '1485660587349512452'; // full-messa
 // Cooldown log channel
 export const COOLDOWN_LOG_CHANNEL_ID = '1485785753349914775'; // cooldown-logs
 export const MASS_UNBAN_LOG_CHANNEL_ID = '1485805505417973920'; // mass-unban-logs
+
+// Role management log channels
+export const ROLE_CREATE_LOG_CHANNEL_ID = '1485809214105903105'; // role-created
+export const ROLE_DELETE_LOG_CHANNEL_ID = '1485809215600189444'; // role-deleted
+export const ROLE_UPDATE_LOG_CHANNEL_ID = '1485809217109381257'; // role-updated
+export const ROLE_PERMISSION_LOG_CHANNEL_ID = '1485809218605125654'; // role-permission-updated
+export const MEMBER_ROLE_ADD_LOG_CHANNEL_ID = '1485809219907693708'; // member-role-added
+export const MEMBER_ROLE_REMOVE_LOG_CHANNEL_ID = '1485809221208161815'; // member-role-removed
+export const ROLE_ALL_LOG_CHANNEL_ID = '1485809222573568040'; // all-role-management-logs
