@@ -100,6 +100,13 @@ db.exec(`
     exempted_by TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS global_log_config (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL UNIQUE,
+    channel_id TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 export default db;
@@ -123,6 +130,41 @@ export function getDmExemptions() {
 export function isDmExempt(discordId) {
   const row = db.prepare('SELECT id FROM dm_exemptions WHERE discord_id = ?').get(discordId);
   return !!row;
+}
+
+export function getGlobalLogChannel(category) {
+  const row = db.prepare('SELECT channel_id FROM global_log_config WHERE category = ?').get(category);
+  return row?.channel_id || null;
+}
+
+export function setGlobalLogChannel(category, channelId) {
+  db.prepare(`
+    INSERT INTO global_log_config (category, channel_id, updated_at)
+    VALUES (?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(category) DO UPDATE SET channel_id = excluded.channel_id, updated_at = CURRENT_TIMESTAMP
+  `).run(category, channelId);
+}
+
+export function getLogChannel(guildId, category, type) {
+  const row = db.prepare('SELECT channel_id FROM log_config WHERE guild_id = ? AND category = ? AND type = ?').get(guildId, category, type);
+  return row?.channel_id || null;
+}
+
+export function setLogChannel(guildId, category, type, channelId) {
+  db.prepare(`
+    INSERT INTO log_config (guild_id, category, type, channel_id, updated_at)
+    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(guild_id, category, type) DO UPDATE SET channel_id = excluded.channel_id, updated_at = CURRENT_TIMESTAMP
+  `).run(guildId, category, type, channelId);
+}
+
+export function getAllLogConfig(guildId) {
+  const rows = db.prepare('SELECT * FROM log_config WHERE guild_id = ?').all(guildId);
+  const config = {};
+  for (const row of rows) {
+    config[`${row.category}:${row.type}`] = row.channel_id;
+  }
+  return config;
 }
 
 export function addInfraction(discordId, type, reason, moderatorId, moderatorName, expiresAt = null, appealable = 1) {

@@ -2,6 +2,7 @@ import express from 'express';
 import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, EmbedBuilder } from 'discord.js';
 import { config } from 'dotenv';
 import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID } from './config.js';
+import { getLogChannel, getGlobalLogChannel } from './utils/botDb.js';
 import { getUserByDiscordId } from './db.js';
 import * as brag from './commands/brag.js';
 import * as leave from './commands/leave.js';
@@ -110,7 +111,10 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
     if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
     // Logspanel back button handlers
-    if (interaction.customId.startsWith('logspanel_back')) return logspanel.handleSelect(interaction);
+    if (interaction.customId.startsWith('logspanel_back')) {
+      try { return logspanel.handleSelect(interaction); }
+      catch(e) { console.error('[logspanel handleSelect btn error]', e.message); throw e; }
+    }
 
     // NID button handlers
     if (interaction.customId.startsWith('nid_confirm_')) {
@@ -297,14 +301,20 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isStringSelectMenu()) {
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
     if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
-    if (interaction.customId.startsWith('logspanel_')) return logspanel.handleSelect(interaction);
+    if (interaction.customId.startsWith('logspanel_')) {
+      try { return logspanel.handleSelect(interaction); }
+      catch(e) { console.error('[logspanel handleSelect error]', e.message); throw e; }
+    }
   }
 
   // Verify/Unverify modal handlers
   if (interaction.isModalSubmit()) {
     if (interaction.customId.startsWith('verify_deny_reason_')) return verifyModal(interaction);
     if (interaction.customId.startsWith('unverify_approve_reason_')) return unverifyModal(interaction);
-    if (interaction.customId.startsWith('logspanel_')) return logspanel.handleModal(interaction);
+    if (interaction.customId.startsWith('logspanel_')) {
+      try { return logspanel.handleModal(interaction); }
+      catch(e) { console.error('[logspanel handleModal error]', e.message); throw e; }
+    }
 
     if (interaction.customId === 'dm_exempt_add_modal') {
       const { addDmExemption, getDmExemptions } = await import('./utils/botDb.js');
@@ -399,7 +409,11 @@ client.on('messageDelete', async (message) => {
   if (!message || message.author?.bot) return;
   try {
     const deleteChannelId = MESSAGE_DELETE_LOG_CHANNEL_ID;
-    if (!deleteChannelId && !FULL_MESSAGE_LOGS_CHANNEL_ID) return;
+    const guildId = message.guildId;
+    const perGuildChannelId = guildId ? getLogChannel(guildId, 'message', 'message_delete') : null;
+    const globalChannelId = getGlobalLogChannel('global_message');
+
+    if (!deleteChannelId && !FULL_MESSAGE_LOGS_CHANNEL_ID && !perGuildChannelId && !globalChannelId) return;
 
     const content = message.content?.slice(0, 1500) || '*No text content*';
     const attachments = message.attachments.size > 0 ? `\n📎 ${message.attachments.size} attachment(s)` : '';
@@ -427,6 +441,16 @@ client.on('messageDelete', async (message) => {
       const fullMsgChannel = await client.channels.fetch(FULL_MESSAGE_LOGS_CHANNEL_ID).catch(() => null);
       if (fullMsgChannel) await fullMsgChannel.send({ embeds: [embed] });
     }
+    // Also send to per-guild configured channel
+    if (perGuildChannelId) {
+      const perGuildChannel = await client.channels.fetch(perGuildChannelId).catch(() => null);
+      if (perGuildChannel) await perGuildChannel.send({ embeds: [embed] });
+    }
+    // Also send to global message log channel
+    if (globalChannelId) {
+      const globalChannel = await client.channels.fetch(globalChannelId).catch(() => null);
+      if (globalChannel) await globalChannel.send({ embeds: [embed] });
+    }
   } catch (e) {
     console.error('[messageDelete log error]', e.message);
   }
@@ -438,7 +462,11 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
   if (oldMessage.content === newMessage.content) return;
   try {
     const editChannelId = MESSAGE_EDIT_LOG_CHANNEL_ID;
-    if (!editChannelId && !FULL_MESSAGE_LOGS_CHANNEL_ID) return;
+    const guildId = newMessage.guildId;
+    const perGuildChannelId = guildId ? getLogChannel(guildId, 'message', 'message_edit') : null;
+    const globalChannelId = getGlobalLogChannel('global_message');
+
+    if (!editChannelId && !FULL_MESSAGE_LOGS_CHANNEL_ID && !perGuildChannelId && !globalChannelId) return;
 
     const oldContent = oldMessage.content?.slice(0, 750) || '*No text content*';
     const newContent = newMessage.content?.slice(0, 750) || '*No text content*';
@@ -466,6 +494,11 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
     if (FULL_MESSAGE_LOGS_CHANNEL_ID) {
       const fullMsgChannel = await client.channels.fetch(FULL_MESSAGE_LOGS_CHANNEL_ID).catch(() => null);
       if (fullMsgChannel) await fullMsgChannel.send({ embeds: [embed] });
+    }
+    // Also send to per-guild configured channel
+    if (perGuildChannelId) {
+      const perGuildChannel = await client.channels.fetch(perGuildChannelId).catch(() => null);
+      if (perGuildChannel) await perGuildChannel.send({ embeds: [embed] });
     }
   } catch (e) {
     console.error('[messageUpdate log error]', e.message);

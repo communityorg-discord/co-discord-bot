@@ -26,7 +26,7 @@ export async function execute(interaction) {
   const formatMember = (id) => {
     const member = memberMap.get(id);
     const nickname = member?.nickname || member?.user?.globalName || member?.user?.username || `Unknown`;
-    return `<@${id}> ( ${id} )`;
+    return `<@${id}> '${id}'`;
   };
 
   // All three users in every category
