@@ -379,6 +379,11 @@ client.on('interactionCreate', async interaction => {
       });
       return;
     }
+    // Inbox button handlers
+    if (interaction.customId?.startsWith('inbox_')) {
+      try { return inbox.handleInboxInteraction(interaction); }
+      catch(e) { console.error('[inbox error]', e.message, 'customId:', interaction.customId); throw e; }
+    }
 
   }
 
