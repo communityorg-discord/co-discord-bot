@@ -14,10 +14,14 @@ const PAGE_SIZE = 8;
 
 async function safeReply(interaction, opts) {
   try {
-    if (interaction.deferred) return interaction.editReply(opts);
-    return interaction.editReply(opts);
-  } catch {
-    return interaction.followUp({ ...opts, ephemeral: true });
+    if (interaction.deferred || interaction.replied) {
+      return await interaction.editReply(opts);
+    }
+    return await interaction.reply({ ...opts, ephemeral: true });
+  } catch (e) {
+    try {
+      return await interaction.followUp({ ...opts, ephemeral: true });
+    } catch (_) {}
   }
 }
 
@@ -128,7 +132,7 @@ async function showInbox(interaction, inbox, discordUserId, discordRoleIds, page
   }
   const verified = await verifyAccess(inbox.inbox_id, discordUserId, discordRoleIds);
   if (!verified) {
-    return safeReply(interaction, { content: '❌ Access denied to this inbox.', components: [] });
+    return interaction.editReply({ content: '❌ Access denied to this inbox.', components: [] });
   }
   try {
     const result = await fetchInboxEmails(inbox, page, PAGE_SIZE);
@@ -149,7 +153,7 @@ async function showInbox(interaction, inbox, discordUserId, discordRoleIds, page
       components: rows.length > 0 ? [selectRow, navRow, backRow] : [backRow],
     });
   } catch (err) {
-    await safeReply(interaction, { content: `⚠️ Error loading inbox: \`${err.message}\`` });
+    return interaction.editReply({ content: `⚠️ Error loading inbox: \`${err.message}\`` });
   }
 }
 
@@ -159,7 +163,7 @@ async function showEmail(interaction, inbox, uid, discordUserId, discordRoleIds,
   }
   const verified = await verifyAccess(inbox.inbox_id, discordUserId, discordRoleIds);
   if (!verified) {
-    return safeReply(interaction, { content: '❌ Access denied.' });
+    return interaction.editReply({ content: '❌ Access denied.' });
   }
   try {
     const email = await fetchEmailBody(inbox, uid);
@@ -193,7 +197,7 @@ async function showEmail(interaction, inbox, uid, discordUserId, discordRoleIds,
       await interaction.followUp({ content: chunks[i], ephemeral: true });
     }
   } catch (err) {
-    await safeReply(interaction, { content: `⚠️ Error loading email: \`${err.message}\`` });
+    return interaction.editReply({ content: `⚠️ Error loading email: \`${err.message}\`` });
   }
 }
 
@@ -209,9 +213,9 @@ export async function handleInboxInteraction(interaction) {
       const inboxId = interaction.values[0];
       const config = await fetchEmailConfig();
       const inbox = config[inboxId];
-      if (!inbox) return safeReply(interaction, { content: '❌ Inbox not found.' });
+      if (!inbox) return interaction.editReply({ content: '❌ Inbox not found.' });
       const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
-      if (!verified) return safeReply(interaction, { content: '❌ Access denied.' });
+      if (!verified) return interaction.editReply({ content: '❌ Access denied.' });
       return showInbox(interaction, inbox, discordUserId, discordRoleIds, 0);
     }
 
@@ -234,7 +238,24 @@ export async function handleInboxInteraction(interaction) {
     if (customId === 'inbox_back') {
       await interaction.deferReply({ ephemeral: true }).catch(() => {});
       await interaction.message.delete().catch(() => {});
-      return execute(interaction);
+      const accessibleInboxes = await getAccessibleInboxes(discordUserId, discordRoleIds);
+      if (accessibleInboxes.length === 0) {
+        return interaction.editReply({ content: '❌ You do not have access to any email inboxes.' });
+      }
+      if (accessibleInboxes.length === 1) {
+        return showInbox(interaction, accessibleInboxes[0], discordUserId, discordRoleIds, 0);
+      }
+      const selectRow = await buildInboxSelect(discordUserId, discordRoleIds);
+      const embed = new EmbedBuilder()
+        .setTitle('📬 Select an Inbox')
+        .setColor(0x1a73e8)
+        .setDescription('Choose an inbox to access:')
+        .addFields(accessibleInboxes.map(ib => ({
+          name: `${ib.emoji} ${ib.name}`,
+          value: ib.description || '\u200B',
+          inline: false,
+        })));
+      return interaction.editReply({ embeds: [embed], components: [selectRow] });
     }
 
     if (customId.startsWith('inbox_prev|') || customId.startsWith('inbox_next|')) {
@@ -293,7 +314,7 @@ export async function handleInboxInteraction(interaction) {
         .setTitle('Forward Email');
       modal.addComponents(
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('forward_to').setLabel('To (email address)').setStyle(1).setPlaceholder('recipient@example.com').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('forward_subject').setLabel('Subject').setStyle(1).setPlaceholder('Fwd: ...')).setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('forward_subject').setLabel('Subject').setStyle(1).setPlaceholder('Fwd: ...').setRequired(true)),
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('forward_body').setLabel('Additional message').setStyle(2).setPlaceholder('Add a note...').setRequired(false)),
       );
       await interaction.showModal(modal);
@@ -392,11 +413,7 @@ export async function handleInboxModal(interaction) {
       const subject = interaction.fields.getTextInputValue('reply_subject');
       const body = interaction.fields.getTextInputValue('reply_body');
       try {
-        await sendReply(inbox, {
-          to: replyTo,
-          subject,
-          body,
-        }, discordUserId);
+        await sendReply(inbox, { to: replyTo, subject, body }, discordUserId);
         await interaction.reply({ content: '✅ Reply sent.', ephemeral: true });
         await interaction.message.delete().catch(() => {});
       } catch (err) {
@@ -409,11 +426,7 @@ export async function handleInboxModal(interaction) {
       const subject = interaction.fields.getTextInputValue('forward_subject');
       const note = interaction.fields.getTextInputValue('forward_body');
       try {
-        await sendForward(inbox, {
-          to: forwardTo,
-          subject,
-          body: note,
-        }, discordUserId);
+        await sendForward(inbox, { to: forwardTo, subject, body: note }, discordUserId);
         await interaction.reply({ content: '✅ Email forwarded.', ephemeral: true });
         await interaction.message.delete().catch(() => {});
       } catch (err) {
