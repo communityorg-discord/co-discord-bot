@@ -14,9 +14,9 @@ export const data = new SlashCommandBuilder()
   .addStringOption(opt => opt.setName('reason').setDescription('Reason for termination').setRequired(true));
 
 export async function execute(interaction) {
-  const perm = canRunCommand(interaction.user.id, 5);
+  const perm = await canRunCommand(interaction.user.id, 5);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
-  if (!isSuperuser(interaction.user.id) && !canRunCommand(interaction.user.id, 7).allowed) {
+  if (!await isSuperuser(interaction.user.id) && !(await canRunCommand(interaction.user.id, 7)).allowed) {
     return interaction.reply({ content: `❌ Termination requires Auth Level 7 or Superuser.`, ephemeral: true });
   }
 

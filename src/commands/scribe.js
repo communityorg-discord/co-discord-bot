@@ -137,7 +137,7 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
-  const perm = canRunCommand(interaction.user.id, 5);
+  const perm = await canRunCommand(interaction.user.id, 5);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
   const limit = interaction.options.getInteger('limit') || 100;

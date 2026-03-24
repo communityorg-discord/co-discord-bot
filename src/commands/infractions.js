@@ -15,10 +15,11 @@ export const data = new SlashCommandBuilder()
     .addIntegerOption(opt => opt.setName('id').setDescription('Infraction ID').setRequired(true)));
 
 export async function execute(interaction) {
+  try {
   const sub = interaction.options.getSubcommand();
 
   if (sub === 'view') {
-    const perm = canRunCommand(interaction.user.id, 3);
+    const perm = await canRunCommand(interaction.user.id, 3);
     if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
     const target = interaction.options.getUser('user');
@@ -41,7 +42,7 @@ export async function execute(interaction) {
     await interaction.reply({ embeds: [embed] });
 
   } else if (sub === 'delete') {
-    if (!isSuperuser(interaction.user.id)) return interaction.reply({ content: '❌ Superuser only.', ephemeral: true });
+    if (!await isSuperuser(interaction.user.id)) return interaction.reply({ content: '❌ Superuser only.', ephemeral: true });
     const id = interaction.options.getInteger('id');
     const deleted = deleteInfraction(id, interaction.user.id);
     if (!deleted) return interaction.reply({ content: `❌ Infraction #${id} not found.`, ephemeral: true });
@@ -71,5 +72,14 @@ export async function execute(interaction) {
       .setFooter({ text: 'Community Organisation' })
       .setTimestamp()
     ]});
+  }
+  } catch (err) {
+    console.error('[infractions] Error:', err);
+    const msg = { content: 'An error occurred. Please try again.', flags: 64 };
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp(msg);
+    } else {
+      await interaction.reply(msg);
+    }
   }
 }

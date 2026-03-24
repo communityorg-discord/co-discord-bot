@@ -13,6 +13,7 @@ export const data = new SlashCommandBuilder()
   .addStringOption(opt => opt.setName('incident').setDescription('Brief description of the incident').setRequired(true));
 
 export async function execute(interaction) {
+  try {
   const supervisor = getUserByDiscordId(interaction.user.id);
   if (!supervisor) {
     return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account.', ephemeral: true });
@@ -54,4 +55,13 @@ export async function execute(interaction) {
   );
 
   await interaction.reply({ embeds: [embed], components: [row] });
+  } catch (err) {
+    console.error('[nid] Error:', err);
+    const msg = { content: 'An error occurred. Please try again.', flags: 64 };
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp(msg);
+    } else {
+      await interaction.reply(msg);
+    }
+  }
 }

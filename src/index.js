@@ -151,6 +151,7 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async interaction => {
+  try {
   console.log('[Interaction]', interaction.type, interaction.isChatInputCommand() ? interaction.commandName : '');
   if (interaction.isChatInputCommand()) {
     const command = client.commands.get(interaction.commandName);
@@ -357,6 +358,10 @@ client.on('interactionCreate', async interaction => {
       return;
     }
 
+  }
+
+  // String select menu handlers
+  if (interaction.isStringSelectMenu()) {
     if (interaction.customId === 'dm_exempt_user_select') {
       const { addDmExemption, getDmExemptions } = await import('./utils/botDb.js');
 
@@ -415,10 +420,6 @@ client.on('interactionCreate', async interaction => {
       });
       return;
     }
-  }
-
-  // String select menu handlers
-  if (interaction.isStringSelectMenu()) {
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
     if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
     if (interaction.customId?.startsWith('logspanel_')) {
@@ -505,6 +506,17 @@ client.on('interactionCreate', async interaction => {
         ]
       });
     }
+  }
+  } catch (e) {
+    console.error('[interactionCreate] Unhandled error:', e.message);
+    const msg = { content: '❌ An unexpected error occurred. Please try again.', ephemeral: true };
+    try {
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp(msg).catch(() => {});
+      } else {
+        await interaction.reply(msg).catch(() => {});
+      }
+    } catch (_) {}
   }
 });
 

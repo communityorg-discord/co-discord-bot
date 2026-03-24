@@ -60,7 +60,7 @@ export async function execute(interaction) {
       .setFooter({ text: 'Community Organisation | Staff Portal' })
       .setTimestamp();
 
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({ embeds: [embed], ephemeral: true });
   } catch (e) {
     console.error('[/user ERROR]', e);
     await interaction.reply({ content: 'Error: ' + e.message, ephemeral: true }).catch(() => {});

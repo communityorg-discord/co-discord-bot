@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { isSuperuser } from '../utils/verifyHelper.js';
 import { getAuthLevelRole } from '../utils/positions.js';
+import { ALL_SERVER_IDS } from '../config.js';
 import { logAction } from '../utils/logger.js';
 import { AUTH_OVERRIDE_LOG_CHANNEL_ID } from '../config.js';
 
@@ -45,19 +46,13 @@ export async function execute(interaction) {
 
     const newAuthLevelRoleName = getAuthLevelRole(newAuthLevel);
 
-    const GUILD_IDS = [
-      '1485422910972760176',
-      '1485423163817988186',
-      '1485423682980675729',
-      '1485423935569920135',
-      '1485424535405723729',
-    ];
+    // Uses ALL_SERVER_IDS from config.js
 
     let updated = 0;
     const results = [];
     let previousLevel = null;
 
-    for (const guildId of GUILD_IDS) {
+    for (const guildId of ALL_SERVER_IDS) {
       try {
         const guild = await interaction.client.guilds.fetch(guildId);
         if (!guild) { results.push(`❌ ${guildId}: not found`); continue; }
@@ -110,7 +105,7 @@ export async function execute(interaction) {
         { name: 'Target', value: `<@${targetUserId}>`, inline: true },
         { name: 'Previous Level', value: previousLevel ? `Level ${previousLevel}` : 'None', inline: true },
         { name: 'New Level', value: newAuthLevelRoleName, inline: true },
-        { name: 'Servers Updated', value: `${updated}/${GUILD_IDS.length}`, inline: true },
+        { name: 'Servers Updated', value: `${updated}/${ALL_SERVER_IDS.length}`, inline: true },
         { name: 'Results', value: results.join('\n').slice(0, 1024) || 'None', inline: false },
       ],
       specificChannelId: AUTH_OVERRIDE_LOG_CHANNEL_ID,

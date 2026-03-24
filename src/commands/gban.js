@@ -15,7 +15,7 @@ export const data = new SlashCommandBuilder()
     .addChoices({ name: 'Yes', value: 'yes' }, { name: 'No', value: 'no' }));
 
 export async function execute(interaction) {
-  const perm = canRunCommand(interaction.user.id, 7);
+  const perm = await canRunCommand(interaction.user.id, 7);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
   const target = interaction.options.getUser('user');

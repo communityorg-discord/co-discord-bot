@@ -7,7 +7,7 @@ export const data = new SlashCommandBuilder()
   .setDescription('View and manage users exempt from mass/team DMs');
 
 export async function execute(interaction) {
-  const perm = canRunCommand(interaction.user.id, 5);
+  const perm = await canRunCommand(interaction.user.id, 5);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
   try {

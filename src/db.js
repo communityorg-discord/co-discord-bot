@@ -3,6 +3,7 @@ import { config } from 'dotenv';
 config();
 
 const db = new Database(process.env.PORTAL_DB_PATH, { readonly: true });
+export default db;
 
 export function getUserByDiscordId(discordId) {
   return db.prepare('SELECT * FROM users WHERE discord_id = ?').get(String(discordId));

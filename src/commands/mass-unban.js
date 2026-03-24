@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { isSuperuser } from '../utils/verifyHelper.js';
-import { MASS_UNBAN_LOG_CHANNEL_ID, ALL_SERVER_IDS } from '../config.js';
+import { ALL_SERVER_IDS } from '../config.js';
 import { logAction } from '../utils/logger.js';
 
 export const data = new SlashCommandBuilder()
@@ -37,9 +37,10 @@ export async function execute(interaction) {
     let totalUnbanned = 0;
     let totalFailed = 0;
 
-    for (const guildId of interaction.client.guilds.cache.keys()) {
+    for (const guildId of ALL_SERVER_IDS) {
+      const guild = interaction.client.guilds.cache.get(guildId);
+      if (!guild) continue;
       try {
-        const guild = interaction.client.guilds.cache.get(guildId);
         const bans = await guild.bans.fetch();
         if (bans.size === 0) {
           results.push({ guild: guild.name, unbanned: 0, failed: 0 });

@@ -4,10 +4,7 @@ import { logAction } from '../utils/logger.js';
 import { DM_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import { isDmExempt } from '../utils/botDb.js';
-import Database from 'better-sqlite3';
-import { config } from 'dotenv';
-config();
-const portalDb = new Database(process.env.PORTAL_DB_PATH, { readonly: true });
+import portalDb from '../db.js';
 
 const TEAMS = {
   'executive_operations_board': 'Executive Operations Board',
@@ -67,7 +64,7 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
-  const perm = canRunCommand(interaction.user.id, 5);
+  const perm = await canRunCommand(interaction.user.id, 5);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
   const target = interaction.options.getUser('user');
@@ -85,7 +82,7 @@ export async function execute(interaction) {
   }
 
   // Mass DM requires superuser
-  if (mass && !isSuperuser(interaction.user.id)) {
+  if (mass && !await isSuperuser(interaction.user.id)) {
     interaction._commandFailed = 'Mass DM requires superuser access.';
     return interaction.reply({ content: '❌ Mass DM requires superuser access.', ephemeral: true });
   }

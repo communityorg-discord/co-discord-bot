@@ -13,7 +13,7 @@ export const data = new SlashCommandBuilder()
   .addStringOption(opt => opt.setName('reason').setDescription('Reason for unbanning').setRequired(true));
 
 export async function execute(interaction) {
-  if (!isSuperuser(interaction.user.id)) return interaction.reply({ content: '❌ Superuser only.', ephemeral: true });
+  if (!await isSuperuser(interaction.user.id)) return interaction.reply({ content: '❌ Superuser only.', ephemeral: true });
 
   const userId = interaction.options.getString('userid');
   const reason = interaction.options.getString('reason');

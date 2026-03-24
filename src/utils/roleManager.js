@@ -1,4 +1,4 @@
-import { POSITION_ROLES, ALL_SERVER_IDS, STAFF_HQ_ID, SUSPENDED_ROLE_ID, UNDER_INVESTIGATION_ROLE_ID } from '../config.js';
+import { ALL_SERVER_IDS, STAFF_HQ_ID, SUSPENDED_ROLE_ID, UNDER_INVESTIGATION_ROLE_ID } from '../config.js';
 
 export async function removeAllStaffRoles(client, discordId, reason = 'Staff action') {
   const results = [];
@@ -8,7 +8,8 @@ export async function removeAllStaffRoles(client, discordId, reason = 'Staff act
       if (!guild) continue;
       const member = await guild.members.fetch(discordId).catch(() => null);
       if (!member) continue;
-      const allRoleNames = new Set(Object.values(POSITION_ROLES).flat());
+      const { POSITIONS } = await import('./positions.js');
+  const allRoleNames = new Set(Object.values(POSITIONS).flat());
       const rolesToRemove = member.roles.cache.filter(r => allRoleNames.has(r.name));
       for (const [, role] of rolesToRemove) {
         await member.roles.remove(role, reason).catch(e => console.error(`[RoleManager] Failed to remove ${role.name}:`, e.message));
@@ -70,7 +71,8 @@ export async function removeInvestigationRole(client, discordId) {
 }
 
 export async function restorePositionRoles(client, discordId, position) {
-  const roleNames = POSITION_ROLES[position] || [];
+  const { POSITIONS } = await import('./positions.js');
+  const roleNames = POSITIONS[position] || [];
   if (!roleNames.length) return;
   for (const serverId of ALL_SERVER_IDS) {
     try {

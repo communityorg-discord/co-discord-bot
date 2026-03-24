@@ -14,7 +14,7 @@ export const data = new SlashCommandBuilder()
   .addStringOption(opt => opt.setName('reason').setDescription('Reason for lifting suspension').setRequired(false));
 
 export async function execute(interaction) {
-  const perm = canRunCommand(interaction.user.id, 5);
+  const perm = await canRunCommand(interaction.user.id, 5);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
   const target = interaction.options.getUser('user');

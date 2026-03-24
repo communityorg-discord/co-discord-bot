@@ -6,6 +6,7 @@ export const data = new SlashCommandBuilder()
   .setDescription('View your recent cases in Case Management');
 
 export async function execute(interaction) {
+  try {
   const user = getUserByDiscordId(interaction.user.id);
   if (!user) {
     return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account.', ephemeral: true });
@@ -32,4 +33,13 @@ export async function execute(interaction) {
     .setTimestamp();
 
   await interaction.reply({ embeds: [embed] });
+  } catch (err) {
+    console.error('[cases] Error:', err);
+    const msg = { content: 'An error occurred. Please try again.', flags: 64 };
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp(msg);
+    } else {
+      await interaction.reply(msg);
+    }
+  }
 }

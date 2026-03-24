@@ -7,6 +7,7 @@ export const data = new SlashCommandBuilder()
   .addStringOption(opt => opt.setName('name').setDescription('Name or username to search').setRequired(true));
 
 export async function execute(interaction) {
+  try {
   const requestingUser = getUserByDiscordId(interaction.user.id);
   if (!requestingUser) {
     return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account.', ephemeral: true });
@@ -31,4 +32,13 @@ export async function execute(interaction) {
   );
 
   await interaction.reply({ embeds: embeds.slice(0, 3) });
+  } catch (err) {
+    console.error('[staff] Error:', err);
+    const msg = { content: 'An error occurred. Please try again.', flags: 64 };
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp(msg);
+    } else {
+      await interaction.reply(msg);
+    }
+  }
 }

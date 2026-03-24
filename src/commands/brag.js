@@ -1,8 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getUserByDiscordId, getBragStatus } from '../db.js';
-import Database from 'better-sqlite3';
-import { config } from 'dotenv';
-config();
+import portalDb from '../db.js';
 
 function getWeekKey(date = new Date()) {
   const d = new Date(date);
@@ -35,15 +33,14 @@ export const data = new SlashCommandBuilder()
   .setDescription('Check your current BRAG activity status');
 
 export async function execute(interaction) {
+  try {
   const user = getUserByDiscordId(interaction.user.id);
   if (!user) {
     return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account. Contact DMSPC.', ephemeral: true });
   }
 
   const brag = getBragStatus(user.id);
-  const portalDb = new Database(process.env.PORTAL_DB_PATH, { readonly: true });
-
-  const weeks = getLast8Weeks();
+    const weeks = getLast8Weeks();
   const currentWeekKey = weeks[0]?.key;
   const previousWeekKey = weeks[1]?.key;
 
@@ -98,4 +95,13 @@ export async function execute(interaction) {
     .setTimestamp();
 
   await interaction.reply({ embeds: [embed] });
+  } catch (err) {
+    console.error('[brag] Error:', err);
+    const msg = { content: 'An error occurred. Please try again.', flags: 64 };
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp(msg);
+    } else {
+      await interaction.reply(msg);
+    }
+  }
 }

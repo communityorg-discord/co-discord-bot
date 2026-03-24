@@ -12,7 +12,7 @@ export const data = new SlashCommandBuilder()
   .addStringOption(opt => opt.setName('reason').setDescription('Reason for strike').setRequired(true));
 
 export async function execute(interaction) {
-  const perm = canRunCommand(interaction.user.id, 4);
+  const perm = await canRunCommand(interaction.user.id, 4);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
   const target = interaction.options.getUser('user');

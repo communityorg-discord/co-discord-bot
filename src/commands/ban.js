@@ -2,14 +2,9 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { logAction } from '../utils/logger.js';
 import db from '../utils/botDb.js';
 import { isSuperuser } from '../utils/verifyHelper.js';
+import { ALL_SERVER_IDS } from '../config.js';
 
-const GUILD_IDS = [
-  '1485422910972760176', // Staff HQ
-  '1485423163817988186', // Private Server
-  '1485423682980675729', // System Log Hub
-  '1485423935569920135', // Communications
-  '1485424535405723729', // Appeals Hub
-];
+// Uses ALL_SERVER_IDS from config.js
 
 export const data = new SlashCommandBuilder()
   .setName('ban')
@@ -76,7 +71,7 @@ export async function execute(interaction) {
     const failedGuilds = [];
     const alreadyBanned = [];
 
-    for (const guildId of GUILD_IDS) {
+    for (const guildId of ALL_SERVER_IDS) {
       const guild = await interaction.client.guilds.fetch(guildId).catch(() => null);
       if (!guild) continue;
 
@@ -135,7 +130,7 @@ export async function execute(interaction) {
       setTimeout(async () => {
         const unbannedIn = [];
         const failedIn = [];
-        for (const guildId of GUILD_IDS) {
+        for (const guildId of ALL_SERVER_IDS) {
           const guild = await interaction.client.guilds.fetch(guildId).catch(() => null);
           if (!guild) continue;
           try {

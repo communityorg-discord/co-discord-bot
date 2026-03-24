@@ -8,6 +8,7 @@ export const data = new SlashCommandBuilder()
   .setDescription('Show ticket management options (must be used in a ticket channel)');
 
 export async function execute(interaction) {
+  try {
   const auth = await canRunCommand(interaction.user.id, 5);
   if (!auth.allowed) {
     return interaction.reply({ content: `❌ ${auth.reason}`, ephemeral: true });
@@ -65,6 +66,15 @@ export async function execute(interaction) {
     .setTimestamp();
 
   await interaction.reply({ embeds: [embed], components: [row1, row2], ephemeral: true });
+  } catch (err) {
+    console.error('[ticket-options] Error:', err);
+    const msg = { content: 'An error occurred. Please try again.', flags: 64 };
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp(msg);
+    } else {
+      await interaction.reply(msg);
+    }
+  }
 }
 
 // ── Button handlers for ticket-options ─────────────────────────────────────

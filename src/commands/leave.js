@@ -6,6 +6,7 @@ export const data = new SlashCommandBuilder()
   .setDescription('Check your leave balance and pending requests');
 
 export async function execute(interaction) {
+  try {
   const user = getUserByDiscordId(interaction.user.id);
   if (!user) {
     return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account.', ephemeral: true });
@@ -41,4 +42,13 @@ export async function execute(interaction) {
   }
 
   await interaction.reply({ embeds: [embed] });
+  } catch (err) {
+    console.error('[leave] Error:', err);
+    const msg = { content: 'An error occurred. Please try again.', flags: 64 };
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp(msg);
+    } else {
+      await interaction.reply(msg);
+    }
+  }
 }

@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canRunCommand } from '../utils/permissions.js';
-import { removeAllStaffRoles, addSuspendedRole, suspendAcrossGuilds } from '../utils/roleManager.js';
+import { suspendAcrossGuilds } from '../utils/roleManager.js';
 import { addInfraction, addSuspension } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { SUSPEND_UNSUSPEND_LOG_CHANNEL_ID } from '../config.js';
@@ -26,7 +26,7 @@ export const data = new SlashCommandBuilder()
   .addStringOption(opt => opt.setName('duration').setDescription('Duration e.g. 7d, 24h, 1m (leave blank for indefinite)').setRequired(false));
 
 export async function execute(interaction) {
-  const perm = canRunCommand(interaction.user.id, 5);
+  const perm = await canRunCommand(interaction.user.id, 5);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
   const target = interaction.options.getUser('user');
@@ -50,8 +50,6 @@ export async function execute(interaction) {
 
   await interaction.deferReply();
 
-  await removeAllStaffRoles(interaction.client, target.id, `Suspended: ${reason}`);
-  await addSuspendedRole(interaction.client, target.id);
   await suspendAcrossGuilds(interaction.client, target.id);
 
   const inf = addInfraction(target.id, 'suspension', reason, interaction.user.id, interaction.user.username);

@@ -195,6 +195,7 @@ export const data = new SlashCommandBuilder()
   .setDescription('Open the log channel configuration panel');
 
 export async function execute(interaction) {
+  try {
   await interaction.deferReply();
 
   const guildId = interaction.guildId;
@@ -206,6 +207,15 @@ export async function execute(interaction) {
     embeds: [embed],
     components: [categoryRow]
   });
+  } catch (err) {
+    console.error('[logspanel] Error:', err);
+    const msg = { content: 'An error occurred. Please try again.', flags: 64 };
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp(msg);
+    } else {
+      await interaction.reply(msg);
+    }
+  }
 }
 
 // Handle select menu interactions
