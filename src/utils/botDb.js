@@ -188,6 +188,25 @@ export function getAllLogConfig(guildId) {
   return config;
 }
 
+// Guild settings (role IDs etc.)
+export function getGuildSetting(guildId, key) {
+  const row = db.prepare('SELECT value FROM guild_settings WHERE guild_id = ? AND key = ?').get(guildId, key);
+  return row?.value || null;
+}
+
+export function setGuildSetting(guildId, key, value) {
+  db.prepare(`
+    INSERT INTO guild_settings (guild_id, \`key\`, value)
+    VALUES (?, ?, ?)
+    ON CONFLICT(guild_id, \`key\`) DO UPDATE SET value = excluded.value
+  `).run(guildId, key, value);
+}
+
+export function isUserVerified(discordId) {
+  const row = db.prepare('SELECT discord_id FROM verified_members WHERE discord_id = ?').get(discordId);
+  return !!row;
+}
+
 // Alias for logspanel.js compatibility
 export const getLogConfig = getAllLogConfig;
 

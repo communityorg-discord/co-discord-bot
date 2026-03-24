@@ -37,17 +37,10 @@ export async function execute(interaction) {
     return interaction.reply({ content: '❌ This command must be used in a server.', ephemeral: true });
   }
 
-  const staffRole = await guild.roles.fetch(panel.staff_role_id).catch(() => null);
-  const category = await guild.channels.fetch(panel.ticket_category_id).catch(() => null);
-
   const embed = new EmbedBuilder()
     .setTitle(`🎫 ${panel.name}`)
     .setColor(0x5865F2)
-    .setDescription(panel.intro_message)
-    .addFields(
-      { name: 'Staff Role', value: staffRole ? `<@&${panel.staff_role_id}>` : `<@&${panel.staff_role_id}> (not found)`, inline: true },
-      { name: 'Category', value: category ? category.name : panel.ticket_category_id, inline: true },
-    )
+    .setDescription(`If you wish to make a ticket, please click the button below.`)
     .setFooter({ text: 'Community Organisation | Ticket System' })
     .setTimestamp();
 
