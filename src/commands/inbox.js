@@ -236,7 +236,7 @@ export async function handleInboxInteraction(interaction) {
       await safeReply(interaction, { content: '❌ Access denied.' });
       return;
     }
-    await interaction.deleteReply().catch(() => {});
+    // Don't delete — showInbox will replace the deferred reply
     return showInbox(interaction, inbox, discordUserId, discordRoleIds, 0);
   }
 
