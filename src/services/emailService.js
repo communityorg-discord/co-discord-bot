@@ -302,18 +302,18 @@ const BREVO_SENDER = {
  * @param {string} senderCoEmail - The sender's CO email address (from portal DB)
  */
 export async function sendEmailViaBrevo(options, senderCoEmail, fromEmail = null) {
-  const { to, cc, subject, body, inReplyTo, references } = options;
+  const { to, cc, subject, body, inReplyTo, references, senderName } = options;
 
   const payload = {
     sender: {
-      name: senderCoEmail.split('@')[0],
-      email: BREVO_SENDER.email, // Brevo requires verified sender — relay from noreply@
+      name: senderName || senderCoEmail.split('@')[0],
+      email: fromEmail || BREVO_SENDER.email,
     },
     to: Array.isArray(to) ? to.map(t => typeof t === 'string' ? { email: t } : t) : [{ email: to }],
     ...(cc ? { cc: Array.isArray(cc) ? cc.map(c => typeof c === 'string' ? { email: c } : c) : [{ email: cc }] } : {}),
     subject,
     htmlContent: `<html><body style="font-family: Arial, sans-serif;"><pre style="white-space: pre-wrap;">${body.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre></body></html>`,
-    ...(inReplyTo ? { replyTo: { email: senderCoEmail, name: senderCoEmail.split('@')[0] } } : {}),
+    ...(inReplyTo ? { replyTo: { email: senderCoEmail, name: senderName || senderCoEmail.split('@')[0] } } : {}),
     ...(references ? { headers: { references } } : {}),
   };
 
