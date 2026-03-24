@@ -58,7 +58,7 @@ function buildEmailListEmbed(inbox, result, page) {
     return {
       label: subject.slice(0, 60),
       value: String(uid),
-      description: `From: ${from.slice(0, 40)} | ${date}`,
+      description: `From: ${from.slice(0, 20)} | ${date}`,
     };
   });
   const embed = new EmbedBuilder()
@@ -73,8 +73,8 @@ function buildEmailListEmbed(inbox, result, page) {
 }
 
 function buildEmailActionRow(uid, page, inboxId, fromAddr = '', subject = '') {
-  const safeFrom = (fromAddr || '').slice(0, 40).replace(/\|/g, '');
-  const safeSubject = (subject || '').slice(0, 30).replace(/\|/g, '');
+  const safeFrom = (fromAddr || '').slice(0, 20).replace(/[|]/g, '');
+  const safeSubject = (subject || '').slice(0, 20).replace(/[|]/g, '');
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`inbox_read|${inboxId}|${uid}`).setLabel('Read').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`inbox_reply|${uid}|${page}|${inboxId}|${safeFrom}|${safeSubject}`).setLabel('Reply').setStyle(ButtonStyle.Secondary),
