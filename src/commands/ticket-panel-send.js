@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from 'discord.js';
-import { randomBytes } from 'crypto';
 import { canRunCommand } from '../utils/permissions.js';
 import { getTicketPanelByName, getAllTicketPanels } from '../utils/botDb.js';
+import { closeTicketWithTranscript } from '../utils/ticketTranscript.js';
 
 // ── Shared transcript HTML generator ─────────────────────────────────────────
 
@@ -318,27 +318,14 @@ export async function handleTicketChannelButton(interaction) {
     const isClaimer = ticket.claimed_by === interaction.user.id;
     if (!auth.allowed && !isClaimer) return interaction.editReply({ content: `❌ ${auth.reason}` });
 
+    const panel = getTicketPanelById(ticket.panel_id);
     const ticketChannel = guild.channels.cache.get(channelId);
-    if (ticketChannel) {
-      const closeRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('ticket_placeholder').setLabel('🔴 Closed').setStyle(ButtonStyle.Danger).setDisabled(true),
-      );
-      const msgs = await ticketChannel.messages.fetch({ limit: 1 });
-      if (msgs.size > 0) {
-        const lastMsg = msgs.first();
-        if (lastMsg.author.bot && lastMsg.embeds.length > 0) {
-          const closedEmbed = EmbedBuilder.from(lastMsg.embeds[0]).setColor(0x6b7280).spliceFields(2, 1, { name: 'Status', value: '🔴 Closed', inline: true });
-          await lastMsg.edit({ embeds: [closedEmbed], components: [closeRow] }).catch(() => {});
-        }
-      }
-      await ticketChannel.setName(`closed-${ticketChannel.name}`).catch(() => {});
-      await ticketChannel.permissionOverwrites.delete(ticket.user_id).catch(() => {});
-      if (ticket.claimed_by) {
-        await ticketChannel.permissionOverwrites.delete(ticket.claimed_by).catch(() => {});
-      }
-    }
 
-    closeTicket(channelId);
-    await interaction.editReply({ content: `✅ Ticket has been closed and removed from the database.` });
+    const transcriptUrl = await closeTicketWithTranscript(
+      ticket, ticketChannel, panel, interaction, closeTicket
+    );
+
+    const transcriptNote = transcriptUrl ? `\n📄 Transcript: ${transcriptUrl}` : '';
+    await interaction.editReply({ content: `✅ Ticket has been closed.${transcriptNote}` });
   }
 }

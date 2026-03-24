@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { canRunCommand } from '../utils/permissions.js';
-import { getTicketChannelByChannelId } from '../utils/botDb.js';
+import { getTicketChannelByChannelId, closeTicket, getTicketPanelById } from '../utils/botDb.js';
+import { closeTicketWithTranscript } from '../utils/ticketTranscript.js';
 
 export const data = new SlashCommandBuilder()
   .setName('ticket-options')
@@ -73,7 +74,7 @@ export async function handleTicketOptionsButton(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
   const { isSuperuser } = await import('../utils/permissions.js');
-  const { getTicketChannelByChannelId, closeTicket, reopenTicket, unclaimTicket, getTicketPanelById } = await import('../utils/botDb.js');
+  const { getTicketChannelByChannelId, reopenTicket, unclaimTicket } = await import('../utils/botDb.js');
 
   const parts = interaction.customId.split('_');
   const action = parts[1]; // close, delete, unclaim, rename, reopen
@@ -91,14 +92,11 @@ export async function handleTicketOptionsButton(interaction) {
 
   if (action === 'close') {
     if (!auth.allowed && !isClaimer) return interaction.editReply({ content: `❌ ${auth.reason}` });
-    closeTicket(channelId);
+    const panel = getTicketPanelById(ticket.panel_id);
     const ticketChannel = guild.channels.cache.get(channelId);
-    if (ticketChannel) {
-      await ticketChannel.permissionOverwrites.delete(ticket.user_id).catch(() => {});
-      if (ticket.claimed_by) await ticketChannel.permissionOverwrites.delete(ticket.claimed_by).catch(() => {});
-      await ticketChannel.setName(`closed-${ticketChannel.name}`).catch(() => {});
-    }
-    return interaction.editReply({ content: '🔴 Ticket closed.' });
+    const transcriptUrl = await closeTicketWithTranscript(ticket, ticketChannel, panel, interaction, closeTicket);
+    const transcriptNote = transcriptUrl ? `\n📄 Transcript: ${transcriptUrl}` : '';
+    return interaction.editReply({ content: `🔴 Ticket closed.${transcriptNote}` });
   }
 
   if (action === 'delete') {
