@@ -2,11 +2,10 @@ import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, But
 import { getPortalUser, isSuperuser, applyVerification, getOrCreateVerificationChannel } from '../utils/verifyHelper.js';
 import { POSITIONS, getAuthLevelRole } from '../utils/positions.js';
 import db from '../utils/botDb.js';
-import { VERIFY_UNVERIFY_LOG_CHANNEL_ID } from '../config.js';
+import { VERIFY_UNVERIFY_LOG_CHANNEL_ID, OFFICIAL_BYPASS_IDS } from '../config.js';
 import { logAction } from '../utils/logger.js';
 
 // Official account bypass IDs — can verify as CO | Official Account without portal entry
-const OFFICIAL_BYPASS_IDS = ['878775920180228127', '1355367209249148928'];
 function isOfficialBypass(discordId) {
   return OFFICIAL_BYPASS_IDS.includes(discordId);
 }
@@ -107,6 +106,15 @@ export async function execute(interaction) {
     db.prepare("UPDATE verification_queue SET message_id = ? WHERE id = ?").run(msg.id, queueId);
 
     await interaction.editReply({ content: `✅ Your verification request **#${queueId}** has been submitted and is awaiting approval from a superuser.` });
+
+    await logAction(interaction.client, {
+      action: '📝 Verification Request Submitted',
+      target: { discordId: interaction.user.id, name: interaction.user.username },
+      moderator: null,
+      color: 0x22C55E,
+      description: `New verification request **#${queueId}** submitted by <@${interaction.user.id}>`,
+      guildId: interaction.guildId
+    });
   } catch (err) {
     console.error('[Verify] Error:', err.message);
     try {

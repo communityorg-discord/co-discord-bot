@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from 'discord.js';
 import { canRunCommand } from '../utils/permissions.js';
 import { getTicketPanelByName, getAllTicketPanels } from '../utils/botDb.js';
+import { logAction } from '../utils/logger.js';
 import { closeTicketWithTranscript } from '../utils/ticketTranscript.js';
 
 // ── Shared transcript HTML generator ─────────────────────────────────────────
@@ -241,6 +242,15 @@ export async function handleTicketButton(interaction) {
     saveTicketChannel({ panelId, discordChannelId: ticketChannel.id, userId });
 
     await interaction.editReply({ content: `✅ Your ticket has been created: ${ticketChannel}` });
+
+    await logAction(interaction.client, {
+      action: '🎫 Ticket Created',
+      target: { discordId: interaction.user.id, name: interaction.user.username },
+      moderator: null,
+      color: 0x22C55E,
+      description: `Ticket created: ${ticketChannel}`,
+      guildId: interaction.guildId
+    });
   } catch (err) {
     console.error('[Ticket Create] Error:', err.message);
     await interaction.editReply({ content: `❌ Failed to create ticket: ${err.message}` });
@@ -312,6 +322,15 @@ export async function handleTicketChannelButton(interaction) {
     }
 
     await interaction.editReply({ content: `✅ You have claimed this ticket. The user can no longer message this channel.` });
+
+    await logAction(interaction.client, {
+      action: '📌 Ticket Claimed',
+      target: { discordId: ticket.discord_id, name: ticket.discord_id },
+      moderator: { discordId: interaction.user.id, name: interaction.user.username },
+      color: 0xF59E0B,
+      description: `Ticket claimed by <@${interaction.user.id}>`,
+      guildId: interaction.guildId
+    });
   } else {
     // Close
     const auth = await canRunCommand(interaction.user.id, 7);

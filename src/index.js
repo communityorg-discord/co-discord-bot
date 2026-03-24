@@ -1,5 +1,5 @@
 import express from 'express';
-import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, EmbedBuilder } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, EmbedBuilder, Partials } from 'discord.js';
 import { config } from 'dotenv';
 import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID } from './config.js';
 import { getLogChannel, getGlobalLogChannel } from './utils/botDb.js';
@@ -49,6 +49,7 @@ if (!process.env.BOT_WEBHOOK_SECRET) {
 }
 
 const client = new Client({
+  partials: [Partials.Channel, Partials.Message],
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent]
 });
 
@@ -62,14 +63,16 @@ client.once('ready', async () => {
   console.log(`[CO Bot] Logged in as ${client.user.tag}`);
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
-  try {
-    await rest.put(
-      Routes.applicationCommands(client.user.id),
-      { body: commands.map(c => c.data.toJSON()) }
-    );
-    console.log('[CO Bot] Slash commands registered');
-  } catch (e) {
-    console.error('[CO Bot] Failed to register commands:', e.message);
+  if (process.argv.includes('--register')) {
+    try {
+      await rest.put(
+        Routes.applicationCommands(client.user.id),
+        { body: commands.map(c => c.data.toJSON()) }
+      );
+      console.log('[CO Bot] Slash commands registered.');
+    } catch (e) {
+      console.error('[CO Bot] Failed to register commands:', e.message);
+    }
   }
 
   // C-05: Re-schedule timed suspensions and bans on startup
@@ -260,6 +263,16 @@ client.on('interactionCreate', async interaction => {
           await interaction.update({
             content: `✅ NID submitted successfully. Case reference: **${data.case_ref}**\n[View in Portal](${process.env.PORTAL_URL}/cases)`,
             embeds: [], components: []
+          });
+
+          const { logAction: nidLog } = await import('./utils/logger.js');
+          await nidLog(client, {
+            action: '📋 NID Submitted',
+            target: { discordId: userId, name: userId },
+            moderator: { discordId: interaction.user.id, name: interaction.user.username },
+            color: 0xF59E0B,
+            description: `NID ${actionType} submitted for <@${userId}> via bot`,
+            guildId: interaction.guildId
           });
         } else {
           await interaction.update({ content: `❌ Failed: ${data.error}`, embeds: [], components: [] });
@@ -454,6 +467,16 @@ client.on('interactionCreate', async interaction => {
 
       addDmExemption(userId, displayName, interaction.user.id);
 
+      const { logAction: dmLog } = await import('./utils/logger.js');
+      await dmLog(client, {
+        action: '✅ DM Exemption Added',
+        target: { discordId: userId, name: displayName },
+        moderator: { discordId: interaction.user.id, name: interaction.user.username },
+        color: 0x22C55E,
+        description: `DM exemption added for <@${userId}> (${displayName})`,
+        guildId: interaction.guildId
+      });
+
       const exempts = getDmExemptions();
       const rows = exempts.map(e =>
         `**${e.display_name || 'Unknown'}** — <@${e.discord_id}>\n   Added by: ${e.exempted_by} · ${new Date(e.created_at).toLocaleDateString('en-GB')}`
@@ -483,6 +506,16 @@ client.on('interactionCreate', async interaction => {
       const userId = userInput.replace(/<@!?/g, '').replace(/>/g, '').trim();
 
       removeDmExemption(userId);
+
+      const { logAction: dmLogRem } = await import('./utils/logger.js');
+      await dmLogRem(client, {
+        action: '❌ DM Exemption Removed',
+        target: { discordId: userId, name: userId },
+        moderator: { discordId: interaction.user.id, name: interaction.user.username },
+        color: 0xEF4444,
+        description: `DM exemption removed for <@${userId}>`,
+        guildId: interaction.guildId
+      });
 
       const exempts = getDmExemptions();
       const rows = exempts.map(e =>

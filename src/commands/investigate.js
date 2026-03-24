@@ -111,7 +111,15 @@ export async function execute(interaction) {
     await removeInvestigationRole(interaction.client, target.id);
 
     const outcomeLabels = { nfa: 'No Further Action', strike: 'Staff Strike', verbal_warning: 'Verbal Warning', suspend: 'Suspended', staff_ban: 'Staff Ban', global_ban: 'Global Ban', terminate: 'Terminated' };
+    const outcomeManualNote = {
+      suspend: '⚠️ Please run /suspend to apply the suspension.',
+      staff_ban: '⚠️ Please run /ban to apply the staff ban.',
+      global_ban: '⚠️ Please run /gban to apply the global ban.',
+      terminate: '⚠️ Please run /terminate to end employment.',
+    };
 
+    // NOTE: For suspend / staff_ban / global_ban / terminate the infraction is logged
+    // here, but the actual role removal or ban must be applied manually via the appropriate command.
     if (outcome === 'nfa') {
       if (portalUser?.position) await restorePositionRoles(interaction.client, target.id, portalUser.position);
     } else {
@@ -148,7 +156,8 @@ export async function execute(interaction) {
       .addFields(
         { name: 'Outcome', value: outcomeLabels[outcome], inline: true },
         { name: 'Reason', value: reason, inline: false },
-        { name: 'Moderator', value: interaction.user.username, inline: true }
+        { name: 'Moderator', value: interaction.user.username, inline: true },
+        ...(outcomeManualNote[outcome] ? [{ name: '⚠️ Next Step', value: outcomeManualNote[outcome], inline: false }] : [])
       )
       .setFooter({ text: 'Community Organisation' })
       .setTimestamp()

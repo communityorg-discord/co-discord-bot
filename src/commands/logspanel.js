@@ -1,4 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, TextInputBuilder, ModalBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { logAction } from '../utils/logger.js';
 import { getLogConfig, setLogChannel, getGlobalLogChannel, setGlobalLogChannel } from '../utils/botDb.js';
 
 // Per-guild log categories and their types
@@ -366,6 +367,15 @@ export async function handleModal(interaction) {
       embeds: [embed],
       components: [categoryRow]
     });
+
+    await logAction(interaction.client, {
+      action: '⚙️ Global Log Channel Configured',
+      target: null,
+      moderator: { discordId: interaction.user.id, name: interaction.user.username },
+      color: 0x5865F2,
+      description: `Global ${cat.label} ${targetChannel ? `set to ${targetChannel}` : 'cleared'} by <@${interaction.user.id}>`,
+      guildId: interaction.guildId
+    });
     return;
   }
 
@@ -407,5 +417,14 @@ export async function handleModal(interaction) {
       : `✅ ${type.label} has been cleared (logs disabled)`,
     embeds: [embed],
     components: [categoryRow]
+  });
+
+  await logAction(interaction.client, {
+    action: '⚙️ Log Channel Configured',
+    target: null,
+    moderator: { discordId: interaction.user.id, name: interaction.user.username },
+    color: 0x5865F2,
+    description: `${type.label} ${targetChannel ? `set to ${targetChannel}` : 'cleared'} by <@${interaction.user.id}>`,
+    guildId: interaction.guildId
   });
 }

@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { canRunCommand } from '../utils/permissions.js';
+import { logAction } from '../utils/logger.js';
 import { getTicketChannelByChannelId, closeTicket, getTicketPanelById } from '../utils/botDb.js';
 import { closeTicketWithTranscript } from '../utils/ticketTranscript.js';
 
@@ -179,4 +180,13 @@ export async function handleTicketOptionsModal(interaction) {
   }
 
   await interaction.editReply({ content: `✏️ Channel renamed to \`${newName}\`.` });
+
+    await logAction(interaction.client, {
+      action: '✏️ Ticket Renamed',
+      target: { discordId: interaction.user.id, name: interaction.user.username },
+      moderator: { discordId: interaction.user.id, name: interaction.user.username },
+      color: 0x6366F1,
+      description: `Ticket renamed to \`${newName}\``,
+      guildId: interaction.guildId
+    });
 }

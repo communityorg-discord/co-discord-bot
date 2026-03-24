@@ -50,6 +50,12 @@ export async function execute(interaction) {
 
   await interaction.deferReply();
 
+  // Prevent suspending superusers (auth level 99)
+  if (portalUser && Number(portalUser.auth_level) >= 99) {
+    await interaction.editReply({ content: '❌ Cannot suspend a superuser. Use /terminate instead.', components: [] });
+    return;
+  }
+
   await suspendAcrossGuilds(interaction.client, target.id);
 
   const inf = addInfraction(target.id, 'suspension', reason, interaction.user.id, interaction.user.username);
