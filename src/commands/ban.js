@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { logAction } from '../utils/logger.js';
-import { getDb } from '../utils/botDb.js';
+import db from '../utils/botDb.js';
 import { isSuperuser } from '../utils/verifyHelper.js';
 
 const GUILD_IDS = [
@@ -11,26 +11,26 @@ const GUILD_IDS = [
   '1485424535405723729', // Appeals Hub
 ];
 
-export default [
-  new SlashCommandBuilder()
-    .setName('ban')
-    .setDescription('Permanently or temporarily ban a user from all CO servers. Requires superuser.')
-    .addStringOption(opt =>
-      opt.setName('user_id')
-        .setDescription('The user\'s Discord ID or mention')
-        .setRequired(true)
-    )
-    .addStringOption(opt =>
-      opt.setName('reason')
-        .setDescription('Reason for the ban')
-        .setRequired(false)
-    )
-    .addStringOption(opt =>
-      opt.setName('duration')
-        .setDescription('Temp ban duration: 30s, 5m, 2h, 1d (omit for permanent)')
-        .setRequired(false)
-    ),
-  async execute(interaction) {
+export const data = new SlashCommandBuilder()
+  .setName('ban')
+  .setDescription('Permanently or temporarily ban a user from all CO servers. Requires superuser.')
+  .addStringOption(opt =>
+    opt.setName('user_id')
+      .setDescription('The user\'s Discord ID or mention')
+      .setRequired(true)
+  )
+  .addStringOption(opt =>
+    opt.setName('reason')
+      .setDescription('Reason for the ban')
+      .setRequired(false)
+  )
+  .addStringOption(opt =>
+    opt.setName('duration')
+      .setDescription('Temp ban duration: 30s, 5m, 2h, 1d (omit for permanent)')
+      .setRequired(false)
+  );
+
+export async function execute(interaction) {
     if (!await isSuperuser(interaction.user.id)) {
       return interaction.reply({ content: '❌ Insufficient permissions.', ephemeral: true });
     }
@@ -67,7 +67,6 @@ export default [
       }
     }
 
-    const db = getDb();
     const existingBan = db.prepare("SELECT * FROM banned_users WHERE discord_id = ?").get(targetUserId);
     if (existingBan) {
       return interaction.reply({ content: `❌ <@${targetUserId}> is already in the global ban list.`, ephemeral: true });
@@ -178,5 +177,4 @@ export default [
         ...(isTempBan ? [{ name: 'Auto-Unban At', value: `<t:${unbanTs}:F>`, inline: false }] : []),
       ],
     });
-  },
-];
+}
