@@ -352,6 +352,7 @@ export async function sendEmailViaBrevo(options, senderCoEmail, fromEmail = null
   });
 
   const data = await res.json();
+  console.log(`[Brevo] Sent — messageId: ${data.messageId} | from: ${payload.sender.email} | to: ${JSON.stringify(payload.to)} | cc: ${JSON.stringify(payload.cc || [])}`);
   if (!res.ok) throw new Error(data.message || 'Brevo send failed');
   return { messageId: data.messageId };
 }
