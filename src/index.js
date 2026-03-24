@@ -567,6 +567,11 @@ client.on('interactionCreate', async interaction => {
       catch(e) { console.error('[inbox modal error]', e.message, 'customId:', interaction.customId); throw e; }
     }
 
+    // Setup email modal
+    if (interaction.customId === 'setup_email_modal') {
+      return setupEmail.handleModal(interaction);
+    }
+
     if (interaction.customId.startsWith('ticketopts_renamemodal_')) {
       return handleTicketOptionsModal(interaction);
     }

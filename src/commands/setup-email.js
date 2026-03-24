@@ -95,34 +95,17 @@ export async function handleModal(interaction) {
 
   const password = interaction.fields.getTextInputValue('imap_password').trim();
   const portalUser = getUserByDiscordId(interaction.user.id);
+  const coEmail = portalUser?.co_email || portalUser?.email || null;
 
-  const userEmail = portalUser?.co_email || portalUser?.email || null;
-    if (!userEmail) {
-    return interaction.reply({ content: '❌ CO email not found.', ephemeral: true });
+  if (!coEmail) {
+    return interaction.reply({ content: '❌ CO email not found in portal.', ephemeral: true });
   }
-
-  const coEmail = portalUser.co_email || portalUser.email;
 
   await interaction.deferReply({ ephemeral: true });
 
-  try {
-    const { testImapConnection } = await import('../services/emailService.js');
-    await testImapConnection({
-      host: 'mail.mybustimes.cc',
-      port: 993,
-      user: coEmail,
-      password,
-      secure: true,
-    });
+  savePersonalEmailSetup(interaction.user.id, coEmail, password);
 
-    savePersonalEmailSetup(interaction.user.id, coEmail, password);
-
-    return interaction.editReply({
-      content: `✅ Email monitoring configured for **${coEmail}**.\n\nNew emails will be sent to your DMs every minute. Use \`/setup-email status\` to check your setup.`,
-    });
-  } catch (err) {
-    return interaction.editReply({
-      content: `❌ Could not connect to your email account: \`${err.message}\`\n\nPlease check your password and try again.`,
-    });
-  }
+  return interaction.editReply({
+    content: `✅ Email monitoring configured for **${coEmail}**.\n\nThe bot will check your inbox every minute and send new emails to your DMs. If the password is incorrect you will receive an error notification.\n\nUse \`/setup-email status\` to check your setup.`,
+  });
 }
