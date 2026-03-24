@@ -145,6 +145,13 @@ try {
   db.exec('ALTER TABLE ticket_channels ADD COLUMN claimed_by TEXT');
 }
 
+// Migration: add status column if missing
+try {
+  db.prepare('SELECT status FROM ticket_channels LIMIT 1').get();
+} catch {
+  db.exec("ALTER TABLE ticket_channels ADD COLUMN status TEXT DEFAULT 'open'");
+}
+
 export default db;
 
 export function addDmExemption(discordId, displayName, exemptedBy) {
@@ -358,5 +365,17 @@ export function claimTicket(discordChannelId, moderatorId) {
 }
 
 export function closeTicket(discordChannelId) {
-  return db.prepare('DELETE FROM ticket_channels WHERE discord_channel_id = ?').run(String(discordChannelId));
+  return db.prepare("UPDATE ticket_channels SET status = 'closed' WHERE discord_channel_id = ?").run(String(discordChannelId));
+}
+
+export function reopenTicket(discordChannelId) {
+  return db.prepare("UPDATE ticket_channels SET status = 'open', claimed_by = NULL WHERE discord_channel_id = ?").run(String(discordChannelId));
+}
+
+export function unclaimTicket(discordChannelId) {
+  return db.prepare("UPDATE ticket_channels SET claimed_by = NULL WHERE discord_channel_id = ?").run(String(discordChannelId));
+}
+
+export function setTicketStatus(discordChannelId, status) {
+  return db.prepare("UPDATE ticket_channels SET status = ? WHERE discord_channel_id = ?").run(status, String(discordChannelId));
 }

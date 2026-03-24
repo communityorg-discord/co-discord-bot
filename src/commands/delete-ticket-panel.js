@@ -3,7 +3,7 @@ import { canRunCommand } from '../utils/permissions.js';
 import { getTicketPanelById, getTicketPanelByName, deleteTicketPanel, getAllTicketPanels } from '../utils/botDb.js';
 
 export const data = new SlashCommandBuilder()
-  .setName('delete-ticket-panel')
+  .setName('ticket-panel-delete')
   .setDescription('Delete a ticket panel (superusers only)')
   .addStringOption(opt =>
     opt.setName('name')

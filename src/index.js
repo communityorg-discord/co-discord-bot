@@ -37,6 +37,8 @@ import * as createTicketPanel from './commands/create-ticket-panel.js';
 import * as ticketPanelSend from './commands/ticket-panel-send.js';
 import * as deleteTicketPanel from './commands/delete-ticket-panel.js';
 import { handleTicketButton, handleTicketChannelButton } from './commands/ticket-panel-send.js';
+import { handleTicketOptionsButton, handleTicketOptionsModal } from './commands/ticket-options.js';
+import * as ticketOptions from './commands/ticket-options.js';
 
 config();
 
@@ -45,7 +47,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, ban, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, ban, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -111,8 +113,8 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
-  // Autocomplete for ticket-panel-send and delete-ticket-panel
-  if (interaction.isAutocomplete() && (interaction.commandName === 'ticket-panel-send' || interaction.commandName === 'delete-ticket-panel')) {
+  // Autocomplete for ticket-panel-send and ticket-panel-delete
+  if (interaction.isAutocomplete() && (interaction.commandName === 'ticket-panel-send' || interaction.commandName === 'ticket-panel-delete')) {
     const { getAllTicketPanels } = await import('./utils/botDb.js');
     const panels = getAllTicketPanels();
     const focused = interaction.options.getFocused(true);
@@ -133,7 +135,7 @@ client.on('interactionCreate', async interaction => {
     // Logspanel back button handlers
     if (interaction.customId.startsWith('logspanel_back')) {
       try { return logspanel.handleSelect(interaction); }
-      catch(e) { console.error('[logspanel handleSelect btn error]', e.message); throw e; }
+      catch(e) { console.error('[logspanel btn error]', e.message, 'customId:', interaction.customId); throw e; }
     }
 
     // Ticket create button
@@ -144,6 +146,11 @@ client.on('interactionCreate', async interaction => {
     // Ticket channel buttons (claim / close)
     if (interaction.customId.startsWith('ticket_claim_') || interaction.customId.startsWith('ticket_close_')) {
       return handleTicketChannelButton(interaction);
+    }
+
+    // Ticket options buttons
+    if (interaction.isButton() && interaction.customId.startsWith('ticketopts_')) {
+      return handleTicketOptionsButton(interaction);
     }
 
     // NID button handlers
@@ -333,7 +340,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
     if (interaction.customId.startsWith('logspanel_')) {
       try { return logspanel.handleSelect(interaction); }
-      catch(e) { console.error('[logspanel handleSelect error]', e.message); throw e; }
+      catch(e) { console.error('[logspanel handleSelect error]', e.message, 'customId:', interaction.customId, 'values:', interaction.values); throw e; }
     }
   }
 
@@ -343,7 +350,11 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId.startsWith('unverify_approve_reason_')) return unverifyModal(interaction);
     if (interaction.customId.startsWith('logspanel_')) {
       try { return logspanel.handleModal(interaction); }
-      catch(e) { console.error('[logspanel handleModal error]', e.message); throw e; }
+      catch(e) { console.error('[logspanel handleModal error]', e.message, 'customId:', interaction.customId); throw e; }
+    }
+
+    if (interaction.customId.startsWith('ticketopts_renamemodal_')) {
+      return handleTicketOptionsModal(interaction);
     }
 
     if (interaction.customId === 'dm_exempt_add_modal') {
