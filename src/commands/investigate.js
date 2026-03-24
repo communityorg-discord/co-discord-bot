@@ -1,114 +1,168 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { canRunCommand, requiresSuperuserWarning } from '../utils/permissions.js';
-import { removeAllStaffRoles, addInvestigationRole, removeInvestigationRole, restorePositionRoles } from '../utils/roleManager.js';
-import { startInvestigation, endInvestigation, getActiveInvestigation, addInfraction } from '../utils/botDb.js';
+import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
+import { canRunCommand } from '../utils/permissions.js';
+import { getPortalUser } from '../utils/verifyHelper.js';
+import { addInvestigationRole, removeInvestigationRole, restorePositionRoles } from '../utils/roleManager.js';
+import { addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
-import { INVESTIGATION_LOG_CHANNEL_ID } from '../config.js';
-import { getUserByDiscordId } from '../db.js';
 
 export const data = new SlashCommandBuilder()
   .setName('investigate')
-  .setDescription('Start or end a staff investigation')
-  .addSubcommand(sub => sub
-    .setName('start')
-    .setDescription('Start an investigation')
-    .addUserOption(opt => opt.setName('user').setDescription('Staff member').setRequired(true))
-    .addStringOption(opt => opt.setName('reason').setDescription('Reason for investigation').setRequired(true))
+  .setDescription('Open a formal investigation case for a staff member.')
+  .addUserOption(opt =>
+    opt.setName('user')
+      .setDescription('The staff member to investigate.')
+      .setRequired(true)
   )
-  .addSubcommand(sub => sub
-    .setName('end')
-    .setDescription('End an investigation and record outcome')
-    .addUserOption(opt => opt.setName('user').setDescription('Staff member').setRequired(true))
-    .addStringOption(opt => opt.setName('outcome').setDescription('Outcome').setRequired(true)
-      .addChoices(
-        { name: 'No Further Action', value: 'nfa' },
-        { name: 'Staff Strike', value: 'strike' },
-        { name: 'Verbal Warning', value: 'verbal_warning' },
-        { name: 'Suspend', value: 'suspend' },
-        { name: 'Staff Ban', value: 'staff_ban' },
-        { name: 'Global Ban', value: 'global_ban' },
-        { name: 'Terminate', value: 'terminate' }
-      ))
-    .addStringOption(opt => opt.setName('reason').setDescription('Reason/notes for outcome').setRequired(true))
+  .addStringOption(opt =>
+    opt.setName('description')
+      .setDescription('Brief description of the issue requiring investigation.')
+      .setRequired(true)
   );
 
 export async function execute(interaction) {
-  const perm = await canRunCommand(interaction.user.id, 5);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
-
-  const sub = interaction.options.getSubcommand();
   const target = interaction.options.getUser('user');
-  const reason = interaction.options.getString('reason');
-  const portalUser = getUserByDiscordId(target.id);
+  const reason = interaction.options.getString('description');
 
-  if (requiresSuperuserWarning(target.id)) {
-    return interaction.reply({ content: `⚠️ **Warning:** You are attempting to moderate a Superuser. This action has been logged.`, ephemeral: true });
+  const perm = await canRunCommand(interaction.user.id, 5);
+  if (!perm) {
+    return interaction.reply({ content: '❌ You do not have permission to use this command.', ephemeral: true });
   }
 
-  await interaction.deferReply();
+  const portalUser = await getPortalUser(target.id);
+  const displayName = portalUser?.display_name || target.username;
 
-  if (sub === 'start') {
-    const existing = getActiveInvestigation(target.id);
-    if (existing) return interaction.editReply({ embeds: [new EmbedBuilder()
-      .setTitle('❌ Already Under Investigation')
-      .setColor(0xEF4444)
-      .setDescription(`${target.username} is already under investigation.`)
-    ]});
+  const caseRef = `INV-${Date.now().toString(36).toUpperCase()}`;
 
-    await removeAllStaffRoles(interaction.client, target.id, `Under Investigation: ${reason}`);
-    await addInvestigationRole(interaction.client, target.id);
-    startInvestigation(target.id, reason, interaction.user.id);
+  const embed = new EmbedBuilder()
+    .setTitle('📋 Investigation Opened')
+    .setColor(0xF59E0B)
+    .setDescription(`Investigation **${caseRef}** opened for **${displayName}**.\n\nReason: ${reason}`)
+    .addFields(
+      { name: 'Investigated User', value: `<@${target.id}>`, inline: true },
+      { name: 'Opened By', value: interaction.user.username, inline: true },
+      { name: 'Case ID', value: caseRef, inline: true }
+    )
+    .setTimestamp();
 
-    try {
-      await target.send({
-        embeds: [new EmbedBuilder()
-          .setTitle('🔍 You are Under Investigation')
-          .setColor(0xF59E0B)
-          .setDescription('You have been placed under investigation by Community Organisation.')
-          .addFields(
-            { name: 'Reason', value: reason },
-            { name: 'Moderator', value: interaction.user.username },
-            { name: 'Note', value: 'Your roles have been temporarily removed pending the outcome of this investigation.' }
-          )
-          .setTimestamp()
-        ]
-      });
-    } catch {}
+  await interaction.reply({ embeds: [embed] });
 
-    await logAction(interaction.client, {
-      action: 'Investigation Started',
-      moderator: { discordId: interaction.user.id, name: interaction.user.username },
-      target: { discordId: target.id, name: portalUser?.display_name || target.username },
-      reason, color: 0xF59E0B,
-      specificChannelId: INVESTIGATION_LOG_CHANNEL_ID,
-    guildId: interaction.guildId,
-    logType: 'moderation.investigation',
-    });
+  await logAction(interaction.client, {
+    action: '🔍 Investigation Opened',
+    target: { discordId: target.id, name: displayName },
+    moderator: { discordId: interaction.user.id, name: interaction.user.username },
+    color: 0xF59E0B,
+    description: `Case **${caseRef}**: ${reason}`
+  });
 
-    await interaction.editReply({ embeds: [new EmbedBuilder()
-      .setTitle('🔍 Investigation Started')
+  const { createPortalCase } = await import('../utils/verifyHelper.js');
+  await createPortalCase({
+    case_type: 'investigation',
+    case_ref: caseRef,
+    discord_id: target.id,
+    reporter_id: interaction.user.id,
+    description: reason,
+  });
+}
+
+export async function handleSelect(interaction) {
+  if (!interaction.customId.startsWith('investigate_')) return;
+
+  const [action, caseId] = interaction.customId.replace('investigate_', '').split('_');
+  const { getPortalCase } = await import('../utils/verifyHelper.js');
+  const caseData = getPortalCase(caseId);
+
+  if (action === 'view') {
+    const target = await interaction.client.users.fetch(caseData.discord_id).catch(() => null);
+    const displayName = caseData.portal_user?.display_name || target?.username || caseData.discord_id;
+    const embed = new EmbedBuilder()
+      .setTitle(`📋 Case ${caseData.case_ref}`)
       .setColor(0xF59E0B)
-      .setDescription(`Investigation started for **${portalUser?.display_name || target.username}**.`)
+      .setDescription(caseData.description || 'No description provided.')
       .addFields(
-        { name: 'Reason', value: reason, inline: false },
-        { name: 'Moderator', value: interaction.user.username, inline: true },
-        { name: 'Roles', value: 'Staff roles removed, Under Investigation role assigned.', inline: false }
+        { name: 'Type', value: caseData.case_type, inline: true },
+        { name: 'Status', value: caseData.status, inline: true },
+        { name: 'Investigated', value: `<@${caseData.discord_id}> (${displayName})`, inline: false },
+        { name: 'Opened', value: new Date(caseData.created_at).toLocaleString(), inline: false }
       )
-      .setFooter({ text: 'Community Organisation' })
-      .setTimestamp()
-    ]});
+      .setTimestamp();
 
-  } else if (sub === 'end') {
-    const outcome = interaction.options.getString('outcome');
-    const investigation = getActiveInvestigation(target.id);
-    if (!investigation) return interaction.editReply({ embeds: [new EmbedBuilder()
-      .setTitle('❌ Not Under Investigation')
-      .setColor(0xEF4444)
-      .setDescription(`${target.username} is not currently under investigation.`)
-    ]});
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+    return;
+  }
 
-    endInvestigation(target.id, outcome);
-    await removeInvestigationRole(interaction.client, target.id);
+  if (action === 'start') {
+    const target = await interaction.client.users.fetch(caseData.discord_id).catch(() => null);
+    const displayName = caseData.portal_user?.display_name || target?.username || caseData.discord_id;
+
+    if (caseData.status === 'open') {
+      await addInvestigationRole(interaction.client, target.id);
+      await logAction(interaction.client, {
+        action: '🔍 Investigation Started',
+        target: { discordId: target.id, name: displayName },
+        moderator: { discordId: interaction.user.id, name: interaction.user.username },
+        color: 0xF59E0B,
+        description: `Investigation **${caseData.case_ref}** started for **${displayName}**.`
+      });
+
+      const embed = new EmbedBuilder()
+        .setTitle('🔍 Investigation Started')
+        .setColor(0xF59E0B)
+        .setDescription(`Investigation **${caseData.case_ref}** has been started for **${displayName}**.\n\nThis user has been notified via DM and their access has been restricted.`)
+        .addFields(
+          { name: 'Case', value: caseData.case_ref, inline: true },
+          { name: 'Investigated', value: displayName, inline: true }
+        )
+        .setTimestamp();
+
+      await interaction.update({ embeds: [embed], components: [] });
+      return;
+    }
+
+    if (caseData.status === 'in_progress') {
+      const portalUser = await getPortalUser(caseData.discord_id);
+      const displayName = portalUser?.display_name || caseData.discord_id;
+
+      const outcomeOptions = [
+        { label: '🔒 Suspend', value: 'suspend', description: 'Suspend the staff member' },
+        { label: '🔨 Staff Ban', value: 'staff_ban', description: 'Staff ban the member' },
+        { label: '🌐 Global Ban', value: 'global_ban', description: 'Globally ban the member' },
+        { label: '❌ Terminate', value: 'terminate', description: 'Terminate employment' },
+        { label: '⚠️ NFA — No Further Action', value: 'nfa', description: 'Close with no action' },
+      ];
+
+      const embed = new EmbedBuilder()
+        .setTitle(`📋 Case ${caseData.case_ref} — Investigation In Progress`)
+        .setColor(0xF59E0B)
+        .setDescription(`Investigation for **${displayName}** is currently in progress.\n\nUse the select menu below to record the outcome.`)
+        .addFields(
+          { name: 'Reason', value: caseData.description || 'No description', inline: false },
+          { name: 'Investigated', value: `<@${caseData.discord_id}>`, inline: true },
+          { name: 'Investigator', value: `<@${caseData.reporter_id}>`, inline: true }
+        )
+        .setTimestamp();
+
+      const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(`investigate_outcome_${caseData.case_ref}`)
+          .setPlaceholder('Select investigation outcome')
+          .addOptions(outcomeOptions)
+      );
+
+      await interaction.update({ embeds: [embed], components: [row] });
+      return;
+    }
+
+    await interaction.update({ content: 'This case is already closed.', embeds: [], components: [] });
+    return;
+  }
+
+  if (action === 'outcome') {
+    const [outcome, ...rest] = interaction.values[0].split('_');
+    const reason2 = interaction.message.embeds[0].data.description.split('\n\n')[1]?.replace('Reason: ', '') || 'No reason provided';
+
+    const portalUser = await getPortalUser(caseData.discord_id);
+    const target = await interaction.client.users.fetch(caseData.discord_id).catch(() => null);
+    const displayName = portalUser?.display_name || target?.username || caseData.discord_id;
 
     const outcomeLabels = { nfa: 'No Further Action', strike: 'Staff Strike', verbal_warning: 'Verbal Warning', suspend: 'Suspended', staff_ban: 'Staff Ban', global_ban: 'Global Ban', terminate: 'Terminated' };
     const outcomeManualNote = {
@@ -118,49 +172,23 @@ export async function execute(interaction) {
       terminate: '⚠️ Please run /terminate to end employment.',
     };
 
-    // NOTE: For suspend / staff_ban / global_ban / terminate the infraction is logged
-    // here, but the actual role removal or ban must be applied manually via the appropriate command.
     if (outcome === 'nfa') {
       if (portalUser?.position) await restorePositionRoles(interaction.client, target.id, portalUser.position);
     } else {
-      addInfraction(target.id, outcome, reason, interaction.user.id, interaction.user.username);
+      addInfraction(target.id, outcome, reason2, interaction.user.id, interaction.user.username);
     }
-
-    try {
-      await target.send({
-        embeds: [new EmbedBuilder()
-          .setTitle(`📋 Investigation Outcome: ${outcomeLabels[outcome]}`)
-          .setColor(outcome === 'nfa' ? 0x22C55E : 0xEF4444)
-          .addFields(
-            { name: 'Outcome', value: outcomeLabels[outcome] },
-            { name: 'Reason', value: reason },
-            { name: 'Moderator', value: interaction.user.username }
-          )
-          .setTimestamp()
-        ]
-      });
-    } catch {}
-
-    await logAction(interaction.client, {
-      action: `Investigation Ended — ${outcomeLabels[outcome]}`,
-      moderator: { discordId: interaction.user.id, name: interaction.user.username },
-      target: { discordId: target.id, name: portalUser?.display_name || target.username },
-      reason, color: outcome === 'nfa' ? 0x22C55E : 0xEF4444,
-      specificChannelId: INVESTIGATION_LOG_CHANNEL_ID,
-    });
 
     await interaction.editReply({ embeds: [new EmbedBuilder()
       .setTitle('📋 Investigation Ended')
       .setColor(outcome === 'nfa' ? 0x22C55E : 0xEF4444)
-      .setDescription(`Investigation ended for **${portalUser?.display_name || target.username}**.`)
+      .setDescription(`Investigation ended for **${displayName}**.`)
       .addFields(
         { name: 'Outcome', value: outcomeLabels[outcome], inline: true },
-        { name: 'Reason', value: reason, inline: false },
+        { name: 'Reason', value: reason2, inline: false },
         { name: 'Moderator', value: interaction.user.username, inline: true },
         ...(outcomeManualNote[outcome] ? [{ name: '⚠️ Next Step', value: outcomeManualNote[outcome], inline: false }] : [])
       )
-      .setFooter({ text: 'Community Organisation' })
       .setTimestamp()
-    ]});
+    ], ephemeral: true });
   }
 }
