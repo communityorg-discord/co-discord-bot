@@ -133,7 +133,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
     if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
     // Logspanel back button handlers
-    if (interaction.customId.startsWith('logspanel_back')) {
+    if (interaction.customId?.startsWith('logspanel_back')) {
       try { return logspanel.handleSelect(interaction); }
       catch(e) { console.error('[logspanel btn error]', e.message, 'customId:', interaction.customId); throw e; }
     }
@@ -338,7 +338,7 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isStringSelectMenu()) {
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
     if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
-    if (interaction.customId.startsWith('logspanel_')) {
+    if (interaction.customId?.startsWith('logspanel_')) {
       try { return logspanel.handleSelect(interaction); }
       catch(e) { console.error('[logspanel handleSelect error]', e.message, 'customId:', interaction.customId, 'values:', interaction.values); throw e; }
     }
@@ -348,7 +348,7 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isModalSubmit()) {
     if (interaction.customId.startsWith('verify_deny_reason_')) return verifyModal(interaction);
     if (interaction.customId.startsWith('unverify_approve_reason_')) return unverifyModal(interaction);
-    if (interaction.customId.startsWith('logspanel_')) {
+    if (interaction.customId?.startsWith('logspanel_')) {
       try { return logspanel.handleModal(interaction); }
       catch(e) { console.error('[logspanel handleModal error]', e.message, 'customId:', interaction.customId); throw e; }
     }

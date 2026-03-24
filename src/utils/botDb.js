@@ -115,6 +115,7 @@ db.exec(`
     staff_role_id TEXT NOT NULL,
     ping_role_id TEXT NOT NULL,
     ticket_category_id TEXT NOT NULL,
+    transcripts_channel_id TEXT,
     created_by TEXT NOT NULL,
     ticket_count INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -150,6 +151,13 @@ try {
   db.prepare('SELECT status FROM ticket_channels LIMIT 1').get();
 } catch {
   db.exec("ALTER TABLE ticket_channels ADD COLUMN status TEXT DEFAULT 'open'");
+}
+
+// Migration: add transcripts_channel_id if missing
+try {
+  db.prepare('SELECT transcripts_channel_id FROM ticket_panels LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE ticket_panels ADD COLUMN transcripts_channel_id TEXT');
 }
 
 export default db;
@@ -316,11 +324,11 @@ export function getPortalUserById(userId) {
 
 // ── Ticket Panels ────────────────────────────────────────────────────────────
 
-export function saveTicketPanel({ name, introMessage, staffRoleId, pingRoleId, ticketCategoryId, createdBy }) {
+export function saveTicketPanel({ name, introMessage, staffRoleId, pingRoleId, ticketCategoryId, transcriptsChannelId, createdBy }) {
   return db.prepare(`
-    INSERT INTO ticket_panels (name, intro_message, staff_role_id, ping_role_id, ticket_category_id, created_by)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(name, introMessage, String(staffRoleId), String(pingRoleId), String(ticketCategoryId), String(createdBy));
+    INSERT INTO ticket_panels (name, intro_message, staff_role_id, ping_role_id, ticket_category_id, transcripts_channel_id, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(name, introMessage, String(staffRoleId), String(pingRoleId), String(ticketCategoryId), transcriptsChannelId ? String(transcriptsChannelId) : null, String(createdBy));
 }
 
 export function getTicketPanelByName(name) {

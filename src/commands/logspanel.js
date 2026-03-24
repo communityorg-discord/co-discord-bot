@@ -322,6 +322,7 @@ export async function handleSelect(interaction) {
 // Handle modal submit
 export async function handleModal(interaction) {
   const customId = interaction.customId;
+  if (!customId) return;
 
   // Global log channel modal
   if (customId.startsWith('logspanel_channel_global_')) {

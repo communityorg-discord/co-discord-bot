@@ -1,6 +1,109 @@
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from 'discord.js';
+import { randomBytes } from 'crypto';
 import { canRunCommand } from '../utils/permissions.js';
 import { getTicketPanelByName, getAllTicketPanels } from '../utils/botDb.js';
+
+// ── Shared transcript HTML generator ─────────────────────────────────────────
+
+function generateTranscriptHTML(messages, channel, guild, ticketMeta) {
+  const rows = messages.map(m => {
+    const time = new Date(m.createdTimestamp).toLocaleString('en-GB', { timeZone: 'UTC' });
+    const avatar = m.author.displayAvatarURL({ size: 64, extension: 'png' });
+    const authorName = m.author.displayName || m.author.username;
+
+    let resolvedContent = m.content || '';
+    if (resolvedContent) {
+      resolvedContent = resolvedContent.replace(/<@!?(\d+)>/g, (match, id) => {
+        const user = m.mentions.users.get(id) || m.mentions.members?.get(id);
+        return user ? '@' + (user.displayName || user.username || id) : '@' + id;
+      });
+      resolvedContent = resolvedContent.replace(/<#(\d+)>/g, (match, id) => {
+        const ch = m.mentions.channels?.get(id);
+        return ch ? '#' + ch.name : '#' + id;
+      });
+      resolvedContent = resolvedContent.replace(/<@&(\d+)>/g, (match, id) => {
+        const role = m.mentions.roles?.get(id);
+        return role ? '@' + role.name : '@' + id;
+      });
+      resolvedContent = resolvedContent.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    const hasTextContent = resolvedContent.trim().length > 0;
+    let content;
+    if (hasTextContent) {
+      content = resolvedContent;
+    } else if (m.embeds && m.embeds.size > 0) {
+      const firstEmbed = m.embeds[0];
+      const desc = firstEmbed.description || firstEmbed.title || '[embed]';
+      content = `<em style="color:#666">[Embed] ${desc.slice(0, 120)}</em>`;
+    } else if (m.attachments && m.attachments.size > 0) {
+      const attachmentNames = [...m.attachments.values()].map(a => a.name || a.filename).join(', ');
+      content = `<em style="color:#666">[Attachment(s)] ${attachmentNames}</em>`;
+    } else {
+      content = '<em style="color:#666">No text content</em>';
+    }
+
+    const attachments = [...m.attachments.values()].map(a =>
+      a.contentType?.startsWith('image/')
+        ? `<img src="${a.url}" style="max-width:300px;max-height:200px;border-radius:4px;margin-top:4px;display:block" />`
+        : `<a href="${a.url}" style="color:#7289da">${a.name}</a>`
+    ).join('');
+    const embeds = m.embeds.size > 0
+      ? `<div style="border-left:3px solid #7289da;padding:4px 8px;margin-top:4px;color:#aaa;font-size:12px">[${m.embeds.size} embed(s)]</div>`
+      : '';
+
+    return `<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid #2a2a2a">
+ <img src="${avatar}" style="width:36px;height:36px;border-radius:50%;flex-shrink:0" onerror="this.style.display='none'" />
+ <div style="flex:1;min-width:0">
+ <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+ <span style="font-weight:700;color:#fff">${authorName}</span>
+ <span style="font-size:11px;color:#666">${time} UTC</span>
+ ${m.author.bot ? '<span style="font-size:10px;background:#5865f2;color:#fff;padding:1px 5px;border-radius:3px">BOT</span>' : ''}
+ </div>
+ <div style="color:#dcddde;margin-top:2px;word-break:break-word">${content}</div>
+ ${attachments}
+ ${embeds}
+ </div></div>`;
+  }).join('');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ticket Transcript — #${channel.name}</title>
+<style>
+ * { box-sizing:border-box; margin:0; padding:0; }
+ body { background:#1a1a1a; color:#dcddde; font-family:'Segoe UI',sans-serif; font-size:14px; padding:20px; }
+ .header { background:#111; border:1px solid #333; border-radius:8px; padding:16px 20px; margin-bottom:20px; }
+ .header h1 { color:#fff; font-size:18px; margin-bottom:8px; }
+ .meta { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:8px; }
+ .meta-item { background:#222; border-radius:6px; padding:8px 12px; }
+ .meta-item .label { font-size:11px; color:#888; text-transform:uppercase; letter-spacing:.05em; }
+ .meta-item .value { color:#fff; font-weight:600; margin-top:2px; }
+ .messages { background:#111; border:1px solid #333; border-radius:8px; padding:0 16px; }
+ .count { color:#888; font-size:12px; margin-bottom:12px; padding-top:12px; }
+ .portal-badge { display:inline-block; margin-top:12px; padding:6px 12px; background:#5865f2; color:#fff; border-radius:6px; text-decoration:none; font-size:13px; font-weight:600; }
+</style>
+</head>
+<body>
+<div class="header">
+ <h1>🎫 Ticket Transcript</h1>
+ <div class="meta">
+ ${['Panel','Ticket #','Opened By','Claimed By','Server','Closed By','Status'].map(field => {
+   const key = field.toLowerCase().replace(/ /g,'_');
+   const val = ticketMeta[key] || ticketMeta[field.toLowerCase()] || '—';
+   return `<div class="meta-item"><div class="label">${field}</div><div class="value">${val}</div></div>`;
+ }).join('')}
+ </div>
+</div>
+<div class="messages">
+ <div class="count">${messages.length} message${messages.length !== 1 ? 's' : ''}</div>
+ ${rows}
+</div>
+</body>
+</html>`;
+}
 
 export const data = new SlashCommandBuilder()
   .setName('ticket-panel-send')
