@@ -34,7 +34,6 @@ import * as logspanel from './commands/logspanel.js';
 import * as cooldown from './commands/cooldown.js';
 import * as createTicketPanel from './commands/create-ticket-panel.js';
 import * as ticketPanelSend from './commands/ticket-panel-send.js';
-import { handleModal as createTicketPanelModal } from './commands/create-ticket-panel.js';
 import { handleTicketButton } from './commands/ticket-panel-send.js';
 
 config();
@@ -338,10 +337,6 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId.startsWith('logspanel_')) {
       try { return logspanel.handleModal(interaction); }
       catch(e) { console.error('[logspanel handleModal error]', e.message); throw e; }
-    }
-
-    if (interaction.customId === 'create_ticket_panel_modal') {
-      return createTicketPanelModal(interaction);
     }
 
     if (interaction.customId === 'dm_exempt_add_modal') {

@@ -24,3 +24,4 @@ export const FULL_MESSAGE_LOGS_CHANNEL_ID = '1485660587349512452'; // full-messa
 
 // Cooldown log channel
 export const COOLDOWN_LOG_CHANNEL_ID = '1485785753349914775'; // cooldown-logs
+export const MASS_UNBAN_LOG_CHANNEL_ID = '1485805505417973920'; // mass-unban-logs
