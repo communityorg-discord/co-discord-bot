@@ -472,6 +472,12 @@ client.on('interactionCreate', async interaction => {
       catch(e) { console.error('[inbox error]', e.message, 'customId:', interaction.customId); throw e; }
     }
 
+    // Personal inbox email button handlers
+    if (interaction.customId?.startsWith('inbox_personal_')) {
+      try { return inbox.handlePersonalEmailButton(interaction); }
+      catch(e) { console.error('[inbox personal btn error]', e.message); throw e; }
+    }
+
   }
 
   // String select menu handlers
@@ -570,6 +576,12 @@ client.on('interactionCreate', async interaction => {
     // Setup email modal
     if (interaction.customId === 'setup_email_modal') {
       return setupEmail.handleModal(interaction);
+    }
+
+    // Personal inbox email modal handlers
+    if (interaction.customId?.startsWith('inbox_personal_')) {
+      try { return inbox.handleInboxModal(interaction); }
+      catch(e) { console.error('[inbox personal modal error]', e.message); throw e; }
     }
 
     if (interaction.customId.startsWith('ticketopts_renamemodal_')) {

@@ -202,6 +202,19 @@ export async function pollPersonalInboxes(client) {
           const date = email.headers?.date?.[0] ? new Date(email.headers.date[0]).toLocaleString('en-GB') : '';
           const to = email.headers?.to?.[0] || setup.co_email;
 
+          // Fetch email body for content preview
+          let bodyPreview = '';
+          try {
+            const { fetchEmailBody } = await import('./emailService.js');
+            const fullEmail = await Promise.race([
+              fetchEmailBody(fakeInbox, email.uid),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+            ]);
+            const rawText = fullEmail.text || '';
+            bodyPreview = rawText.slice(0, 800).trim();
+            if (rawText.length > 800) bodyPreview += '...';
+          } catch { /* skip body if fetch fails */ }
+
           const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import('discord.js');
 
           const embed = new EmbedBuilder()
@@ -211,6 +224,7 @@ export async function pollPersonalInboxes(client) {
               { name: '📤 From', value: from.slice(0, 100), inline: true },
               { name: '📥 To', value: to.slice(0, 100), inline: true },
               { name: '📅 Date', value: date, inline: false },
+              ...(bodyPreview ? [{ name: '💬 Message', value: bodyPreview.slice(0, 1024), inline: false }] : []),
               { name: '📭 Status', value: 'No replies yet', inline: false },
             )
             .setFooter({ text: `Personal Inbox | UID: ${email.uid}` })
