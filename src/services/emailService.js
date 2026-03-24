@@ -48,13 +48,13 @@ export async function fetchEmailConfig() {
   const rows = res.data.values || [];
   const config = {};
 
-  // Row 0 is headers; cols: inbox_id, name, emoji, description, smtp_host, smtp_port, smtp_user, smtp_password, imap_host, imap_port, access_type, allowed_ids_or_role_ids
+  // Row 0 is headers; cols: inbox_id, name, emoji, description, smtp_host, smtp_port, smtp_user, smtp_password, imap_host, imap_port, imap_user, imap_password, access_type, allowed_ids_or_role_ids
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     const [
       inbox_id, name, emoji, description,
       smtp_host, smtp_port, smtp_user, smtp_password,
-      imap_host, imap_port, access_type, allowed_ids_or_role_ids,
+      imap_host, imap_port, imap_user, imap_password, access_type, allowed_ids_or_role_ids,
     ] = row;
 
     if (!inbox_id) continue;
