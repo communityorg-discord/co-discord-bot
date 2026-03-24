@@ -148,6 +148,11 @@ function buildInfoEmbed(guildId) {
 function buildCategorySelect(disabled = false) {
   const options = [
     {
+      label: 'Organisation Logs',
+      emoji: '🏢',
+      value: 'cat_orgwide'
+    },
+    {
       label: 'Global Logs',
       emoji: '🌐',
       value: 'cat_global_logs'
@@ -199,6 +204,42 @@ function buildGlobalTypeSelect(disabled = false) {
     new StringSelectMenuBuilder()
       .setCustomId('logspanel_global_type')
       .setPlaceholder('Select a global log type...')
+      .setOptions(options)
+      .setDisabled(disabled)
+  );
+}
+
+// Build orgwide log type select
+const ORGWIDE_LOG_TYPES = [
+  { key: 'member_join', label: 'Member Join Logs' },
+  { key: 'member_leave', label: 'Member Leave Logs' },
+  { key: 'role_change', label: 'Role Change Logs' },
+  { key: 'channel_change', label: 'Channel Change Logs' },
+  { key: 'message_delete', label: 'Message Delete Logs' },
+  { key: 'verification', label: 'Verification Logs' },
+  { key: 'mod_action', label: 'Moderation Action Logs' },
+  { key: 'case_action', label: 'Case Action Logs' },
+  { key: 'dm_log', label: 'DM Logs' },
+];
+
+function buildOrgwideTypeSelect(disabled = false) {
+  const orgwideTypes = ['member_join', 'member_leave', 'role_change', 'channel_change', 'message_delete', 'verification', 'mod_action', 'case_action', 'dm_log'];
+  const orgwideRows = [];
+  for (const t of orgwideTypes) {
+    const ch = getLogConfig('orgwide', t);
+    if (ch) orgwideRows.push(t);
+  }
+
+  const options = ORGWIDE_LOG_TYPES.map(({ key, label }) => ({
+    label,
+    value: `orgwide_${key}`,
+    description: orgwideRows.includes(key) ? 'Configured' : 'Not configured'
+  }));
+
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('logspanel_orgwide_type')
+      .setPlaceholder('Select an organisation log type...')
       .setOptions(options)
       .setDisabled(disabled)
   );
@@ -262,6 +303,20 @@ export async function handleSelect(interaction) {
   if (customId === 'logspanel_category') {
     const value = interaction.values[0];
 
+    // Organisation Logs category — show orgwide type select
+    if (value === 'cat_orgwide') {
+      const orgwideRow = buildOrgwideTypeSelect();
+      const backRow = buildBackButton();
+      const embed = buildInfoEmbed(interaction.guildId);
+
+      await interaction.update({
+        content: '🏢 **Organisation Logs** — Select the log type to configure, or go back:',
+        embeds: [embed],
+        components: [orgwideRow, backRow]
+      });
+      return;
+    }
+
     // Global Logs category — show global type select
     if (value === 'cat_global_logs') {
       const globalRow = buildGlobalTypeSelect();
@@ -303,6 +358,32 @@ export async function handleSelect(interaction) {
     const modal = new ModalBuilder()
       .setCustomId(`logspanel_channel_global_${globalKey}`)
       .setTitle(`${cat.emoji} ${cat.label} — Set Channel`);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('channel_id')
+          .setLabel('Channel ID')
+          .setStyle(1)
+          .setPlaceholder('Paste the channel ID here, or leave blank to disable')
+          .setRequired(false)
+      )
+    );
+
+    await interaction.showModal(modal);
+    return;
+  }
+
+  // Organisation-wide log type selected — show modal
+  if (customId === 'logspanel_orgwide_type') {
+    const value = interaction.values[0];
+    const typeKey = value.replace('orgwide_', '');
+    const typeMeta = ORGWIDE_LOG_TYPES.find(t => t.key === typeKey);
+    if (!typeMeta) return;
+
+    const modal = new ModalBuilder()
+      .setCustomId(`logspanel_channel_orgwide_${typeKey}`)
+      .setTitle(`🏢 ${typeMeta.label} — Set Channel`);
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(
@@ -397,6 +478,50 @@ export async function handleModal(interaction) {
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       color: 0x5865F2,
       description: `Global ${cat.label} ${targetChannel ? `set to ${targetChannel}` : 'cleared'} by <@${interaction.user.id}>`,
+      guildId: interaction.guildId
+    });
+    return;
+  }
+
+  // Organisation-wide log channel modal
+  if (customId.startsWith('logspanel_channel_orgwide_')) {
+    const typeKey = customId.replace('logspanel_channel_orgwide_', '');
+    const typeMeta = ORGWIDE_LOG_TYPES.find(t => t.key === typeKey);
+    if (!typeMeta) return;
+
+    const channelIdInput = interaction.fields.getTextInputValue('channel_id').trim();
+    let targetChannel = null;
+
+    if (channelIdInput) {
+      targetChannel = await interaction.guild.channels.fetch(channelIdInput).catch(() => null);
+      if (!targetChannel) {
+        return interaction.update({
+          content: `❌ Channel ID "${channelIdInput}" not found in this server.`,
+          components: []
+        });
+      }
+      setLogChannel('orgwide', typeKey, targetChannel.id);
+    } else {
+      setLogChannel('orgwide', typeKey, null);
+    }
+
+    const embed = buildInfoEmbed(interaction.guildId);
+    const categoryRow = buildCategorySelect();
+
+    await interaction.update({
+      content: targetChannel
+        ? `✅ ${typeMeta.label} set to ${targetChannel}`
+        : `✅ ${typeMeta.label} has been cleared (orgwide logs disabled)`,
+      embeds: [embed],
+      components: [categoryRow]
+    });
+
+    await logAction(interaction.client, {
+      action: '⚙️ Org Log Channel Configured',
+      target: null,
+      moderator: { discordId: interaction.user.id, name: interaction.user.username },
+      color: 0x5865F2,
+      description: `Orgwide ${typeMeta.label} ${targetChannel ? `set to ${targetChannel}` : 'cleared'} by <@${interaction.user.id}>`,
       guildId: interaction.guildId
     });
     return;
