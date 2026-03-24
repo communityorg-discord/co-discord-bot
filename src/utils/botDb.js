@@ -145,16 +145,6 @@ try {
   db.exec('ALTER TABLE ticket_channels ADD COLUMN claimed_by TEXT');
 }
 
-  CREATE TABLE IF NOT EXISTS ticket_channels (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    panel_id INTEGER NOT NULL,
-    discord_channel_id TEXT NOT NULL UNIQUE,
-    user_id TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (panel_id) REFERENCES ticket_panels(id)
-  );
-`);
-
 export default db;
 
 export function addDmExemption(discordId, displayName, exemptedBy) {
@@ -348,13 +338,25 @@ export function incrementTicketCount(panelId) {
   return panel ? panel.ticket_count : 1;
 }
 
-export function saveTicketChannel({ panelId, discordChannelId, userId }) {
+export function saveTicketChannel({ panelId, discordChannelId, userId, claimedBy = null }) {
   return db.prepare(`
-    INSERT INTO ticket_channels (panel_id, discord_channel_id, user_id)
-    VALUES (?, ?, ?)
-  `).run(panelId, String(discordChannelId), String(userId));
+    INSERT INTO ticket_channels (panel_id, discord_channel_id, user_id, claimed_by)
+    VALUES (?, ?, ?, ?)
+  `).run(panelId, String(discordChannelId), String(userId), claimedBy ? String(claimedBy) : null);
 }
 
 export function getTicketChannelByUser(panelId, userId) {
   return db.prepare('SELECT * FROM ticket_channels WHERE panel_id = ? AND user_id = ?').get(panelId, String(userId));
+}
+
+export function getTicketChannelByChannelId(discordChannelId) {
+  return db.prepare('SELECT * FROM ticket_channels WHERE discord_channel_id = ?').get(String(discordChannelId));
+}
+
+export function claimTicket(discordChannelId, moderatorId) {
+  return db.prepare('UPDATE ticket_channels SET claimed_by = ? WHERE discord_channel_id = ?').run(String(moderatorId), String(discordChannelId));
+}
+
+export function closeTicket(discordChannelId) {
+  return db.prepare('DELETE FROM ticket_channels WHERE discord_channel_id = ?').run(String(discordChannelId));
 }

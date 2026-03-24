@@ -36,7 +36,7 @@ import * as massUnban from './commands/mass-unban.js';
 import * as createTicketPanel from './commands/create-ticket-panel.js';
 import * as ticketPanelSend from './commands/ticket-panel-send.js';
 import * as deleteTicketPanel from './commands/delete-ticket-panel.js';
-import { handleTicketButton } from './commands/ticket-panel-send.js';
+import { handleTicketButton, handleTicketChannelButton } from './commands/ticket-panel-send.js';
 
 config();
 
@@ -139,6 +139,11 @@ client.on('interactionCreate', async interaction => {
     // Ticket create button
     if (interaction.customId.startsWith('ticket_create_')) {
       return handleTicketButton(interaction);
+    }
+
+    // Ticket channel buttons (claim / close)
+    if (interaction.customId.startsWith('ticket_claim_') || interaction.customId.startsWith('ticket_close_')) {
+      return handleTicketChannelButton(interaction);
     }
 
     // NID button handlers
