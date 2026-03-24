@@ -23,9 +23,10 @@ export async function execute(interaction) {
 
   if (sub === 'configure') {
     const portalUser = getUserByDiscordId(interaction.user.id);
-    if (!portalUser?.co_email) {
+    const userEmail = portalUser?.co_email || portalUser?.email || null;
+    if (!userEmail) {
       return interaction.reply({
-        content: '❌ No CO email address found for your account in the staff portal. Contact DMSPC to have your CO email set up first.',
+        content: '❌ No email address found for your account in the staff portal. Contact DMSPC to have your email set up first.',
         ephemeral: true,
       });
     }
@@ -40,7 +41,7 @@ export async function execute(interaction) {
           .setCustomId('email_display')
           .setLabel('Your CO Email (read only)')
           .setStyle(1)
-          .setValue(portalUser.co_email)
+          .setValue(userEmail)
           .setRequired(false)
       ),
       new ActionRowBuilder().addComponents(
@@ -95,11 +96,12 @@ export async function handleModal(interaction) {
   const password = interaction.fields.getTextInputValue('imap_password').trim();
   const portalUser = getUserByDiscordId(interaction.user.id);
 
-  if (!portalUser?.co_email) {
+  const userEmail = portalUser?.co_email || portalUser?.email || null;
+    if (!userEmail) {
     return interaction.reply({ content: '❌ CO email not found.', ephemeral: true });
   }
 
-  const coEmail = portalUser.co_email;
+  const coEmail = portalUser.co_email || portalUser.email;
 
   await interaction.deferReply({ ephemeral: true });
 
