@@ -147,6 +147,7 @@ async function showInbox(interaction, inbox, discordUserId, discordRoleIds, page
     const navRow = buildPaginationRow(inbox.inbox_id, page, totalPages);
     const backRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('inbox_back').setLabel('← Change Inbox').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`inbox_compose|${inbox.inbox_id}`).setLabel('✉️ Compose').setStyle(ButtonStyle.Primary),
     );
     await interaction.editReply({
       embeds: [embed],
@@ -200,6 +201,49 @@ async function showEmail(interaction, inbox, uid, discordUserId, discordRoleIds,
   } catch (err) {
     return interaction.editReply({ content: `⚠️ Error loading email: \`${err.message}\`` });
   }
+}
+
+async function showComposeModal(interaction, inboxId, cc) {
+  const safeCc = (cc || '').slice(0, 40).replace(/\|/g, '');
+  const modal = new ModalBuilder()
+    .setCustomId(`inbox_compose_submit|${inboxId}|${safeCc}`)
+    .setTitle('✉️ Compose New Email');
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('compose_to')
+        .setLabel('To')
+        .setStyle(1)
+        .setPlaceholder('recipient@example.com')
+        .setRequired(true)
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('compose_cc')
+        .setLabel('CC (comma separated, optional)')
+        .setStyle(1)
+        .setValue(cc || '')
+        .setPlaceholder('cc@example.com, another@example.com')
+        .setRequired(false)
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('compose_subject')
+        .setLabel('Subject')
+        .setStyle(1)
+        .setPlaceholder('Email subject...')
+        .setRequired(true)
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('compose_body')
+        .setLabel('Message')
+        .setStyle(2)
+        .setPlaceholder('Write your message...')
+        .setRequired(true)
+    ),
+  );
+  await interaction.showModal(modal);
 }
 
 export async function handleInboxInteraction(interaction) {
@@ -299,7 +343,6 @@ export async function handleInboxInteraction(interaction) {
       const inbox = config[inboxId];
       if (!inbox) return interaction.reply({ content: '❌ Inbox not found.', ephemeral: true });
 
-      // Fetch with 4s timeout for pre-fill data
       let original = {};
       try {
         original = await Promise.race([
@@ -373,6 +416,55 @@ export async function handleInboxInteraction(interaction) {
         ),
       );
       await interaction.showModal(modal);
+    }
+
+    if (customId.startsWith('inbox_compose|')) {
+      const inboxId = customId.split('|')[1];
+      const config = await fetchEmailConfig();
+      const allInboxes = Object.values(config);
+
+      const ccOptions = allInboxes.map(ib => ({
+        label: `${ib.emoji} ${ib.name}`,
+        value: ib.imap.user || ib.inbox_id,
+        description: ib.description?.slice(0, 50) || '',
+      })).filter(opt => opt.value);
+
+      if (ccOptions.length > 0) {
+        const ccRow = new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId(`inbox_compose_cc|${inboxId}`)
+            .setPlaceholder('CC a team inbox (optional)...')
+            .setMinValues(0)
+            .setMaxValues(Math.min(ccOptions.length, 5))
+            .addOptions(ccOptions.slice(0, 25))
+        );
+        const skipRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`inbox_compose_send|${inboxId}|`)
+            .setLabel('Skip CC — Compose Now')
+            .setStyle(ButtonStyle.Secondary),
+        );
+        await interaction.deferReply({ ephemeral: true }).catch(() => {});
+        return interaction.editReply({
+          content: '**✉️ New Email — Step 1:** Select team inboxes to CC (optional), or skip:',
+          components: [ccRow, skipRow],
+        });
+      } else {
+        return showComposeModal(interaction, inboxId, '');
+      }
+    }
+
+    if (customId.startsWith('inbox_compose_cc|')) {
+      const inboxId = customId.split('|')[1];
+      const ccAddresses = interaction.values.join(', ');
+      return showComposeModal(interaction, inboxId, ccAddresses);
+    }
+
+    if (customId.startsWith('inbox_compose_send|')) {
+      const parts = customId.split('|');
+      const inboxId = parts[1];
+      const cc = parts[2] || '';
+      return showComposeModal(interaction, inboxId, cc);
     }
 
     if (customId.startsWith('inbox_copy|')) {
@@ -452,6 +544,38 @@ export async function handleInboxModal(interaction) {
     if (!customId?.startsWith('inbox_')) return;
     const parts = customId.split('|');
     const actionFull = parts[0];
+
+    if (actionFull === 'inbox_compose_submit') {
+      const inboxId = parts[1];
+      const discordUserId = interaction.user.id;
+      const discordRoleIds = interaction.member?.roles?.cache?.map(r => r.id) || [];
+
+      const to = interaction.fields.getTextInputValue('compose_to').trim();
+      const cc = interaction.fields.getTextInputValue('compose_cc').trim();
+      const subject = interaction.fields.getTextInputValue('compose_subject').trim();
+      const body = interaction.fields.getTextInputValue('compose_body').trim();
+
+      const config = await fetchEmailConfig();
+      const inbox = config[inboxId];
+      if (!inbox) return interaction.reply({ content: '❌ Inbox not found.', ephemeral: true });
+
+      const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
+      if (!verified) return interaction.reply({ content: '❌ Access denied.', ephemeral: true });
+
+      try {
+        await sendReply(inbox, {
+          to,
+          cc: cc || undefined,
+          subject,
+          body,
+        }, discordUserId);
+        await interaction.reply({ content: `✅ Email sent to **${to}**${cc ? ` (CC: ${cc})` : ''}.`, ephemeral: true });
+      } catch (err) {
+        await interaction.reply({ content: `⚠️ Failed to send: \`${err.message}\``, ephemeral: true });
+      }
+      return;
+    }
+
     const inboxId = parts[1];
     const uid = parts[2];
     const page = parseInt(parts[3]) || 0;
