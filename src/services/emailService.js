@@ -17,6 +17,15 @@ function getPortalDb() {
   return _PORTAL_DB;
 }
 
+export function getSenderInfo(discordId) {
+  const db = getPortalDb();
+  const user = db.prepare('SELECT co_email, email, display_name FROM users WHERE discord_id = ?').get(String(discordId));
+  return {
+    email: user?.co_email || user?.email || null,
+    displayName: user?.display_name || null,
+  };
+}
+
 /** Look up a user's CO email by Discord ID. */
 export function getUserCoEmail(discordId) {
   const db = getPortalDb();
@@ -292,7 +301,7 @@ const BREVO_SENDER = {
  * @param {object} options - { to, cc, subject, body, inReplyTo, references }
  * @param {string} senderCoEmail - The sender's CO email address (from portal DB)
  */
-export async function sendEmailViaBrevo(options, senderCoEmail) {
+export async function sendEmailViaBrevo(options, senderCoEmail, fromEmail = null) {
   const { to, cc, subject, body, inReplyTo, references } = options;
 
   const payload = {
@@ -326,18 +335,26 @@ export async function sendEmailViaBrevo(options, senderCoEmail) {
  * Reply to an email — looks up sender's CO email and sends via Brevo.
  */
 export async function sendReply(inbox, options, discordUserId) {
-  const coEmail = getUserCoEmail(discordUserId);
+  const { email: coEmail, displayName } = getSenderInfo(discordUserId);
   if (!coEmail) throw new Error('No CO email found for user in portal');
-  return sendEmailViaBrevo(options, coEmail);
+  const fromEmail = inbox?.imap?.user || null;
+  const senderName = displayName
+    ? `${displayName} via ${inbox?.name || 'CO'}`
+    : (inbox?.name || 'CO');
+  return sendEmailViaBrevo({ ...options, senderName }, coEmail, fromEmail);
 }
 
 /**
  * Forward an email — looks up sender's CO email and sends via Brevo.
  */
 export async function sendForward(inbox, options, discordUserId) {
-  const coEmail = getUserCoEmail(discordUserId);
+  const { email: coEmail, displayName } = getSenderInfo(discordUserId);
   if (!coEmail) throw new Error('No CO email found for user in portal');
-  return sendEmailViaBrevo(options, coEmail);
+  const fromEmail = inbox?.imap?.user || null;
+  const senderName = displayName
+    ? `${displayName} via ${inbox?.name || 'CO'}`
+    : (inbox?.name || 'CO');
+  return sendEmailViaBrevo({ ...options, senderName }, coEmail, fromEmail);
 }
 
 // ─── Archive (IMAP move) ──────────────────────────────────────────────────────

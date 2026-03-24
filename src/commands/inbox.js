@@ -1,7 +1,7 @@
 import {
   SlashCommandBuilder, EmbedBuilder, ActionRowBuilder,
   StringSelectMenuBuilder, ButtonBuilder, ButtonStyle,
-  ModalBuilder, TextInputBuilder, ComponentType,
+  ModalBuilder, TextInputBuilder,
 } from 'discord.js';
 import {
   getAccessibleInboxes, fetchEmailConfig,
@@ -58,7 +58,7 @@ function buildEmailListEmbed(inbox, result, page) {
     return {
       label: subject.slice(0, 60),
       value: String(uid),
-      description: `From: ${from.slice(0, 20)} | ${date}`,
+      description: `From: ${from.slice(0, 40)} | ${date}`,
     };
   });
   const embed = new EmbedBuilder()
@@ -72,13 +72,11 @@ function buildEmailListEmbed(inbox, result, page) {
   return { embed, rows, totalPages };
 }
 
-function buildEmailActionRow(uid, page, inboxId, fromAddr = '', subject = '') {
-  const safeFrom = (fromAddr || '').slice(0, 20).replace(/[|]/g, '');
-  const safeSubject = (subject || '').slice(0, 20).replace(/[|]/g, '');
+function buildEmailActionRow(uid, page, inboxId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`inbox_read|${inboxId}|${uid}`).setLabel('Read').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`inbox_reply|${uid}|${page}|${inboxId}|${safeFrom}|${safeSubject}`).setLabel('Reply').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`inbox_forward|${uid}|${page}|${inboxId}|${safeFrom}|${safeSubject}`).setLabel('Forward').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`inbox_reply|${uid}|${page}|${inboxId}`).setLabel('Reply').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`inbox_forward|${uid}|${page}|${inboxId}`).setLabel('Forward').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`inbox_copy|${inboxId}|${uid}`).setLabel('Copy').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`inbox_archive|${uid}|${page}|${inboxId}`).setLabel('Archive').setStyle(ButtonStyle.Danger),
   );
@@ -184,7 +182,7 @@ async function showEmail(interaction, inbox, uid, discordUserId, discordRoleIds,
         { name: 'Date', value: dateStr, inline: false },
       )
       .setFooter({ text: `UID: ${uid} | ${inbox.name}` });
-    const actionRow = buildEmailActionRow(uid, page, inbox.inbox_id, fromAddr, subject);
+    const actionRow = buildEmailActionRow(uid, page, inbox.inbox_id);
     const backButton = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`inbox_back_email|${inbox.inbox_id}|${page}`)
@@ -296,9 +294,24 @@ export async function handleInboxInteraction(interaction) {
       const uid = parts[1];
       const page = parseInt(parts[2]) || 0;
       const inboxId = parts[3];
-      const fromAddr = parts[4] || '';
-      const originalSubject = parts[5] || '';
-      const replySubject = originalSubject.startsWith('Re:') ? originalSubject : `Re: ${originalSubject}`;
+
+      const config = await fetchEmailConfig();
+      const inbox = config[inboxId];
+      if (!inbox) return interaction.reply({ content: '❌ Inbox not found.', ephemeral: true });
+
+      // Fetch with 4s timeout for pre-fill data
+      let original = {};
+      try {
+        original = await Promise.race([
+          fetchEmailBody(inbox, uid),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
+        ]);
+      } catch { /* use empty pre-fill */ }
+
+      const replySubject = original.subject
+        ? (original.subject.startsWith('Re:') ? original.subject : `Re: ${original.subject}`)
+        : '';
+      const replyTo = original.from?.address || '';
 
       const modal = new ModalBuilder()
         .setCustomId(`inbox_reply_send|${inboxId}|${uid}|${page}`)
@@ -306,7 +319,7 @@ export async function handleInboxInteraction(interaction) {
       modal.addComponents(
         new ActionRowBuilder().addComponents(
           new TextInputBuilder().setCustomId('reply_to').setLabel('To').setStyle(1)
-            .setValue(fromAddr).setPlaceholder('recipient@example.com').setRequired(true)
+            .setValue(replyTo).setPlaceholder('recipient@example.com').setRequired(true)
         ),
         new ActionRowBuilder().addComponents(
           new TextInputBuilder().setCustomId('reply_subject').setLabel('Subject').setStyle(1)
@@ -325,9 +338,22 @@ export async function handleInboxInteraction(interaction) {
       const uid = parts[1];
       const page = parseInt(parts[2]) || 0;
       const inboxId = parts[3];
-      const fromAddr = parts[4] || '';
-      const originalSubject = parts[5] || '';
-      const fwdSubject = originalSubject.startsWith('Fwd:') ? originalSubject : `Fwd: ${originalSubject}`;
+
+      const config = await fetchEmailConfig();
+      const inbox = config[inboxId];
+      if (!inbox) return interaction.reply({ content: '❌ Inbox not found.', ephemeral: true });
+
+      let original = {};
+      try {
+        original = await Promise.race([
+          fetchEmailBody(inbox, uid),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
+        ]);
+      } catch { /* use empty pre-fill */ }
+
+      const fwdSubject = original.subject
+        ? (original.subject.startsWith('Fwd:') ? original.subject : `Fwd: ${original.subject}`)
+        : '';
 
       const modal = new ModalBuilder()
         .setCustomId(`inbox_forward_send|${inboxId}|${uid}|${page}`)
