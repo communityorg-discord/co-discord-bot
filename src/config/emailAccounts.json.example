@@ -1,0 +1,186 @@
+{
+  "_comment": "Rename this file to emailAccounts.json after filling in credentials",
+  "_schema_version": "1.0",
+
+  "inboxes": {
+    "audit_vault": {
+      "_comment": "🔐 RESTRICTED: Only these 3 IDs can access — no exceptions, no EOB",
+      "id": "audit_vault",
+      "name": "Audit Vault",
+      "emoji": "🔐",
+      "description": "Internal Audit and Compliance Inbox",
+      "smtp": {
+        "host": "smtp-mail.outlook.com",
+        "port": 587,
+        "user": "audit@yourdomain.com",
+        "password": "YOUR_PASSWORD_HERE",
+        "secure": false
+      },
+      "imap": {
+        "host": "imap-mail.outlook.com",
+        "port": 993,
+        "user": "audit@yourdomain.com",
+        "password": "YOUR_PASSWORD_HERE",
+        "secure": true
+      },
+      "folders": {
+        "inbox": "INBOX",
+        "sent": "Sent",
+        "archive": "Archive"
+      },
+      "access": {
+        "_comment": "type must be 'ids' — EOB is explicitly blocked from this inbox",
+        "type": "ids",
+        "ids": [
+          "723199054514749450",
+          "415922272956710912",
+          "1013486189891817563"
+        ]
+      }
+    },
+
+    "executive_operations": {
+      "_comment": "🏛️ EOB global viewer — sees all inboxes EXCEPT Audit Vault",
+      "id": "executive_operations",
+      "name": "Executive Operations Board",
+      "emoji": "🏛️",
+      "description": "EOB Global Inbox — all team emails",
+      "smtp": {
+        "host": "smtp-mail.outlook.com",
+        "port": 587,
+        "user": "eob@yourdomain.com",
+        "password": "YOUR_PASSWORD_HERE",
+        "secure": false
+      },
+      "imap": {
+        "host": "imap-mail.outlook.com",
+        "port": 993,
+        "user": "eob@yourdomain.com",
+        "password": "YOUR_PASSWORD_HERE",
+        "secure": true
+      },
+      "folders": {
+        "inbox": "INBOX",
+        "sent": "Sent",
+        "archive": "Archive"
+      },
+      "access": {
+        "_comment": "type 'eob' grants global viewer access to all non-audit_vault inboxes",
+        "type": "eob",
+        "_comment_roleIds": "Add Discord role IDs for EOB members here",
+        "roleIds": [
+          "DISCORD_ROLE_ID_EOB_HERE"
+        ]
+      }
+    },
+
+    "hr_department": {
+      "_comment": "👥 HR team only + EOB global viewer",
+      "id": "hr_department",
+      "name": "HR Department",
+      "emoji": "👥",
+      "description": "HR Team Inbox",
+      "smtp": {
+        "host": "",
+        "port": 587,
+        "user": "",
+        "password": "",
+        "secure": false
+      },
+      "imap": {
+        "host": "",
+        "port": 993,
+        "user": "",
+        "password": "",
+        "secure": true
+      },
+      "folders": {
+        "inbox": "INBOX",
+        "sent": "Sent",
+        "archive": "Archive"
+      },
+      "access": {
+        "_comment": "type 'role' restricts to specific Discord role IDs",
+        "type": "role",
+        "roleIds": [
+          "DISCORD_ROLE_ID_HR_HERE"
+        ]
+      }
+    },
+
+    "it_support": {
+      "_comment": "🖥️ IT support team only + EOB global viewer",
+      "id": "it_support",
+      "name": "IT Support",
+      "emoji": "🖥️",
+      "description": "IT Support Team Inbox",
+      "smtp": {
+        "host": "",
+        "port": 587,
+        "user": "",
+        "password": "",
+        "secure": false
+      },
+      "imap": {
+        "host": "",
+        "port": 993,
+        "user": "",
+        "password": "",
+        "secure": true
+      },
+      "folders": {
+        "inbox": "INBOX",
+        "sent": "Sent",
+        "archive": "Archive"
+      },
+      "access": {
+        "type": "role",
+        "roleIds": [
+          "DISCORD_ROLE_ID_IT_HERE"
+        ]
+      }
+    },
+
+    "finance": {
+      "_comment": "💰 Finance team only + EOB global viewer",
+      "id": "finance",
+      "name": "Finance",
+      "emoji": "💰",
+      "description": "Finance Team Inbox",
+      "smtp": {
+        "host": "",
+        "port": 587,
+        "user": "",
+        "password": "",
+        "secure": false
+      },
+      "imap": {
+        "host": "",
+        "port": 993,
+        "user": "",
+        "password": "",
+        "secure": true
+      },
+      "folders": {
+        "inbox": "INBOX",
+        "sent": "Sent",
+        "archive": "Archive"
+      },
+      "access": {
+        "type": "role",
+        "roleIds": [
+          "DISCORD_ROLE_ID_FINANCE_HERE"
+        ]
+      }
+    }
+  },
+
+  "_field_guide": {
+    "smtp_port": "587 = TLS, 465 = SSL, 25 = no encryption (not recommended)",
+    "imap_port": "993 = IMAPS (SSL), 143 = IMAP (STARTTLS)",
+    "imap_secure": "true for port 993, false for port 143",
+    "smtp_secure": "true for port 465, false for port 587 (use STARTTLS)",
+    "roleIds": "Find a Discord role ID by enabling Developer Mode → right-click role → Copy Role ID",
+    "userIds": "Find a Discord user ID by enabling Developer Mode → right-click user → Copy User ID"
+  }
+}
