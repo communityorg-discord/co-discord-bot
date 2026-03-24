@@ -110,6 +110,21 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
+  // Autocomplete for ticket-panel-send
+  if (interaction.isAutocomplete() && interaction.commandName === 'ticket-panel-send') {
+    const { getAllTicketPanels } = await import('./utils/botDb.js');
+    const panels = getAllTicketPanels();
+    const focused = interaction.options.getFocused(true);
+    if (focused.name === 'panel_name') {
+      const value = focused.value.toLowerCase();
+      const choices = panels
+        .filter(p => p.name.toLowerCase().includes(value))
+        .slice(0, 25)
+        .map(p => ({ name: p.name, value: p.name }));
+      return interaction.respond(choices).catch(() => {});
+    }
+  }
+
   if (interaction.isButton()) {
     // Verify/Unverify button handlers
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
@@ -123,21 +138,6 @@ client.on('interactionCreate', async interaction => {
     // Ticket create button
     if (interaction.customId.startsWith('ticket_create_')) {
       return handleTicketButton(interaction);
-    }
-
-    // Autocomplete for ticket-panel-send
-    if (interaction.isAutocomplete() && interaction.commandName === 'ticket-panel-send') {
-      const { getAllTicketPanels } = await import('./utils/botDb.js');
-      const panels = getAllTicketPanels();
-      const focused = interaction.options.getFocused(true);
-      if (focused.name === 'panel_name') {
-        const value = focused.value.toLowerCase();
-        const choices = panels
-          .filter(p => p.name.toLowerCase().includes(value))
-          .slice(0, 25)
-          .map(p => ({ name: p.name, value: p.name }));
-        return interaction.respond(choices).catch(() => {});
-      }
     }
 
     // NID button handlers

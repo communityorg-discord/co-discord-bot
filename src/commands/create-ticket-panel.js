@@ -67,7 +67,7 @@ export async function execute(interaction) {
 
 // Handle modal submit — imported and called from index.js
 export async function handleModal(interaction) {
-  if (!interaction.customId === 'create_ticket_panel_modal') return;
+  if (interaction.customId !== 'create_ticket_panel_modal') return;
 
   const panelName = interaction.fields.getTextInputValue('panel_name').trim();
   const introMessage = interaction.fields.getTextInputValue('intro_message').trim();
