@@ -1,11 +1,22 @@
 import Imap from 'imap';
 import { simpleParser } from 'mailparser';
-import nodemailer from 'nodemailer';
+import fetch from 'node-fetch';
 import { readFileSync } from 'fs';
+import Database from 'better-sqlite3';
 import { GoogleAuth } from 'google-auth-library';
 import { google } from 'googleapis';
 
-// ─── Google Sheets Config Loader ─────────────────────────────────────────────
+// ─── Portal DB ────────────────────────────────────────────────────────────────
+
+const PORTAL_DB = new Database(process.env.PORTAL_DB_PATH, { readonly: true });
+
+/** Look up a user's CO email by Discord ID. */
+export function getUserCoEmail(discordId) {
+  const user = PORTAL_DB.prepare('SELECT co_email, email, display_name FROM users WHERE discord_id = ?').get(String(discordId));
+  return user?.co_email || user?.email || null;
+}
+
+// ─── Google Sheets Config Loader ───────────────────────────────────────────────
 
 const EMAIL_CONFIG_PATH = './src/config/emailConfig.json';
 const EMAIL_ACCOUNTS_SHEET = JSON.parse(readFileSync(EMAIL_CONFIG_PATH, 'utf8'));
@@ -15,7 +26,7 @@ let cacheTime = 0;
 const CACHE_TTL_MS = 60_000; // 1 minute
 
 /**
- * Fetch email accounts from Google Sheet.
+ * Fetch email accounts from Google Sheet (IMAP credentials only).
  * Cached for CACHE_TTL_MS to avoid hammering the API.
  */
 export async function fetchEmailConfig() {
@@ -37,7 +48,7 @@ export async function fetchEmailConfig() {
   const rows = res.data.values || [];
   const config = {};
 
-  // Row 0 is headers: inbox_id, name, emoji, description, smtp_host, smtp_port, smtp_user, smtp_password, imap_host, imap_port, access_type, allowed_ids_or_role_ids
+  // Row 0 is headers; cols: inbox_id, name, emoji, description, smtp_host, smtp_port, smtp_user, smtp_password, imap_host, imap_port, access_type, allowed_ids_or_role_ids
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     const [
@@ -48,7 +59,6 @@ export async function fetchEmailConfig() {
 
     if (!inbox_id) continue;
 
-    // Parse allowed IDs — comma-separated in one cell
     const allowedList = (allowed_ids_or_role_ids || '')
       .split(',')
       .map(s => s.trim())
@@ -59,19 +69,18 @@ export async function fetchEmailConfig() {
       name: name || inbox_id,
       emoji: emoji || '📧',
       description: description || '',
-      smtp: {
-        host: smtp_host || '',
-        port: parseInt(smtp_port) || 587,
-        user: smtp_user || '',
-        password: smtp_password || '',
-        secure: parseInt(smtp_port) === 465,
-      },
+      // IMAP only — SMTP is handled by Brevo
       imap: {
         host: imap_host || '',
         port: parseInt(imap_port) || 993,
-        user: imap_user || '',
-        password: imap_password || '',
+        user: imap_user || smtp_user || '',
+        password: imap_password || smtp_password || '',
         secure: parseInt(imap_port) === 993,
+      },
+      folders: {
+        inbox: 'INBOX',
+        sent: 'Sent',
+        archive: 'Archive',
       },
       access: {
         type: access_type || 'role',
@@ -95,17 +104,11 @@ export async function getAccessibleInboxes(discordUserId, discordRoleIds = []) {
 
   for (const [id, inbox] of Object.entries(allInboxes)) {
     if (inbox.access.type === 'ids') {
-      // Audit Vault — only the 3 hardcoded IDs
-      if (inbox.access.ids.includes(discordUserId)) {
-        accessible.push(inbox);
-      }
+      if (inbox.access.ids.includes(discordUserId)) accessible.push(inbox);
     } else if (inbox.access.type === 'eob') {
-      // EOB global viewer — blocked from audit_vault, sees all others
       if (id === 'audit_vault') continue;
-      // EOB sees all role-based inboxes
       accessible.push(inbox);
     } else if (inbox.access.type === 'role') {
-      // Team inbox — user must have one of the allowed roles
       const hasRole = inbox.access.roleIds.some(rid => discordRoleIds.includes(rid));
       if (hasRole) accessible.push(inbox);
     }
@@ -114,7 +117,7 @@ export async function getAccessibleInboxes(discordUserId, discordRoleIds = []) {
   return accessible;
 }
 
-// ─── IMAP Connection ──────────────────────────────────────────────────────────
+// ─── IMAP Connection ───────────────────────────────────────────────────────────
 
 function createImapConnection(inbox) {
   return new Imap({
@@ -128,54 +131,52 @@ function createImapConnection(inbox) {
 }
 
 /**
- * Fetch inbox emails. Returns array of email summaries (newest first).
+ * Fetch inbox emails — newest first, paginated.
  */
 export async function fetchInboxEmails(inbox, page = 0, perPage = 10) {
   return new Promise((resolve, reject) => {
     const imap = createImapConnection(inbox);
-    const emails = [];
 
     imap.once('ready', () => {
       imap.openBox(inbox.folders?.inbox || 'INBOX', true, (err, box) => {
         if (err) { imap.end(); return reject(err); }
 
-        const start = Math.max(0, box.messages.total - (page + 1) * perPage);
-        const end = box.messages.total - page * perPage;
-
-        if (box.messages.total === 0) {
+        const total = box.messages.total;
+        if (total === 0) {
           imap.end();
           return resolve({ emails: [], total: 0, page, perPage });
         }
 
-        const fetch = imap.seq.fetch(`${start + 1}:${end}`, {
+        const start = Math.max(1, total - (page + 1) * perPage + 1);
+        const end = Math.min(total, total - page * perPage);
+
+        const fetch = imap.seq.fetch(`${start}:${end}`, {
           bodies: 'HEADER.FIELDS (FROM SUBJECT DATE TO CC)',
           struct: true,
         });
 
+        const emails = [];
         fetch.on('message', (msg) => {
-          const email = { headers: {}, body: '', uid: null, seqno: null };
+          const email = { headers: {}, uid: null, seqno: null };
           msg.on('body', (stream, info) => {
             let buffer = '';
             stream.on('data', chunk => { buffer += chunk.toString('utf8'); });
             stream.once('end', () => {
-              const parsed = Imap.parseHeader(buffer);
-              email.headers = parsed;
+              email.headers = Imap.parseHeader(buffer);
             });
           });
           msg.once('attributes', (attrs) => {
             email.uid = attrs.uid;
             email.seqno = info.seqno;
-            email.flags = attrs.flags;
           });
           msg.once('done', () => emails.push(email));
         });
 
         fetch.once('error', (err) => { imap.end(); reject(err); });
         fetch.once('end', () => {
-          // Sort newest first (seqno descending)
           emails.sort((a, b) => b.seqno - a.seqno);
           imap.end();
-          resolve({ emails, total: box.messages.total, page, perPage });
+          resolve({ emails, total, page, perPage });
         });
       });
     });
@@ -186,7 +187,7 @@ export async function fetchInboxEmails(inbox, page = 0, perPage = 10) {
 }
 
 /**
- * Fetch a single email body by UID.
+ * Fetch full email body by UID.
  */
 export async function fetchEmailBody(inbox, uid) {
   return new Promise((resolve, reject) => {
@@ -213,6 +214,7 @@ export async function fetchEmailBody(inbox, uid) {
                   date: parsed.date || new Date(),
                   text: parsed.text || '',
                   html: parsed.html || '',
+                  headers: parsed.headers,
                   textAsHtml: markdownToDiscord(parsed.text || ''),
                 });
               } catch (e) {
@@ -232,36 +234,69 @@ export async function fetchEmailBody(inbox, uid) {
   });
 }
 
-// ─── SMTP ─────────────────────────────────────────────────────────────────────
+// ─── Brevo Email Sending ───────────────────────────────────────────────────────
 
-function createSmtpTransport(inbox) {
-  return nodemailer.createTransport({
-    host: inbox.smtp.host,
-    port: inbox.smtp.port,
-    secure: inbox.smtp.secure,
-    auth: { user: inbox.smtp.user, pass: inbox.smtp.password },
-    tls: { rejectUnauthorized: false },
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
+
+const BREVO_SENDER = {
+  name: 'CO Bot',
+  email: 'noreply@communityorg.co.uk',
+};
+
+/**
+ * Send email via Brevo API.
+ * @param {object} options - { to, cc, subject, body, inReplyTo, references }
+ * @param {string} senderCoEmail - The sender's CO email address (from portal DB)
+ */
+export async function sendEmailViaBrevo(options, senderCoEmail) {
+  const { to, cc, subject, body, inReplyTo, references } = options;
+
+  const payload = {
+    sender: {
+      name: senderCoEmail.split('@')[0],
+      email: BREVO_SENDER.email, // Brevo requires verified sender — relay from noreply@
+    },
+    to: Array.isArray(to) ? to.map(t => typeof t === 'string' ? { email: t } : t) : [{ email: to }],
+    ...(cc ? { cc: Array.isArray(cc) ? cc.map(c => typeof c === 'string' ? { email: c } : c) : [{ email: cc }] } : {}),
+    subject,
+    htmlContent: `<html><body style="font-family: Arial, sans-serif;"><pre style="white-space: pre-wrap;">${body.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre></body></html>`,
+    ...(inReplyTo ? { replyTo: { email: senderCoEmail, name: senderCoEmail.split('@')[0] } } : {}),
+    ...(references ? { headers: { references } } : {}),
+  };
+
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'api-key': BREVO_API_KEY,
+    },
+    body: JSON.stringify(payload),
   });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Brevo send failed');
+  return { messageId: data.messageId };
 }
 
 /**
- * Send an email reply or forward.
+ * Reply to an email — looks up sender's CO email and sends via Brevo.
  */
-export async function sendEmail(inbox, options) {
-  const { to, cc, subject, body, inReplyTo, references } = options;
-  const transport = createSmtpTransport(inbox);
-
-  const info = await transport.sendMail({
-    from: inbox.smtp.user,
-    to,
-    cc,
-    subject,
-    text: body,
-    ...(inReplyTo ? { inReplyTo, references } : {}),
-  });
-
-  return { messageId: info.messageId };
+export async function sendReply(inbox, options, discordUserId) {
+  const coEmail = getUserCoEmail(discordUserId);
+  if (!coEmail) throw new Error('No CO email found for user in portal');
+  return sendEmailViaBrevo(options, coEmail);
 }
+
+/**
+ * Forward an email — looks up sender's CO email and sends via Brevo.
+ */
+export async function sendForward(inbox, options, discordUserId) {
+  const coEmail = getUserCoEmail(discordUserId);
+  if (!coEmail) throw new Error('No CO email found for user in portal');
+  return sendEmailViaBrevo(options, coEmail);
+}
+
+// ─── Archive (IMAP move) ──────────────────────────────────────────────────────
 
 /**
  * Move an email to the Archive folder.
@@ -290,20 +325,15 @@ export async function archiveEmail(inbox, uid) {
 // ─── HTML → Discord-safe Markdown ─────────────────────────────────────────────
 
 /**
- * Strip HTML tags and convert to simple Discord-friendly markdown.
- * Handles code blocks, bold, italic, links, and line breaks.
+ * Strip HTML and convert to simple Discord-friendly markdown.
  */
 export function markdownToDiscord(text) {
   if (!text) return '';
   return text
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
     .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n').replace(/<\/div>/gi, '\n')
     .replace(/<pre><code[^>]*>([\s\S]*?)<\/code><\/pre>/gi, '```\n$1\n```')
     .replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, '`$1`')
     .replace(/<b>([\s\S]*?)<\/b>/gi, '**$1**')
@@ -319,7 +349,7 @@ export function markdownToDiscord(text) {
 }
 
 /**
- * Split text into chunks safe for Discord (2000 chars max).
+ * Split text into Discord-safe chunks (2000 chars max).
  */
 export function paginateText(text, maxLen = 2000) {
   const chunks = [];

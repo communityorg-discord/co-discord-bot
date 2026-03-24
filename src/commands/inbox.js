@@ -5,7 +5,8 @@ import {
 } from 'discord.js';
 import {
   getAccessibleInboxes, fetchEmailConfig,
-  fetchInboxEmails, fetchEmailBody, sendEmail, archiveEmail,
+  fetchInboxEmails, fetchEmailBody,
+  sendReply, sendForward, archiveEmail,
   markdownToDiscord, paginateText,
 } from '../services/emailService.js';
 
@@ -537,13 +538,13 @@ export async function handleInboxModal(interaction) {
       let original = {};
       try { original = await fetchEmailBody(inbox, uid); } catch { /* ok */ }
 
-      await sendEmail(inbox, {
+      await sendReply(inbox, {
         to: replyTo,
         subject,
         body,
         inReplyTo: original.headers?.['message-id']?.[0],
         references: original.headers?.['references']?.[0],
-      });
+      }, discordUserId);
 
       await interaction.reply({ content: '✅ Reply sent.', ephemeral: true });
       await interaction.message.delete();
@@ -572,11 +573,11 @@ export async function handleInboxModal(interaction) {
         original.text || '',
       ].join('');
 
-      await sendEmail(inbox, {
+      await sendForward(inbox, {
         to: forwardTo,
         subject: subject || `Fwd: ${original.subject || ''}`,
         body: forwardedBody,
-      });
+      }, discordUserId);
 
       await interaction.reply({ content: '✅ Email forwarded.', ephemeral: true });
       await interaction.message.delete();
