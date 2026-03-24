@@ -23,6 +23,7 @@ const CATEGORIES = {
     emoji: '✅',
     types: {
       verify_unverify: { label: 'Verify/Unverify Logs', channelIdField: 'mod_log_channel_id' },
+      dm: { label: 'DM Logs', channelIdField: 'dm_log_channel_id' },
     }
   },
   message: {
@@ -219,11 +220,17 @@ export async function handleSelect(interaction) {
 
   // Type selected — show modal to pick channel
   if (customId.startsWith('logspanel_type_')) {
-    // interaction.values[0] is 'type_categoryKey_typeKey', extract from there
-    const valueParts = interaction.values[0].split('_');
-    // valueParts = ['type', 'moderation', 'ban_unban']
-    const categoryKey = valueParts[1];
-    const typeKey = valueParts[2];
+    // interaction.values[0] is 'type_categoryKey_typeKey' where typeKey may contain underscores
+    // e.g. 'type_moderation_ban_unban' -> category='moderation', type='ban_unban'
+    const valuePrefix = 'type_';
+    const value = interaction.values[0];
+    if (!value.startsWith(valuePrefix)) return;
+
+    const rest = value.slice(valuePrefix.length); // 'moderation_ban_unban'
+    const firstUnderscore = rest.indexOf('_');
+    const categoryKey = rest.slice(0, firstUnderscore); // 'moderation'
+    const typeKey = rest.slice(firstUnderscore + 1); // 'ban_unban'
+
     const cat = CATEGORIES[categoryKey];
     const type = cat?.types[typeKey];
     if (!cat || !type) return;
@@ -254,11 +261,10 @@ export async function handleModal(interaction) {
   // logspanel_channel_category_type -> extract category and type
   // type can have underscores (e.g. ban_unban), so split from end
   const prefix = 'logspanel_channel_';
-  const rest = interaction.customId.slice(prefix.length);
-  // last _ separated part is type, everything before is category
-  const lastUnderscore = rest.lastIndexOf('_');
-  const categoryKey = rest.slice(0, lastUnderscore);
-  const typeKey = rest.slice(lastUnderscore + 1);
+  const rest = interaction.customId.slice(prefix.length); // 'moderation_ban_unban'
+  const firstUnderscore = rest.indexOf('_');
+  const categoryKey = rest.slice(0, firstUnderscore); // 'moderation'
+  const typeKey = rest.slice(firstUnderscore + 1); // 'ban_unban'
 
   const channelIdInput = interaction.fields.getTextInputValue('channel_id').trim();
 
