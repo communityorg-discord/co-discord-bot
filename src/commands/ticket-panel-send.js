@@ -13,8 +13,9 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
-  if (!await canRunCommand(interaction.user.id, 7)) {
-    return interaction.reply({ content: '❌ You do not have permission to send ticket panels.', ephemeral: true });
+  const auth = await canRunCommand(interaction.user.id, 7);
+  if (!auth.allowed) {
+    return interaction.reply({ content: `❌ ${auth.reason}`, ephemeral: true });
   }
 
   const panelName = interaction.options.getString('panel_name');
