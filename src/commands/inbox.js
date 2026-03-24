@@ -212,7 +212,7 @@ export async function handleInboxInteraction(interaction) {
     if (!verified) {
       return interaction.reply({ content: '❌ Access denied.', ephemeral: true });
     }
-    await interaction.message.delete();
+    await interaction.message.delete().catch(() => {});
     return showInbox(interaction, inbox, discordUserId, discordRoleIds, 0);
   }
 
@@ -233,13 +233,13 @@ export async function handleInboxInteraction(interaction) {
       return interaction.reply({ content: '❌ Access denied.', ephemeral: true });
     }
 
-    await interaction.message.delete();
+    await interaction.message.delete().catch(() => {});
     return showEmail(interaction, inbox, uid, discordUserId, discordRoleIds, page);
   }
 
   // ── Back to inbox select ───────────────────────────────────────────────────
   if (customId === 'inbox_back') {
-    await interaction.message.delete();
+    await interaction.message.delete().catch(() => {});
     return execute(interaction);
   }
 
@@ -260,7 +260,7 @@ export async function handleInboxInteraction(interaction) {
       return interaction.reply({ content: '❌ Access denied.', ephemeral: true });
     }
 
-    await interaction.message.delete();
+    await interaction.message.delete().catch(() => {});
     return showInbox(interaction, inbox, discordUserId, discordRoleIds, newPage);
   }
 
@@ -298,7 +298,7 @@ export async function handleInboxInteraction(interaction) {
       await archiveEmail(inbox, uid);
       await interaction.reply({ content: '✅ Email archived.', ephemeral: true });
       // Refresh the inbox
-      await interaction.message.delete();
+      await interaction.message.delete().catch(() => {});
       return showInbox(interaction, inbox, discordUserId, discordRoleIds, page);
     } catch (err) {
       return interaction.reply({ content: `⚠️ Archive failed: \`${err.message}\``, ephemeral: true });
@@ -547,7 +547,7 @@ export async function handleInboxModal(interaction) {
       }, discordUserId);
 
       await interaction.reply({ content: '✅ Reply sent.', ephemeral: true });
-      await interaction.message.delete();
+      await interaction.message.delete().catch(() => {});
       return showInbox(interaction, inbox, discordUserId, discordRoleIds, page);
     } catch (err) {
       return interaction.reply({ content: `⚠️ Send failed: \`${err.message}\``, ephemeral: true });
@@ -580,7 +580,7 @@ export async function handleInboxModal(interaction) {
       }, discordUserId);
 
       await interaction.reply({ content: '✅ Email forwarded.', ephemeral: true });
-      await interaction.message.delete();
+      await interaction.message.delete().catch(() => {});
       return showInbox(interaction, inbox, discordUserId, discordRoleIds, page);
     } catch (err) {
       return interaction.reply({ content: `⚠️ Forward failed: \`${err.message}\``, ephemeral: true });
