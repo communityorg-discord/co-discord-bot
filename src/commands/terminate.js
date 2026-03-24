@@ -57,7 +57,6 @@ export async function execute(interaction) {
     specificChannelId: TERMINATE_LOG_CHANNEL_ID,
     guildId: interaction.guildId,
     logType: 'moderation.terminate',
-    globalLogType: 'global_moderation',
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()

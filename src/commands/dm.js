@@ -141,7 +141,6 @@ export async function execute(interaction) {
         specificChannelId: DM_LOG_CHANNEL_ID,
     guildId: interaction.guildId,
     logType: 'verification.dm',
-    globalLogType: 'global_verification',
       });
 
       return interaction.editReply({

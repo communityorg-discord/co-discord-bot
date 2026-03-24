@@ -69,8 +69,7 @@ export async function execute(interaction) {
     ],
     specificChannelId: BAN_UNBAN_LOG_CHANNEL_ID,
     guildId: interaction.guildId,
-    logType: 'moderation.ban_unban',
-    globalLogType: 'global_moderation'
+    logType: 'moderation.ban_unban'
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()

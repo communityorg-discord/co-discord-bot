@@ -180,7 +180,6 @@ export async function handleModal(interaction) {
     specificChannelId: VERIFY_UNVERIFY_LOG_CHANNEL_ID,
     guildId: interaction.guildId,
     logType: 'verification.verify_unverify',
-    globalLogType: 'global_verification',
   });
 
   try {

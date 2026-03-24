@@ -43,7 +43,6 @@ export async function execute(interaction) {
     specificChannelId: STRIKE_LOG_CHANNEL_ID,
     guildId: interaction.guildId,
     logType: 'moderation.strike',
-    globalLogType: 'global_moderation',
   });
 
   await interaction.reply({ embeds: [new EmbedBuilder()
