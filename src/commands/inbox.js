@@ -232,6 +232,7 @@ export async function handleInboxInteraction(interaction) {
     }
 
     if (customId === 'inbox_back') {
+      await interaction.deferReply({ ephemeral: true }).catch(() => {});
       await interaction.message.delete().catch(() => {});
       return execute(interaction);
     }
@@ -271,19 +272,12 @@ export async function handleInboxInteraction(interaction) {
       const uid = parts[1];
       const page = parseInt(parts[2]) || 0;
       const inboxId = parts[3];
-      const config = await fetchEmailConfig();
-      const inbox = config[inboxId];
-      if (!inbox) return;
-      const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
-      if (!verified) return interaction.reply({ content: '❌ Access denied.', ephemeral: true });
-      let original = {};
-      try { original = await fetchEmailBody(inbox, uid); } catch {}
       const modal = new ModalBuilder()
         .setCustomId(`inbox_reply_send|${inboxId}|${uid}|${page}`)
-        .setTitle(`Reply to: ${(original.subject || 'Email').slice(0, 40)}`);
+        .setTitle('Reply to Email');
       modal.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reply_to').setLabel('To').setStyle(1).setValue(original.from?.address || '').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reply_subject').setLabel('Subject').setStyle(1).setValue(original.subject?.startsWith('Re:') ? original.subject : `Re: ${original.subject || ''}`).setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reply_to').setLabel('To').setStyle(1).setPlaceholder('recipient@example.com').setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reply_subject').setLabel('Subject').setStyle(1).setPlaceholder('Re: ...').setRequired(true)),
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reply_body').setLabel('Message').setStyle(2).setPlaceholder('Write your reply...').setRequired(true)),
       );
       await interaction.showModal(modal);
@@ -294,17 +288,12 @@ export async function handleInboxInteraction(interaction) {
       const uid = parts[1];
       const page = parseInt(parts[2]) || 0;
       const inboxId = parts[3];
-      const config = await fetchEmailConfig();
-      const inbox = config[inboxId];
-      if (!inbox) return;
-      const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
-      if (!verified) return interaction.reply({ content: '❌ Access denied.', ephemeral: true });
       const modal = new ModalBuilder()
         .setCustomId(`inbox_forward_send|${inboxId}|${uid}|${page}`)
         .setTitle('Forward Email');
       modal.addComponents(
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('forward_to').setLabel('To (email address)').setStyle(1).setPlaceholder('recipient@example.com').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('forward_subject').setLabel('Subject').setStyle(1).setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('forward_subject').setLabel('Subject').setStyle(1).setPlaceholder('Fwd: ...')).setRequired(true)),
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('forward_body').setLabel('Additional message').setStyle(2).setPlaceholder('Add a note...').setRequired(false)),
       );
       await interaction.showModal(modal);
@@ -314,21 +303,22 @@ export async function handleInboxInteraction(interaction) {
       const parts = customId.split('|');
       const inboxId = parts[1];
       const uid = parts[2];
+      await interaction.deferReply({ ephemeral: true }).catch(() => {});
       const config = await fetchEmailConfig();
       const inbox = config[inboxId];
-      if (!inbox) return;
+      if (!inbox) return interaction.editReply({ content: '❌ Inbox not found.' });
       const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
-      if (!verified) return interaction.reply({ content: '❌ Access denied.', ephemeral: true });
+      if (!verified) return interaction.editReply({ content: '❌ Access denied.' });
       try {
         const email = await fetchEmailBody(inbox, uid);
         const content = `**From:** ${email.from?.address || 'Unknown'}\n**To:** ${email.to?.map(t => t.address).join(', ') || ''}\n**Subject:** ${email.subject}\n\n${email.text || '(no content)'}`;
         const chunks = paginateText(content, 1900);
-        await interaction.reply({ content: `📄 **${email.subject}**\n\n${chunks[0]}`, ephemeral: true });
+        await interaction.editReply({ content: `📄 **${email.subject}**\n\n${chunks[0]}` });
         for (let i = 1; i < chunks.length; i++) {
           await interaction.followUp({ content: chunks[i], ephemeral: true });
         }
       } catch (err) {
-        await interaction.reply({ content: `⚠️ Copy failed: \`${err.message}\``, ephemeral: true });
+        await interaction.editReply({ content: `⚠️ Copy failed: \`${err.message}\`` });
       }
     }
 
@@ -337,18 +327,19 @@ export async function handleInboxInteraction(interaction) {
       const uid = parts[1];
       const page = parseInt(parts[2]) || 0;
       const inboxId = parts[3];
+      await interaction.deferReply({ ephemeral: true }).catch(() => {});
       const config = await fetchEmailConfig();
       const inbox = config[inboxId];
-      if (!inbox) return;
+      if (!inbox) return interaction.editReply({ content: '❌ Inbox not found.' });
       const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
-      if (!verified) return interaction.reply({ content: '❌ Access denied.', ephemeral: true });
+      if (!verified) return interaction.editReply({ content: '❌ Access denied.' });
       try {
         await archiveEmail(inbox, uid);
-        await interaction.reply({ content: '✅ Email archived.', ephemeral: true });
+        await interaction.editReply({ content: '✅ Email archived.' });
         await interaction.message.delete().catch(() => {});
         return showInbox(interaction, inbox, discordUserId, discordRoleIds, page);
       } catch (err) {
-        await interaction.reply({ content: `⚠️ Archive failed: \`${err.message}\``, ephemeral: true });
+        await interaction.editReply({ content: `⚠️ Archive failed: \`${err.message}\`` });
       }
     }
 
@@ -356,11 +347,12 @@ export async function handleInboxInteraction(interaction) {
       const parts = customId.split('|');
       const inboxId = parts[1];
       const page = parseInt(parts[2]) || 0;
+      await interaction.deferReply({ ephemeral: true }).catch(() => {});
       const config = await fetchEmailConfig();
       const inbox = config[inboxId];
-      if (!inbox) return;
+      if (!inbox) return interaction.editReply({ content: '❌ Inbox not found.' });
       const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
-      if (!verified) return interaction.reply({ content: '❌ Access denied.', ephemeral: true });
+      if (!verified) return interaction.editReply({ content: '❌ Access denied.' });
       await interaction.message.delete().catch(() => {});
       return showInbox(interaction, inbox, discordUserId, discordRoleIds, page);
     }
@@ -400,18 +392,13 @@ export async function handleInboxModal(interaction) {
       const subject = interaction.fields.getTextInputValue('reply_subject');
       const body = interaction.fields.getTextInputValue('reply_body');
       try {
-        let original = {};
-        try { original = await fetchEmailBody(inbox, uid); } catch {}
         await sendReply(inbox, {
           to: replyTo,
           subject,
           body,
-          inReplyTo: original.headers?.['message-id']?.[0],
-          references: original.headers?.['references']?.[0],
         }, discordUserId);
         await interaction.reply({ content: '✅ Reply sent.', ephemeral: true });
         await interaction.message.delete().catch(() => {});
-        return showInbox(interaction, inbox, discordUserId, discordRoleIds, page);
       } catch (err) {
         await interaction.reply({ content: `⚠️ Send failed: \`${err.message}\``, ephemeral: true });
       }
@@ -422,25 +409,13 @@ export async function handleInboxModal(interaction) {
       const subject = interaction.fields.getTextInputValue('forward_subject');
       const note = interaction.fields.getTextInputValue('forward_body');
       try {
-        let original = {};
-        try { original = await fetchEmailBody(inbox, uid); } catch {}
-        const forwardedBody = [
-          note ? `${note}\n\n` : '',
-          '--- Forwarded Email ---\n',
-          `From: ${original.from?.address || 'Unknown'}\n`,
-          `To: ${original.to?.map(t => t.address).join(', ') || ''}\n`,
-          `Subject: ${original.subject || ''}\n`,
-          `Date: ${original.date ? new Date(original.date).toLocaleString() : ''}\n\n`,
-          original.text || '',
-        ].join('');
         await sendForward(inbox, {
           to: forwardTo,
-          subject: subject || `Fwd: ${original.subject || ''}`,
-          body: forwardedBody,
+          subject,
+          body: note,
         }, discordUserId);
         await interaction.reply({ content: '✅ Email forwarded.', ephemeral: true });
         await interaction.message.delete().catch(() => {});
-        return showInbox(interaction, inbox, discordUserId, discordRoleIds, page);
       } catch (err) {
         await interaction.reply({ content: `⚠️ Forward failed: \`${err.message}\``, ephemeral: true });
       }
