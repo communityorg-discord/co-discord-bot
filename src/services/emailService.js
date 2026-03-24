@@ -165,6 +165,8 @@ function createImapConnection(inbox) {
     port: inbox.imap.port,
     tls: inbox.imap.secure,
     tlsOptions: { rejectUnauthorized: false },
+    connTimeout: 10000,
+    authTimeout: 10000,
   });
 }
 
@@ -207,7 +209,7 @@ export async function fetchInboxEmails(inbox, page = 0, perPage = 10) {
             email.uid = attrs.uid;
             email.seqno = msg.seqno;
           });
-          msg.once('done', () => emails.push(email));
+          msg.once('end', () => emails.push(email));
         });
 
         fetch.once('error', (err) => { imap.end(); reject(err); });
@@ -274,7 +276,11 @@ export async function fetchEmailBody(inbox, uid) {
 
 // ─── Brevo Email Sending ───────────────────────────────────────────────────────
 
-const BREVO_API_KEY = process.env.BREVO_API_KEY;
+function getBrevoKey() {
+  const key = process.env.BREVO_API_KEY;
+  if (!key) throw new Error('BREVO_API_KEY not set in environment');
+  return key;
+}
 
 const BREVO_SENDER = {
   name: 'CO Bot',
@@ -306,7 +312,7 @@ export async function sendEmailViaBrevo(options, senderCoEmail) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'api-key': BREVO_API_KEY,
+      'api-key': getBrevoKey(),
     },
     body: JSON.stringify(payload),
   });
