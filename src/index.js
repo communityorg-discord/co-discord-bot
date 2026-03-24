@@ -67,6 +67,74 @@ for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
 
+async function setupEmailNotificationChannels(client) {
+  try {
+    const guild = await client.guilds.fetch('1485422910972760176').catch(() => null);
+    if (!guild) { console.error('[Email Channels] Guild not found'); return; }
+
+    let category = guild.channels.cache.find(c => c.name === '📧 Team Inboxes' && c.type === 4);
+    if (!category) {
+      category = await guild.channels.create({
+        name: '📧 Team Inboxes',
+        type: 4,
+        permissionOverwrites: [{ id: guild.roles.everyone.id, deny: ['ViewChannel'] }],
+        reason: 'CO Bot email notification channels'
+      });
+      console.log('[Email Channels] Created category:', category.id);
+    }
+
+    const inboxChannels = [
+      { inboxId: 'eob', name: 'eob-inbox' },
+      { inboxId: 'bod', name: 'bod-inbox' },
+      { inboxId: 'ebod', name: 'ebod-inbox' },
+      { inboxId: 'dss', name: 'dss-inbox' },
+      { inboxId: 'dmspc', name: 'dmspc-inbox' },
+      { inboxId: 'ic', name: 'ic-inbox' },
+      { inboxId: 'dgacm', name: 'dgacm-inbox' },
+      { inboxId: 'dcos', name: 'dcos-inbox' },
+      { inboxId: 'audit_vault', name: 'audit-vault-inbox' },
+    ];
+
+    const { default: db } = await import('./utils/botDb.js');
+
+    for (const { inboxId, name } of inboxChannels) {
+      let ch = guild.channels.cache.find(c => c.name === name && c.parentId === category.id);
+      if (!ch) {
+        ch = await guild.channels.create({
+          name,
+          type: 0,
+          parent: category.id,
+          permissionOverwrites: [{ id: guild.roles.everyone.id, deny: ['ViewChannel'] }],
+          reason: `CO Bot inbox notifications — ${inboxId}`
+        });
+        console.log(`[Email Channels] Created #${name}:`, ch.id);
+      }
+      db.prepare('INSERT OR REPLACE INTO inbox_channel_map (inbox_id, channel_id) VALUES (?, ?)').run(inboxId, ch.id);
+    }
+
+    // email-logs in the log server 1485423682980675729
+    const logGuild = await client.guilds.fetch('1485423682980675729').catch(() => null);
+    if (logGuild) {
+      let logCat = logGuild.channels.cache.find(c => c.name === '📋 System Logs' && c.type === 4);
+      let logCh = logGuild.channels.cache.find(c => c.name === 'email-logs');
+      if (!logCh) {
+        logCh = await logGuild.channels.create({
+          name: 'email-logs',
+          type: 0,
+          parent: logCat?.id || null,
+          reason: 'CO Bot email activity log'
+        });
+        console.log('[Email Channels] Created email-logs:', logCh.id);
+      }
+      db.prepare('INSERT OR REPLACE INTO inbox_channel_map (inbox_id, channel_id) VALUES (?, ?)').run('__email_log__', logCh.id);
+    }
+
+    console.log('[Email Channels] Setup complete');
+  } catch (e) {
+    console.error('[Email Channels] Setup error:', e.message);
+  }
+}
+
 client.once('ready', async () => {
   console.log(`[CO Bot] Logged in as ${client.user.tag}`);
 
@@ -159,6 +227,7 @@ client.once('ready', async () => {
     } catch (e) { console.error('[C-05 safety net error]', e.message); }
   }, 60000);
 
+  await setupEmailNotificationChannels(client);
 });
 
 client.on('interactionCreate', async interaction => {

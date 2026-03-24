@@ -81,6 +81,11 @@ const GLOBAL_CATEGORIES = {
     label: 'Global Role Management',
     emoji: '🌐',
     description: 'All role management actions from all servers sent to one channel'
+  },
+  global_email_log: {
+    label: 'Global Email Log',
+    emoji: '📧',
+    description: 'All team inbox email activity logged to one channel'
   }
 };
 

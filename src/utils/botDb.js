@@ -137,7 +137,38 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS verified_members (id INTEGER PRIMARY KEY, discord_id TEXT UNIQUE, portal_id INTEGER, position TEXT, auth_level INTEGER, verified_at DATETIME DEFAULT CURRENT_TIMESTAMP);
   CREATE TABLE IF NOT EXISTS verification_queue (id INTEGER PRIMARY KEY, discord_id TEXT, portal_id INTEGER, requested_at DATETIME DEFAULT CURRENT_TIMESTAMP, status TEXT DEFAULT 'pending');
   CREATE TABLE IF NOT EXISTS banned_users (id INTEGER PRIMARY KEY, discord_id TEXT, reason TEXT, banned_by TEXT, banned_at DATETIME DEFAULT CURRENT_TIMESTAMP, unban_at DATETIME, active INTEGER DEFAULT 1);
-  CREATE TABLE IF NOT EXISTS guild_settings (id INTEGER PRIMARY KEY, guild_id TEXT UNIQUE, key TEXT, value TEXT);`);
+  CREATE TABLE IF NOT EXISTS guild_settings (id INTEGER PRIMARY KEY, guild_id TEXT UNIQUE, key TEXT, value TEXT);
+
+  CREATE TABLE IF NOT EXISTS inbox_channel_map (
+    inbox_id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS inbox_seen_emails (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    inbox_id TEXT NOT NULL,
+    uid INTEGER NOT NULL,
+    message_id TEXT,
+    subject TEXT,
+    from_address TEXT,
+    received_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    notification_message_id TEXT,
+    notification_channel_id TEXT,
+    UNIQUE(inbox_id, uid)
+  );
+
+  CREATE TABLE IF NOT EXISTS inbox_replies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reply_code TEXT NOT NULL UNIQUE,
+    inbox_id TEXT NOT NULL,
+    uid INTEGER NOT NULL,
+    replied_by_discord_id TEXT NOT NULL,
+    replied_by_name TEXT,
+    reply_to TEXT,
+    reply_subject TEXT,
+    reply_body TEXT,
+    replied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );`);
 
 // Migration: add ticket_count column if missing (existing DBs)
 try {
@@ -394,3 +425,37 @@ export function unclaimTicket(discordChannelId) {
 export function setTicketStatus(discordChannelId, status) {
   return db.prepare("UPDATE ticket_channels SET status = ? WHERE discord_channel_id = ?").run(status, String(discordChannelId));
 }
+
+// ── Email Inbox Helpers ───────────────────────────────────────────────────────
+
+export function getInboxChannelId(inboxId) {
+  const row = db.prepare('SELECT channel_id FROM inbox_channel_map WHERE inbox_id = ?').get(inboxId);
+  return row?.channel_id || null;
+}
+
+export function markEmailSeen(inboxId, uid, subject, fromAddress, notifMsgId, notifChannelId) {
+  db.prepare(`INSERT OR IGNORE INTO inbox_seen_emails (inbox_id, uid, subject, from_address, notification_message_id, notification_channel_id)
+    VALUES (?, ?, ?, ?, ?, ?)`).run(inboxId, uid, subject, fromAddress, notifMsgId, notifChannelId);
+}
+
+export function isEmailSeen(inboxId, uid) {
+  return !!db.prepare('SELECT id FROM inbox_seen_emails WHERE inbox_id = ? AND uid = ?').get(inboxId, uid);
+}
+
+export function getSeenEmail(inboxId, uid) {
+  return db.prepare('SELECT * FROM inbox_seen_emails WHERE inbox_id = ? AND uid = ?').get(inboxId, uid);
+}
+
+export function saveReply(replyCode, inboxId, uid, discordId, name, replyTo, replySubject, replyBody) {
+  db.prepare(`INSERT INTO inbox_replies (reply_code, inbox_id, uid, replied_by_discord_id, replied_by_name, reply_to, reply_subject, reply_body)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(replyCode, inboxId, uid, discordId, name, replyTo, replySubject, replyBody);
+}
+
+export function getReply(replyCode) {
+  return db.prepare('SELECT * FROM inbox_replies WHERE reply_code = ?').get(replyCode);
+}
+
+export function getRepliesForEmail(inboxId, uid) {
+  return db.prepare('SELECT * FROM inbox_replies WHERE inbox_id = ? AND uid = ? ORDER BY replied_at ASC').all(inboxId, uid);
+}
+
