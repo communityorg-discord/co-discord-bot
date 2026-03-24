@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { isSuperuser } from '../utils/verifyHelper.js';
+import { isSuperuser } from '../utils/permissions.js';
 import { getAuthLevelRole } from '../utils/positions.js';
 import { ALL_SERVER_IDS } from '../config.js';
 import { logAction } from '../utils/logger.js';

@@ -112,8 +112,8 @@ client.once('ready', async () => {
       console.log('[C-05] Scheduling ban lift for', ban.discord_id, 'in', Math.round(remaining / 1000 / 60), 'mins');
       setTimeout(async () => {
         try {
-          const GUILD_IDS = ['1485422910972760176','1485423163817988186','1485423682980675729','1485423935569920135','1485424535405723729'];
-          for (const gid of GUILD_IDS) {
+          
+          for (const gid of ALL_SERVER_IDS) {
             const g = await client.guilds.fetch(gid).catch(() => null);
             if (g) await g.members.unban(ban.discord_id, 'Temporary ban expired').catch(() => {});
           }
@@ -138,8 +138,8 @@ client.once('ready', async () => {
       }
       const expiredBans = db.prepare("SELECT * FROM banned_users WHERE unban_at IS NOT NULL AND active = 1 AND unban_at <= ?").all(new Date(now).toISOString());
       for (const ban of expiredBans) {
-        const GUILD_IDS = ['1485422910972760176','1485423163817988186','1485423682980675729','1485423935569920135','1485424535405723729'];
-        for (const gid of GUILD_IDS) {
+        
+        for (const gid of ALL_SERVER_IDS) {
           const g = await client.guilds.fetch(gid).catch(() => null);
           if (g) await g.members.unban(ban.discord_id, 'Temporary ban expired').catch(() => {});
         }
@@ -217,8 +217,6 @@ client.on('interactionCreate', async interaction => {
 
   if (interaction.isButton()) {
     // Verify/Unverify button handlers
-    if (interaction.customId.startsWith('verify_auth_select_')) return verifySelect(interaction);
-    if (interaction.customId.startsWith('verify_auth_select_')) return verifySelect(interaction);
     if (interaction.customId.startsWith('verify_auth_select_')) return verifySelect(interaction);
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
     if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
