@@ -219,9 +219,11 @@ export async function handleSelect(interaction) {
 
   // Type selected — show modal to pick channel
   if (customId.startsWith('logspanel_type_')) {
-    const parts = customId.replace('logspanel_type_', '').split('_');
-    const categoryKey = parts[0];
-    const typeKey = parts[1];
+    // interaction.values[0] is 'type_categoryKey_typeKey', extract from there
+    const valueParts = interaction.values[0].split('_');
+    // valueParts = ['type', 'moderation', 'ban_unban']
+    const categoryKey = valueParts[1];
+    const typeKey = valueParts[2];
     const cat = CATEGORIES[categoryKey];
     const type = cat?.types[typeKey];
     if (!cat || !type) return;
@@ -249,9 +251,15 @@ export async function handleSelect(interaction) {
 export async function handleModal(interaction) {
   if (!interaction.customId.startsWith('logspanel_channel_')) return;
 
-  const parts = interaction.customId.replace('logspanel_channel_', '').split('_');
-  const categoryKey = parts[0];
-  const typeKey = parts[1];
+  // logspanel_channel_category_type -> extract category and type
+  // type can have underscores (e.g. ban_unban), so split from end
+  const prefix = 'logspanel_channel_';
+  const rest = interaction.customId.slice(prefix.length);
+  // last _ separated part is type, everything before is category
+  const lastUnderscore = rest.lastIndexOf('_');
+  const categoryKey = rest.slice(0, lastUnderscore);
+  const typeKey = rest.slice(lastUnderscore + 1);
+
   const channelIdInput = interaction.fields.getTextInputValue('channel_id').trim();
 
   const cat = CATEGORIES[categoryKey];
