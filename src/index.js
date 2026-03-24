@@ -35,6 +35,7 @@ import * as cooldown from './commands/cooldown.js';
 import * as massUnban from './commands/mass-unban.js';
 import * as createTicketPanel from './commands/create-ticket-panel.js';
 import * as ticketPanelSend from './commands/ticket-panel-send.js';
+import * as deleteTicketPanel from './commands/delete-ticket-panel.js';
 import { handleTicketButton } from './commands/ticket-panel-send.js';
 
 config();
@@ -44,7 +45,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, ban, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, ban, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -110,12 +111,12 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
-  // Autocomplete for ticket-panel-send
-  if (interaction.isAutocomplete() && interaction.commandName === 'ticket-panel-send') {
+  // Autocomplete for ticket-panel-send and delete-ticket-panel
+  if (interaction.isAutocomplete() && (interaction.commandName === 'ticket-panel-send' || interaction.commandName === 'delete-ticket-panel')) {
     const { getAllTicketPanels } = await import('./utils/botDb.js');
     const panels = getAllTicketPanels();
     const focused = interaction.options.getFocused(true);
-    if (focused.name === 'panel_name') {
+    if (focused.name === 'panel_name' || focused.name === 'name') {
       const value = focused.value.toLowerCase();
       const choices = panels
         .filter(p => p.name.toLowerCase().includes(value))

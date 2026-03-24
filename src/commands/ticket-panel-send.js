@@ -37,9 +37,7 @@ export async function execute(interaction) {
     return interaction.reply({ content: '❌ This command must be used in a server.', ephemeral: true });
   }
 
-  // Verify roles and category still exist
   const staffRole = await guild.roles.fetch(panel.staff_role_id).catch(() => null);
-  const pingRole = await guild.roles.fetch(panel.ping_role_id).catch(() => null);
   const category = await guild.channels.fetch(panel.ticket_category_id).catch(() => null);
 
   const embed = new EmbedBuilder()
@@ -70,7 +68,7 @@ export async function handleTicketButton(interaction) {
   if (!interaction.isButton() || !interaction.customId.startsWith('ticket_create_')) return;
 
   const panelId = parseInt(interaction.customId.replace('ticket_create_', ''));
-  const { getTicketPanelById, getTicketChannelByUser, saveTicketChannel } = await import('../utils/botDb.js');
+  const { getTicketPanelById, getTicketChannelByUser, saveTicketChannel, incrementTicketCount } = await import('../utils/botDb.js');
 
   const panel = getTicketPanelById(panelId);
   if (!panel) {
@@ -106,8 +104,10 @@ export async function handleTicketButton(interaction) {
     return interaction.reply({ content: '❌ Could not find your guild member info.', ephemeral: true });
   }
 
-  // Create unique channel name
-  const channelName = `ticket-${member.user.username}-${panel.name.toLowerCase().replace(/\s+/g, '-')}`.slice(0, 100);
+  // Get ticket number and increment counter
+  const ticketNumber = incrementTicketCount(panelId);
+  const username = member.user.username.replace(/\s+/g, '-').slice(0, 50);
+  const channelName = `${username}-${ticketNumber}`.toLowerCase();
 
   try {
     const ticketChannel = await guild.channels.create({
@@ -134,6 +134,7 @@ export async function handleTicketButton(interaction) {
       .setDescription(panel.intro_message)
       .addFields(
         { name: 'Opened By', value: `${member.user} (<@${userId}>)`, inline: true },
+        { name: 'Ticket #', value: String(ticketNumber), inline: true },
         { name: 'Staff Role', value: staffRole ? `<@&${panel.staff_role_id}>` : 'Unknown', inline: true },
       )
       .setFooter({ text: 'Community Organisation | Ticket System' })

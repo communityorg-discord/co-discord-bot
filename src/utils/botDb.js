@@ -116,6 +116,7 @@ db.exec(`
     ping_role_id TEXT NOT NULL,
     ticket_category_id TEXT NOT NULL,
     created_by TEXT NOT NULL,
+    ticket_count INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -295,6 +296,12 @@ export function getAllTicketPanels() {
 
 export function deleteTicketPanel(id) {
   return db.prepare('DELETE FROM ticket_panels WHERE id = ?').run(id);
+}
+
+export function incrementTicketCount(panelId) {
+  db.prepare('UPDATE ticket_panels SET ticket_count = ticket_count + 1 WHERE id = ?').run(panelId);
+  const panel = db.prepare('SELECT ticket_count FROM ticket_panels WHERE id = ?').get(panelId);
+  return panel ? panel.ticket_count : 1;
 }
 
 export function saveTicketChannel({ panelId, discordChannelId, userId }) {
