@@ -14,18 +14,10 @@ const PAGE_SIZE = 8;
 
 /** Safely reply to an interaction — uses editReply if deferred, followUp otherwise. */
 async function safeReply(interaction, opts) {
-  console.log('[safeReply] deferred=' + interaction.deferred + ' replied=' + interaction.replied);
   try {
-    if (interaction.deferred) {
-      const r = await interaction.editReply(opts);
-      console.log('[safeReply] editReply ok');
-      return r;
-    }
-    const r = await interaction.editReply(opts);
-    console.log('[safeReply] editReply ok (not deferred)');
-    return r;
-  } catch (e) {
-    console.log('[safeReply] error:', e.message);
+    if (interaction.deferred) return interaction.editReply(opts);
+    return interaction.editReply(opts);
+  } catch {
     return interaction.followUp({ ...opts, ephemeral: true });
   }
 }
@@ -175,7 +167,7 @@ export async function execute(interaction) {
 
 async function showInbox(interaction, inbox, discordUserId, discordRoleIds, page) {
   if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferReply().catch(() => {});
+    await interaction.deferReply({ ephemeral: true }).catch(() => {});
   }
   const verified = await verifyAccess(inbox.inbox_id, discordUserId, discordRoleIds);
   if (!verified) {
@@ -246,16 +238,16 @@ export async function handleInboxInteraction(interaction) {
     const inboxId = parts[3];
     const page = parseInt(parts[4]);
     const uid = interaction.values[0];
-    if (uid === 'none') return;
+    if (uid === 'none') return interaction.reply({ content: '❌ No email selected.', ephemeral: true });
+
+    await interaction.deferReply({ ephemeral: true }).catch(() => {});
 
     const config = await fetchEmailConfig();
     const inbox = config[inboxId];
-    if (!inbox) return;
+    if (!inbox) return interaction.editReply({ content: '❌ Inbox not found.' });
 
     const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
-    if (!verified) {
-      return interaction.reply({ content: '❌ Access denied.', ephemeral: true });
-    }
+    if (!verified) return interaction.editReply({ content: '❌ Access denied.' });
 
     await interaction.message.delete().catch(() => {});
     return showEmail(interaction, inbox, uid, discordUserId, discordRoleIds, page);
@@ -270,19 +262,19 @@ export async function handleInboxInteraction(interaction) {
   // ── Pagination ─────────────────────────────────────────────────────────────
   if (customId.startsWith('inbox_prev_') || customId.startsWith('inbox_next_')) {
     const parts = customId.split('_');
-    const action = parts[1]; // prev | next
+    const action = parts[1];
     const inboxId = parts[2];
     const page = parseInt(parts[3]);
     const newPage = action === 'prev' ? page - 1 : page + 1;
 
+    await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
     const config = await fetchEmailConfig();
     const inbox = config[inboxId];
-    if (!inbox) return;
+    if (!inbox) return interaction.editReply({ content: '❌ Inbox not found.' });
 
     const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
-    if (!verified) {
-      return interaction.reply({ content: '❌ Access denied.', ephemeral: true });
-    }
+    if (!verified) return interaction.editReply({ content: '❌ Access denied.' });
 
     await interaction.message.delete().catch(() => {});
     return showInbox(interaction, inbox, discordUserId, discordRoleIds, newPage);
@@ -294,14 +286,14 @@ export async function handleInboxInteraction(interaction) {
     const inboxId = parts[2];
     const uid = parts[3];
 
+    await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
     const config = await fetchEmailConfig();
     const inbox = config[inboxId];
-    if (!inbox) return;
+    if (!inbox) return interaction.editReply({ content: '❌ Inbox not found.' });
 
     const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
-    if (!verified) {
-      return interaction.reply({ content: '❌ Access denied.', ephemeral: true });
-    }
+    if (!verified) return interaction.editReply({ content: '❌ Access denied.' });
 
     await interaction.message.delete().catch(() => {});
     return showEmail(interaction, inbox, uid, discordUserId, discordRoleIds, 0);
@@ -491,7 +483,7 @@ export async function handleInboxInteraction(interaction) {
 
 async function showEmail(interaction, inbox, uid, discordUserId, discordRoleIds, page) {
   if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferReply().catch(() => {});
+    await interaction.deferReply({ ephemeral: true }).catch(() => {});
   }
   const verified = await verifyAccess(inbox.inbox_id, discordUserId, discordRoleIds);
   if (!verified) {
