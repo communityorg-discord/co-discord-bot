@@ -1,3 +1,5 @@
 .env
 node_modules/
 bot-data.db
+co.db
+dataPortal.db
