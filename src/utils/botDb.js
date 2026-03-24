@@ -107,6 +107,26 @@ db.exec(`
     channel_id TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS ticket_panels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    intro_message TEXT NOT NULL,
+    staff_role_id TEXT NOT NULL,
+    ping_role_id TEXT NOT NULL,
+    ticket_category_id TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS ticket_channels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    panel_id INTEGER NOT NULL,
+    discord_channel_id TEXT NOT NULL UNIQUE,
+    user_id TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (panel_id) REFERENCES ticket_panels(id)
+  );
 `);
 
 export default db;
@@ -250,4 +270,40 @@ export function getAllActiveStaff() {
 
 export function getPortalUserById(userId) {
   return portalDb.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+}
+
+// ── Ticket Panels ────────────────────────────────────────────────────────────
+
+export function saveTicketPanel({ name, introMessage, staffRoleId, pingRoleId, ticketCategoryId, createdBy }) {
+  return db.prepare(`
+    INSERT INTO ticket_panels (name, intro_message, staff_role_id, ping_role_id, ticket_category_id, created_by)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(name, introMessage, String(staffRoleId), String(pingRoleId), String(ticketCategoryId), String(createdBy));
+}
+
+export function getTicketPanelByName(name) {
+  return db.prepare('SELECT * FROM ticket_panels WHERE LOWER(name) = LOWER(?)').get(name);
+}
+
+export function getTicketPanelById(id) {
+  return db.prepare('SELECT * FROM ticket_panels WHERE id = ?').get(id);
+}
+
+export function getAllTicketPanels() {
+  return db.prepare('SELECT * FROM ticket_panels ORDER BY created_at DESC').all();
+}
+
+export function deleteTicketPanel(id) {
+  return db.prepare('DELETE FROM ticket_panels WHERE id = ?').run(id);
+}
+
+export function saveTicketChannel({ panelId, discordChannelId, userId }) {
+  return db.prepare(`
+    INSERT INTO ticket_channels (panel_id, discord_channel_id, user_id)
+    VALUES (?, ?, ?)
+  `).run(panelId, String(discordChannelId), String(userId));
+}
+
+export function getTicketChannelByUser(panelId, userId) {
+  return db.prepare('SELECT * FROM ticket_channels WHERE panel_id = ? AND user_id = ?').get(panelId, String(userId));
 }

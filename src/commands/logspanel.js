@@ -105,15 +105,15 @@ function buildInfoEmbed(guildId) {
 // Build category select menu
 function buildCategorySelect(disabled = false) {
   const options = [
+    {
+      label: 'Global Logs',
+      emoji: '🌐',
+      value: 'cat_global_logs'
+    },
     ...Object.entries(CATEGORIES).map(([key, cat]) => ({
       label: cat.label,
       emoji: cat.emoji,
       value: `cat_${key}`
-    })),
-    ...Object.entries(GLOBAL_CATEGORIES).map(([key, cat]) => ({
-      label: cat.label,
-      emoji: cat.emoji,
-      value: `global_${key}`
     }))
   ];
 
@@ -126,7 +126,7 @@ function buildCategorySelect(disabled = false) {
   );
 }
 
-// Build type select menu for a category
+// Build type select menu for a per-guild category
 function buildTypeSelect(categoryKey, disabled = false) {
   const cat = CATEGORIES[categoryKey];
   if (!cat) return null;
@@ -140,6 +140,23 @@ function buildTypeSelect(categoryKey, disabled = false) {
     new StringSelectMenuBuilder()
       .setCustomId(`logspanel_type_${categoryKey}`)
       .setPlaceholder(`Select a log type in ${cat.label}...`)
+      .setOptions(options)
+      .setDisabled(disabled)
+  );
+}
+
+// Build global log type select
+function buildGlobalTypeSelect(disabled = false) {
+  const options = Object.entries(GLOBAL_CATEGORIES).map(([key, cat]) => ({
+    label: cat.label,
+    emoji: cat.emoji,
+    value: `global_${key}`
+  }));
+
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('logspanel_global_type')
+      .setPlaceholder('Select a global log type...')
       .setOptions(options)
       .setDisabled(disabled)
   );
@@ -189,36 +206,25 @@ export async function handleSelect(interaction) {
     return;
   }
 
-  // Category selected — show type select for per-guild category, or modal directly for global
+  // Category selected
   if (customId === 'logspanel_category') {
     const value = interaction.values[0];
 
-    // Global category selected — show modal directly
-    if (value.startsWith('global_')) {
-      const globalKey = value.replace('global_', '');
-      const cat = GLOBAL_CATEGORIES[globalKey];
-      if (!cat) return;
+    // Global Logs category — show global type select
+    if (value === 'cat_global_logs') {
+      const globalRow = buildGlobalTypeSelect();
+      const backRow = buildBackButton();
+      const embed = buildInfoEmbed(interaction.guildId);
 
-      const modal = new ModalBuilder()
-        .setCustomId(`logspanel_global_${globalKey}`)
-        .setTitle(`${cat.emoji} ${cat.label} — Set Channel`);
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId('channel_id')
-            .setLabel('Channel ID')
-            .setStyle(1)
-            .setPlaceholder('Paste the channel ID here, or leave blank to disable')
-            .setRequired(false)
-        )
-      );
-
-      await interaction.showModal(modal);
+      await interaction.update({
+        content: '🌐 **Global Logs** — Select the global log type to configure, or go back:',
+        embeds: [embed],
+        components: [globalRow, backRow]
+      });
       return;
     }
 
-    // Per-guild category selected
+    // Per-guild category — show type select
     const categoryKey = value.replace('cat_', '');
     const cat = CATEGORIES[categoryKey];
     if (!cat) return;
@@ -235,7 +241,33 @@ export async function handleSelect(interaction) {
     return;
   }
 
-  // Type selected — show modal to pick channel
+  // Global log type selected — show modal
+  if (customId === 'logspanel_global_type') {
+    const value = interaction.values[0];
+    const globalKey = value.replace('global_', '');
+    const cat = GLOBAL_CATEGORIES[globalKey];
+    if (!cat) return;
+
+    const modal = new ModalBuilder()
+      .setCustomId(`logspanel_channel_global_${globalKey}`)
+      .setTitle(`${cat.emoji} ${cat.label} — Set Channel`);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('channel_id')
+          .setLabel('Channel ID')
+          .setStyle(1)
+          .setPlaceholder('Paste the channel ID here, or leave blank to disable')
+          .setRequired(false)
+      )
+    );
+
+    await interaction.showModal(modal);
+    return;
+  }
+
+  // Per-guild log type selected — show modal
   if (customId.startsWith('logspanel_type_')) {
     const value = interaction.values[0];
     const valuePrefix = 'type_';
@@ -274,8 +306,8 @@ export async function handleModal(interaction) {
   const customId = interaction.customId;
 
   // Global log channel modal
-  if (customId.startsWith('logspanel_global_')) {
-    const globalKey = customId.replace('logspanel_global_', '');
+  if (customId.startsWith('logspanel_channel_global_')) {
+    const globalKey = customId.replace('logspanel_channel_global_', '');
     const cat = GLOBAL_CATEGORIES[globalKey];
     if (!cat) return;
 
@@ -310,6 +342,7 @@ export async function handleModal(interaction) {
 
   // Per-guild log channel modal
   if (!customId.startsWith('logspanel_channel_')) return;
+  if (customId.startsWith('logspanel_channel_global_')) return; // already handled above
 
   const rest = customId.replace('logspanel_channel_', '');
   const firstUnderscore = rest.indexOf('_');

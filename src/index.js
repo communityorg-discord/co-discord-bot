@@ -32,6 +32,10 @@ import * as unverify from './commands/unverify.js';
 import * as authorisationOverride from './commands/authorisation-override.js';
 import * as logspanel from './commands/logspanel.js';
 import * as cooldown from './commands/cooldown.js';
+import * as createTicketPanel from './commands/create-ticket-panel.js';
+import * as ticketPanelSend from './commands/ticket-panel-send.js';
+import { handleModal as createTicketPanelModal } from './commands/create-ticket-panel.js';
+import { handleTicketButton } from './commands/ticket-panel-send.js';
 
 config();
 
@@ -40,7 +44,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, ban, unban, verify, unverify, authorisationOverride, cooldown, logspanel];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, ban, unban, verify, unverify, authorisationOverride, cooldown, logspanel, createTicketPanel, ticketPanelSend];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -114,6 +118,26 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId.startsWith('logspanel_back')) {
       try { return logspanel.handleSelect(interaction); }
       catch(e) { console.error('[logspanel handleSelect btn error]', e.message); throw e; }
+    }
+
+    // Ticket create button
+    if (interaction.customId.startsWith('ticket_create_')) {
+      return handleTicketButton(interaction);
+    }
+
+    // Autocomplete for ticket-panel-send
+    if (interaction.isAutocomplete() && interaction.commandName === 'ticket-panel-send') {
+      const { getAllTicketPanels } = await import('./utils/botDb.js');
+      const panels = getAllTicketPanels();
+      const focused = interaction.options.getFocused(true);
+      if (focused.name === 'panel_name') {
+        const value = focused.value.toLowerCase();
+        const choices = panels
+          .filter(p => p.name.toLowerCase().includes(value))
+          .slice(0, 25)
+          .map(p => ({ name: p.name, value: p.name }));
+        return interaction.respond(choices).catch(() => {});
+      }
     }
 
     // NID button handlers
@@ -314,6 +338,10 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId.startsWith('logspanel_')) {
       try { return logspanel.handleModal(interaction); }
       catch(e) { console.error('[logspanel handleModal error]', e.message); throw e; }
+    }
+
+    if (interaction.customId === 'create_ticket_panel_modal') {
+      return createTicketPanelModal(interaction);
     }
 
     if (interaction.customId === 'dm_exempt_add_modal') {
