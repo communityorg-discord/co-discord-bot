@@ -6,13 +6,21 @@ import Database from 'better-sqlite3';
 import { GoogleAuth } from 'google-auth-library';
 import { google } from 'googleapis';
 
-// ─── Portal DB ────────────────────────────────────────────────────────────────
+// ─── Portal DB (lazy init — .env loaded before first call) ─────────────────
 
-const PORTAL_DB = new Database(process.env.PORTAL_DB_PATH, { readonly: true });
+let _PORTAL_DB = null;
+
+function getPortalDb() {
+  if (!_PORTAL_DB) {
+    _PORTAL_DB = new Database(process.env.PORTAL_DB_PATH, { readonly: true });
+  }
+  return _PORTAL_DB;
+}
 
 /** Look up a user's CO email by Discord ID. */
 export function getUserCoEmail(discordId) {
-  const user = PORTAL_DB.prepare('SELECT co_email, email, display_name FROM users WHERE discord_id = ?').get(String(discordId));
+  const db = getPortalDb();
+  const user = db.prepare('SELECT co_email, email, display_name FROM users WHERE discord_id = ?').get(String(discordId));
   return user?.co_email || user?.email || null;
 }
 
@@ -104,7 +112,7 @@ export async function getAccessibleInboxes(discordUserId, discordRoleIds = []) {
   const allInboxes = await fetchEmailConfig();
 
   // Look up user in portal DB
-  const portalUser = PORTAL_DB.prepare(
+  const portalUser = getPortalDb().prepare(
     'SELECT id, department, auth_level FROM users WHERE discord_id = ?'
   ).get(String(discordUserId));
 
