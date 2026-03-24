@@ -34,13 +34,6 @@ const CATEGORIES = {
       message_edit: { label: 'Message Edit Logs', channelIdField: 'message_edit_channel_id' },
     }
   },
-  dm: {
-    label: 'DM Logs',
-    emoji: '📩',
-    types: {
-      dm: { label: 'DM Logs', channelIdField: 'dm_log_channel_id' },
-    }
-  },
   misc: {
     label: 'Miscellaneous',
     emoji: '📋',
