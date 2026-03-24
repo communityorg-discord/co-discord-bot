@@ -96,21 +96,42 @@ export async function fetchEmailConfig() {
 }
 
 /**
- * Get all inboxes a user can access based on their Discord ID and roles.
+ * Get all inboxes a user can access based on their portal profile.
+ * - auth_level 99 (superuser) → access to all inboxes
+ * - Otherwise, match department from portal profile to inbox name/id
  */
 export async function getAccessibleInboxes(discordUserId, discordRoleIds = []) {
   const allInboxes = await fetchEmailConfig();
+
+  // Look up user in portal DB
+  const portalUser = PORTAL_DB.prepare(
+    'SELECT id, department, auth_level FROM users WHERE discord_id = ?'
+  ).get(String(discordUserId));
+
   const accessible = [];
 
   for (const [id, inbox] of Object.entries(allInboxes)) {
+    // Audit Vault — only the 3 hardcoded IDs
     if (inbox.access.type === 'ids') {
       if (inbox.access.ids.includes(discordUserId)) accessible.push(inbox);
-    } else if (inbox.access.type === 'eob') {
+    }
+    // EOB — global viewer (blocked from audit_vault)
+    else if (inbox.access.type === 'eob') {
       if (id === 'audit_vault') continue;
       accessible.push(inbox);
-    } else if (inbox.access.type === 'role') {
-      const hasRole = inbox.access.roleIds.some(rid => discordRoleIds.includes(rid));
-      if (hasRole) accessible.push(inbox);
+    }
+    // Role-based — match by department name from portal OR by role IDs
+    else if (inbox.access.type === 'role') {
+      const hasRoleId = inbox.access.roleIds.some(rid => discordRoleIds.includes(rid));
+      const hasDept = portalUser?.department &&
+        (id === portalUser.department.toLowerCase().replace(/ /g, '_') ||
+         inbox.name.toLowerCase().includes(portalUser.department.toLowerCase()) ||
+         portalUser.department.toLowerCase().includes(inbox.name.toLowerCase()));
+
+      // Superuser (auth_level 99) gets access to everything
+      const isSuperuser = portalUser?.auth_level === 99;
+
+      if (isSuperuser || hasRoleId || hasDept) accessible.push(inbox);
     }
   }
 
