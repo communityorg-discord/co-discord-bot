@@ -11,7 +11,18 @@ import {
 } from '../services/emailService.js';
 
 const PAGE_SIZE = 8;
-const EMAIL_COLS = { from: 0, subject: 1, date: 2, uid: 3, seqno: 4 };
+
+/** Safely reply to an interaction — uses editReply if deferred, followUp otherwise. */
+async function safeReply(interaction, opts) {
+  if (interaction.deferred) {
+    return interaction.editReply(opts);
+  }
+  try {
+    return interaction.editReply(opts);
+  } catch {
+    return interaction.followUp({ ...opts, ephemeral: opts.ephemeral ?? true });
+  }
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -151,18 +162,18 @@ export async function execute(interaction) {
       inline: false,
     })));
 
-  await interaction.editReply({ embeds: [embed], components: [selectRow] });
+  await safeReply(interaction, { embeds: [embed], components: [selectRow] });
 }
 
 // ─── Show Inbox (email list) ──────────────────────────────────────────────────
 
 async function showInbox(interaction, inbox, discordUserId, discordRoleIds, page) {
-  // Defer if not already deferred (handles calls from button/select handlers)
-  await interaction.deferReply().catch(() => {});
-  // Re-verify access on every call
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply().catch(() => {});
+  }
   const verified = await verifyAccess(inbox.inbox_id, discordUserId, discordRoleIds);
   if (!verified) {
-    return interaction.editReply({ content: '❌ Access denied to this inbox.', components: [] });
+    return safeReply(interaction, { content: '❌ Access denied to this inbox.', components: [] });
   }
 
   try {
@@ -185,12 +196,12 @@ async function showInbox(interaction, inbox, discordUserId, discordRoleIds, page
         .setStyle(ButtonStyle.Secondary)
     );
 
-    await interaction.editReply({
+    await safeReply(interaction, {
       embeds: [embed],
       components: rows.length > 0 ? [actionRow, navRow, backRow] : [backRow],
     });
   } catch (err) {
-    await interaction.editReply({ content: `⚠️ Error loading inbox: \`${err.message}\`` });
+    await safeReply(interaction, { content: `⚠️ Error loading inbox: \`${err.message}\`` });
   }
 }
 
@@ -205,16 +216,21 @@ export async function handleInboxInteraction(interaction) {
 
   // ── Inbox select (from main menu) ──────────────────────────────────────────
   if (customId === 'inbox_select') {
+    await interaction.deferReply();
     const inboxId = interaction.values[0];
     const config = await fetchEmailConfig();
     const inbox = config[inboxId];
-    if (!inbox) return;
+    if (!inbox) {
+      await safeReply(interaction, { content: '❌ Inbox not found.' });
+      return;
+    }
 
     const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
     if (!verified) {
-      return interaction.reply({ content: '❌ Access denied.', ephemeral: true });
+      await safeReply(interaction, { content: '❌ Access denied.' });
+      return;
     }
-    await interaction.message.delete().catch(() => {});
+    await interaction.deleteReply().catch(() => {});
     return showInbox(interaction, inbox, discordUserId, discordRoleIds, 0);
   }
 
@@ -446,10 +462,12 @@ export async function handleInboxInteraction(interaction) {
 // ─── Show Email Detail ────────────────────────────────────────────────────────
 
 async function showEmail(interaction, inbox, uid, discordUserId, discordRoleIds, page) {
-  await interaction.deferReply().catch(() => {});
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply().catch(() => {});
+  }
   const verified = await verifyAccess(inbox.inbox_id, discordUserId, discordRoleIds);
   if (!verified) {
-    return interaction.editReply({ content: '❌ Access denied.' });
+    return safeReply(interaction, { content: '❌ Access denied.' });
   }
 
   try {
@@ -493,7 +511,7 @@ async function showEmail(interaction, inbox, uid, discordUserId, discordRoleIds,
         .setStyle(ButtonStyle.Secondary),
     );
 
-    await interaction.editReply({
+    await safeReply(interaction, {
       embeds: [embed],
       content: chunks[0],
       components: [actionRow],
@@ -503,7 +521,7 @@ async function showEmail(interaction, inbox, uid, discordUserId, discordRoleIds,
       await interaction.followUp({ content: chunks[i], ephemeral: true });
     }
   } catch (err) {
-    await interaction.editReply({ content: `⚠️ Error loading email: \`${err.message}\`` });
+    await safeReply(interaction, { content: `⚠️ Error loading email: \`${err.message}\`` });
   }
 }
 
