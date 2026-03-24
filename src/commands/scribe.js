@@ -227,7 +227,7 @@ export async function execute(interaction) {
         { name: 'Transcript', value: `[View Transcript](${transcriptUrl})`, inline: false },
         ...(targetUser ? [{ name: 'Filtered User', value: `<@${targetUser.id}>`, inline: true }] : []),
       ],
-      specificChannelId: PURGE_SCRIBE_LOG_CHANNEL_ID
+      specificChannelId: PURGE_SCRIBE_LOG_CHANNEL_ID,
     guildId: interaction.guildId,
     logType: 'moderation.purge_scribe',
     globalLogType: 'global_moderation',

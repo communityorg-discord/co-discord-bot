@@ -77,7 +77,7 @@ export async function execute(interaction) {
       { name: 'Appealable', value: appealable ? 'Yes' : 'No', inline: true },
       { name: 'Servers', value: serverList, inline: false }
     ],
-    specificChannelId: GBAN_UNGBAN_LOG_CHANNEL_ID
+    specificChannelId: GBAN_UNGBAN_LOG_CHANNEL_ID,
     guildId: interaction.guildId,
     logType: 'moderation.gban_ungban',
     globalLogType: 'global_moderation',

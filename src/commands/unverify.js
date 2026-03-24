@@ -177,7 +177,7 @@ export async function handleModal(interaction) {
       { name: 'Servers Processed', value: `${successCount} ✅ | ${partialCount} ⚠️ | ${failedCount} ❌`, inline: false },
       { name: 'Per-Server Results', value: guildFieldLines.slice(0, 1024) || 'None', inline: false },
     ],
-    specificChannelId: VERIFY_UNVERIFY_LOG_CHANNEL_ID
+    specificChannelId: VERIFY_UNVERIFY_LOG_CHANNEL_ID,
     guildId: interaction.guildId,
     logType: 'verification.verify_unverify',
     globalLogType: 'global_verification',

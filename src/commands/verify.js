@@ -239,7 +239,7 @@ export async function handleButton(interaction) {
         { name: 'Servers Applied', value: `${successCount} ✅ | ${partialCount} ⚠️ | ${failedCount} ❌`, inline: false },
         { name: 'Per-Server Results', value: guildFieldLines.slice(0, 1024) || 'None', inline: false },
       ],
-      specificChannelId: VERIFY_UNVERIFY_LOG_CHANNEL_ID
+      specificChannelId: VERIFY_UNVERIFY_LOG_CHANNEL_ID,
     guildId: interaction.guildId,
     logType: 'verification.verify_unverify',
     globalLogType: 'global_verification',
@@ -427,7 +427,7 @@ export async function handleButton(interaction) {
         { name: 'Servers Applied', value: `${successCount} ✅ | ${partialCount} ⚠️ | ${failedCount} ❌`, inline: false },
         { name: 'Per-Server Results', value: guildFieldLines.slice(0, 1024) || 'None', inline: false },
       ],
-      specificChannelId: VERIFY_UNVERIFY_LOG_CHANNEL_ID
+      specificChannelId: VERIFY_UNVERIFY_LOG_CHANNEL_ID,
     });
 
     // DM the user — welcome message with 7-day invite links

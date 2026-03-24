@@ -57,7 +57,7 @@ export async function execute(interaction) {
         { name: 'Type', value: deleted.type, inline: true },
         { name: 'Original Reason', value: deleted.reason || 'N/A', inline: false },
       ],
-      specificChannelId: INFRACTIONS_CASES_LOG_CHANNEL_ID
+      specificChannelId: INFRACTIONS_CASES_LOG_CHANNEL_ID,
     guildId: interaction.guildId,
     logType: 'moderation.infractions_cases',
     globalLogType: 'global_moderation',

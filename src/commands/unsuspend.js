@@ -38,7 +38,7 @@ export async function execute(interaction) {
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: target.id, name: portalUser?.display_name || target.username },
     reason, color: 0x22C55E,
-    specificChannelId: SUSPEND_UNSUSPEND_LOG_CHANNEL_ID
+    specificChannelId: SUSPEND_UNSUSPEND_LOG_CHANNEL_ID,
     guildId: interaction.guildId,
     logType: 'moderation.suspend_unsuspend',
     globalLogType: 'global_moderation',

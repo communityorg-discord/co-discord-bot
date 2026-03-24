@@ -67,7 +67,7 @@ export async function execute(interaction) {
       { name: 'Duration', value: durationText, inline: true },
       { name: 'Reason', value: reason, inline: false },
     ],
-    specificChannelId: COOLDOWN_LOG_CHANNEL_ID
+    specificChannelId: COOLDOWN_LOG_CHANNEL_ID,
     guildId: interaction.guildId,
     logType: 'moderation.cooldown',
     globalLogType: 'global_moderation',

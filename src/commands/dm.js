@@ -138,7 +138,7 @@ export async function execute(interaction) {
           { name: '💬 Message', value: message.length > 200 ? message.slice(0, 200) + '...' : message, inline: false },
           ...(emailConfirm ? [{ name: '📧 Email Confirm', value: 'Recipient must acknowledge', inline: false }] : []),
         ],
-        specificChannelId: DM_LOG_CHANNEL_ID
+        specificChannelId: DM_LOG_CHANNEL_ID,
     guildId: interaction.guildId,
     logType: 'verification.dm',
     globalLogType: 'global_verification',
@@ -253,7 +253,7 @@ export async function execute(interaction) {
       ...(emailConfirm ? [{ name: '📧 Email Confirm', value: `${recipients.length} recipients must acknowledge`, inline: false }] : []),
       ...(failedUsers.length > 0 ? [{ name: '❌ Failed Recipients', value: failedUsers.slice(0, 10).join(', ') + (failedUsers.length > 10 ? `\n+${failedUsers.length - 10} more` : ''), inline: false }] : []),
     ],
-    specificChannelId: DM_LOG_CHANNEL_ID
+    specificChannelId: DM_LOG_CHANNEL_ID,
   });
 
   const exemptNote = exemptCount > 0 ? `\n\nℹ️ ${exemptCount} exempt user${exemptCount > 1 ? 's' : ''} skipped (not messaged).` : '';
