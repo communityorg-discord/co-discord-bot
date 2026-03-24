@@ -167,7 +167,7 @@ export async function fetchInboxEmails(inbox, page = 0, perPage = 10) {
           });
           msg.once('attributes', (attrs) => {
             email.uid = attrs.uid;
-            email.seqno = info.seqno;
+            email.seqno = msg.seqno;
           });
           msg.once('done', () => emails.push(email));
         });
