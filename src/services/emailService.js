@@ -328,8 +328,14 @@ export async function sendEmailViaBrevo(options, senderCoEmail, fromEmail = null
       name: senderName || senderCoEmail.split('@')[0],
       email: fromEmail || BREVO_SENDER.email,
     },
-    to: Array.isArray(to) ? to.map(t => typeof t === 'string' ? { email: t } : t) : [{ email: to }],
-    ...(cc ? { cc: Array.isArray(cc) ? cc.map(c => typeof c === 'string' ? { email: c } : c) : [{ email: cc }] } : {}),
+    to: Array.isArray(to)
+      ? to.map(t => typeof t === 'string' ? { email: t.trim() } : t)
+      : String(to).split(',').map(e => ({ email: e.trim() })).filter(e => e.email),
+    ...(cc ? {
+      cc: Array.isArray(cc)
+        ? cc.map(c => typeof c === 'string' ? { email: c.trim() } : c)
+        : String(cc).split(',').map(e => ({ email: e.trim() })).filter(e => e.email)
+    } : {}),
     subject,
     htmlContent: `<html><body style="font-family: Arial, sans-serif;"><pre style="white-space: pre-wrap;">${body.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre></body></html>`,
     ...(inReplyTo ? { replyTo: { email: senderCoEmail, name: senderName || senderCoEmail.split('@')[0] } } : {}),

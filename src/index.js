@@ -34,6 +34,7 @@ import * as unverify from './commands/unverify.js';
 import * as authorisationOverride from './commands/authorisation-override.js';
 import * as logspanel from './commands/logspanel.js';
 import * as inbox from './commands/inbox.js';
+import * as compose from './commands/compose.js';
 import * as setupEmail from './commands/setup-email.js';
 import * as inboxReply from './commands/inbox-reply.js';
 import * as cooldown from './commands/cooldown.js';
@@ -64,7 +65,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, untimeout, kick, serverban, help, inbox, inboxReply, setupEmail];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, untimeout, kick, serverban, help, inbox, inboxReply, setupEmail, compose];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -478,6 +479,13 @@ client.on('interactionCreate', async interaction => {
       catch(e) { console.error('[inbox personal btn error]', e.message); throw e; }
     }
 
+    // Personal compose skip button
+    if (interaction.customId?.startsWith('personal_compose_skip|')) {
+      const to = decodeURIComponent(interaction.customId.split('|')[1]);
+      const { showPersonalComposeModal } = await import('./commands/compose.js');
+      return showPersonalComposeModal(interaction, to, '');
+    }
+
   }
 
   // String select menu handlers
@@ -576,6 +584,40 @@ client.on('interactionCreate', async interaction => {
     // Setup email modal
     if (interaction.customId === 'setup_email_modal') {
       return setupEmail.handleModal(interaction);
+    }
+
+    // Personal compose submit modal
+    if (interaction.customId?.startsWith('personal_compose_submit|')) {
+      const parts = interaction.customId.split('|');
+      const to = decodeURIComponent(parts[1] || '');
+      const ccFromId = decodeURIComponent(parts[2] || '');
+      const discordUserId = interaction.user.id;
+
+      const { getPersonalEmailSetup } = await import('./utils/botDb.js');
+      const setup = getPersonalEmailSetup(discordUserId);
+      if (!setup) return interaction.reply({ content: '❌ No personal email setup found.', ephemeral: true });
+
+      const ccFromField = interaction.fields.getTextInputValue('compose_cc').trim();
+      const cc = ccFromField || ccFromId || undefined;
+      const subject = interaction.fields.getTextInputValue('compose_subject').trim();
+      const body = interaction.fields.getTextInputValue('compose_body').trim();
+      const toField = interaction.fields.getTextInputValue('compose_to').trim();
+
+      await interaction.deferReply({ ephemeral: true });
+
+      try {
+        const { sendReply } = await import('./services/emailService.js');
+        const fakeInbox = {
+          inbox_id: `personal_${discordUserId}`,
+          name: setup.co_email,
+          emoji: '📧',
+          imap: { host: setup.imap_host, port: setup.imap_port, user: setup.co_email, password: setup.imap_password, secure: setup.imap_port === 993 },
+        };
+        await sendReply(fakeInbox, { to: toField, cc, subject, body }, discordUserId);
+        return interaction.editReply({ content: `✅ Email sent to **${toField}**${cc ? ` (CC: ${cc})` : ''} from **${setup.co_email}**.` });
+      } catch (err) {
+        return interaction.editReply({ content: `⚠️ Failed to send: \`${err.message}\`` });
+      }
     }
 
     // Personal inbox email modal handlers

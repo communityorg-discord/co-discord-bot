@@ -22,7 +22,7 @@ function buildEmailNotifEmbed(inbox, email, replies = []) {
       { name: '📬 Inbox', value: `${inbox.emoji} ${inbox.name}`, inline: true },
       { name: '🔑 UID', value: String(email.uid), inline: true },
     )
-    .setFooter({ text: `CO Inbox System | UID: ${email.uid}` })
+    .setFooter({ text: `CO Inbox System | UID: ${email.uid} | View full email at mail.communityorg.co.uk` })
     .setTimestamp();
 
   if (replies.length > 0) {
@@ -227,7 +227,7 @@ export async function pollPersonalInboxes(client) {
               ...(bodyPreview ? [{ name: '💬 Message', value: bodyPreview.slice(0, 1024), inline: false }] : []),
               { name: '📭 Status', value: 'No replies yet', inline: false },
             )
-            .setFooter({ text: `Personal Inbox | UID: ${email.uid}` })
+            .setFooter({ text: `Personal Inbox | UID: ${email.uid} | View full email at mail.communityorg.co.uk` })
             .setTimestamp();
 
           const buttons = new ActionRowBuilder().addComponents(
