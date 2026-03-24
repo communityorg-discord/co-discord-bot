@@ -1,4 +1,5 @@
 import { POSITIONS, ALL_MANAGED_ROLES } from './positions.js';
+import { STAFF_HQ_ID } from '../config.js';
 import db from './botDb.js';
 
 /**
@@ -90,6 +91,19 @@ export async function applyVerification(client, discordId, position, nickname, {
         }
       }
 
+      // In Staff HQ, also remove Unverified role if it exists (user just got verified)
+      if (guildId === STAFF_HQ_ID) {
+        const unverifiedRole = guild.roles.cache.find(r => r.name === 'Unverified');
+        if (unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
+          try {
+            await member.roles.remove(unverifiedRole);
+            guildResult.rolesRemoved.push('Unverified');
+          } catch (e) {
+            guildResult.rolesRemoveFailed.push('Unverified');
+          }
+        }
+      }
+
       results.push(guildResult);
     } catch (e) {
       guildResult.success = false;
@@ -152,6 +166,24 @@ export async function stripVerification(client, discordId, username) {
           guildResult.error = removeResult.error;
         } else {
           guildResult.rolesRemoved = toRemove.map(r => r.name);
+        }
+      }
+
+      // In Staff HQ, also add Unverified role (they've been unverified)
+      if (guildId === STAFF_HQ_ID) {
+        let unverifiedRole = guild.roles.cache.find(r => r.name === 'Unverified');
+        if (!unverifiedRole) {
+          unverifiedRole = await guild.roles.create({
+            name: 'Unverified',
+            color: 0x808080,
+            reason: 'Auto-created: unverified role'
+          });
+        }
+        try {
+          await member.roles.add(unverifiedRole);
+          guildResult.rolesAdded.push('Unverified');
+        } catch (e) {
+          guildResult.rolesAddFailed.push('Unverified');
         }
       }
 
