@@ -109,6 +109,8 @@ client.on('interactionCreate', async interaction => {
     // Verify/Unverify button handlers
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
     if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
+    // Logspanel back button handlers
+    if (interaction.customId.startsWith('logspanel_back')) return logspanel.handleSelect(interaction);
 
     // NID button handlers
     if (interaction.customId.startsWith('nid_confirm_')) {

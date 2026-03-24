@@ -144,12 +144,32 @@ function buildTypeSelect(categoryKey, disabled = false) {
   );
 }
 
+// Build back button row
+function buildBackButton(label = '← Back to Categories') {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('logspanel_back')
+      .setLabel(label)
+      .setStyle(2)
+  );
+}
+
+// Build back to type-select button for channel modal
+function buildBackToTypeButton(categoryKey) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`logspanel_back_type_${categoryKey}`)
+      .setLabel('← Back')
+      .setStyle(2)
+  );
+}
+
 export const data = new SlashCommandBuilder()
   .setName('logspanel')
   .setDescription('Open the log channel configuration panel');
 
 export async function execute(interaction) {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply();
 
   const guildId = interaction.guildId;
 
@@ -167,6 +187,18 @@ export async function execute(interaction) {
 export async function handleSelect(interaction) {
   const customId = interaction.customId;
 
+  // Back button — return to main view
+  if (customId === 'logspanel_back' || customId.startsWith('logspanel_back_type_')) {
+    const embed = buildInfoEmbed(interaction.guildId);
+    const categoryRow = buildCategorySelect();
+    await interaction.update({
+      content: '⚙️ **Log Configuration Panel**\nUse the selector below to configure log channels.',
+      embeds: [embed],
+      components: [categoryRow]
+    });
+    return;
+  }
+
   // Category selected — show type select for that category
   if (customId === 'logspanel_category') {
     const categoryKey = interaction.values[0].replace('cat_', '');
@@ -174,12 +206,13 @@ export async function handleSelect(interaction) {
     if (!cat) return;
 
     const typeRow = buildTypeSelect(categoryKey);
+    const backRow = buildBackButton();
     const embed = buildInfoEmbed(interaction.guildId);
 
     await interaction.update({
-      content: `📁 **${cat.emoji} ${cat.label}** — Select the log type to configure:`,
+      content: `📁 **${cat.emoji} ${cat.label}** — Select the log type to configure, or go back:`,
       embeds: [embed],
-      components: [typeRow]
+      components: [typeRow, backRow]
     });
     return;
   }
@@ -203,7 +236,7 @@ export async function handleSelect(interaction) {
           .setCustomId('channel_id')
           .setLabel('Channel ID')
           .setStyle(1)
-          .setPlaceholder('Paste the channel ID here')
+          .setPlaceholder('Paste the channel ID here, or leave blank to disable')
           .setRequired(false)
       )
     );
