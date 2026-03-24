@@ -48,8 +48,8 @@ export async function logAction(client, {
     .setTitle(`📋 ${action}`)
     .setColor(color)
     .addFields(
-      { name: 'Target', value: target ? (target.discordId === 'MULTIPLE' ? target.name : `<@${target.discordId || target}> ${target.name ? `(${target.name})` : ''}`) : 'Unknown', inline: true },
-      { name: 'Moderator', value: moderator ? `<@${moderator.discordId || moderator}> ${moderator.name ? `(${moderator.name})` : ''}` : 'Unknown', inline: true },
+      { name: 'Target', value: (target && target !== null) ? (target.discordId === 'MULTIPLE' ? target.name : `<@${target.discordId || target}> ${target.name ? `(${target.name})` : ''}`) : 'N/A', inline: true },
+      { name: 'Moderator', value: (moderator && moderator !== null) ? `<@${moderator.discordId || moderator}> ${moderator.name ? `(${moderator.name})` : ''}` : 'N/A', inline: true },
       { name: 'Reason', value: reason || 'No reason provided', inline: false },
       ...fields
     )

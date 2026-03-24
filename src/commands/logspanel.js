@@ -108,15 +108,30 @@ function buildInfoEmbed(guildId) {
     globalRows.push(`**${cat.emoji} ${cat.label}:** ${status}`);
   }
 
+  function chunkString(str, maxLen) {
+  const chunks = [];
+  while (str.length > maxLen) {
+    chunks.push(str.slice(0, maxLen));
+    str = str.slice(maxLen);
+  }
+  chunks.push(str);
+  return chunks;
+}
+
+  const allRows = [...globalRows, ...rows];
+  const fields = [];
+  const content = allRows.join('\n') || 'No log channels configured yet.';
+  const chunks = chunkString(content, 1020);
+  for (let i = 0; i < chunks.length; i++) {
+    fields.push({ name: i === 0 ? '📋 Log Channels' : `📋 Log Channels (cont. ${i + 1})`, value: chunks[i], inline: false });
+  }
+  fields.push({ name: '📌 Instructions', value: '1. Select a category below\n2. Choose a log type\n3. Pick a channel when prompted\n\nAll settings are optional.', inline: false });
+
   return new EmbedBuilder()
     .setTitle('⚙️ Log Channel Configuration Panel')
     .setColor(0x5865F2)
     .setDescription('Configure where different types of logs are sent.\n\nUse the selectors below to set a channel for each log type. All fields are optional — only selected log types will be configured.')
-    .addFields(
-      { name: '🌐 Global Logs', value: globalRows.join('\n') || 'No global logs configured', inline: false },
-      { name: '📌 Per-Server Logs', value: rows.join('\n') || 'No per-server logs configured yet', inline: false },
-      { name: 'Instructions', value: '1. Select a category below\n2. Choose a log type\n3. Pick a channel when prompted\n\nAll settings are optional.', inline: false }
-    )
+    .addFields(...fields)
     .setFooter({ text: 'Community Organisation | Staff Assistant' })
     .setTimestamp();
 }
