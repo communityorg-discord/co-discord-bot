@@ -158,6 +158,38 @@ function buildGuildResultsField(results, type) {
 }
 
 // Button interaction handler
+export async function handleSelect(interaction) {
+  try {
+    if (customId.startsWith('verify_auth_select_')) {
+      const queueId = customId.replace('verify_auth_select_', '');
+      const selectedAuthLevel = parseInt(interaction.values[0]);
+      const queue = db.prepare('SELECT * FROM verification_queue WHERE id = ?').get(queueId);
+      if (!queue) {
+        await interaction.update({ content: 'Verification request not found.', embeds: [], components: [] });
+        return;
+      }
+      const member = await interaction.guild.members.fetch(queue.discord_id).catch(() => null);
+      if (!member) {
+        await interaction.update({ content: 'Member not found in server.', embeds: [], components: [] });
+        return;
+      }
+      if (!(await isSuperuser(interaction.user.id))) {
+        await interaction.update({ content: 'Only superusers can approve verification requests.', ephemeral: true });
+        return;
+      }
+      await interaction.deferUpdate();
+      await applyVerification({ client: interaction.client, discordId: queue.discord_id, nickname: queue.nickname, override: { authLevel: selectedAuthLevel }, sendDM: false, interaction });
+      const { logAction } = await import('../utils/logger.js');
+      await logAction(interaction.client, { action: 'Member Verified (Auth Selected)', target: { discordId: queue.discord_id, name: queue.nickname }, moderator: { discordId: interaction.user.id, name: interaction.user.username }, color: 0x22C55E });
+      await interaction.editReply({ embeds: [new EmbedBuilder().setTitle('Verification Approved').setColor(0x22C55E).setDescription('Approved <@' + queue.discord_id + '> with auth level ' + selectedAuthLevel + '.')] }).catch(() => {});
+      return;
+    }
+  } catch (err) {
+    console.error('[verify handleSelect error]', err);
+    await interaction.editReply({ content: 'An error occurred processing your selection.' }).catch(() => {});
+  }
+}
+
 export async function handleButton(interaction) {
   const customId = interaction.customId;
 

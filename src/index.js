@@ -21,7 +21,7 @@ import * as user from './commands/user.js';
 import * as botInfo from './commands/bot.js';
 import * as ban from './commands/ban.js';
 import * as unban from './commands/unban.js';
-import { handleButton as verifyButton, handleModal as verifyModal } from './commands/verify.js';
+import { handleButton as verifyButton, handleModal as verifyModal, handleSelect as verifySelect } from './commands/verify.js';
 import { handleButton as unverifyButton, handleModal as unverifyModal } from './commands/unverify.js';
 import * as verify from './commands/verify.js';
 import * as dm from './commands/dm.js';
@@ -217,6 +217,9 @@ client.on('interactionCreate', async interaction => {
 
   if (interaction.isButton()) {
     // Verify/Unverify button handlers
+    if (interaction.customId.startsWith('verify_auth_select_')) return verifySelect(interaction);
+    if (interaction.customId.startsWith('verify_auth_select_')) return verifySelect(interaction);
+    if (interaction.customId.startsWith('verify_auth_select_')) return verifySelect(interaction);
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
     if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
     // Logspanel back button handlers
