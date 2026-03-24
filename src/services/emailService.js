@@ -27,7 +27,14 @@ export function getUserCoEmail(discordId) {
 // ─── Google Sheets Config Loader ───────────────────────────────────────────────
 
 const EMAIL_CONFIG_PATH = './src/config/emailConfig.json';
-const EMAIL_ACCOUNTS_SHEET = JSON.parse(readFileSync(EMAIL_CONFIG_PATH, 'utf8'));
+let _emailAccountsSheet = null;
+
+function getEmailAccountsSheet() {
+  if (!_emailAccountsSheet) {
+    _emailAccountsSheet = JSON.parse(readFileSync(EMAIL_CONFIG_PATH, 'utf8'));
+  }
+  return _emailAccountsSheet;
+}
 
 let cachedConfig = null;
 let cacheTime = 0;
@@ -40,6 +47,8 @@ const CACHE_TTL_MS = 60_000; // 1 minute
 export async function fetchEmailConfig() {
   const now = Date.now();
   if (cachedConfig && now - cacheTime < CACHE_TTL_MS) return cachedConfig;
+
+  const EMAIL_ACCOUNTS_SHEET = getEmailAccountsSheet();
 
   const auth = new GoogleAuth({
     keyFile: '/home/vpcommunityorganisation/clawd/services/onboarding-portal/config/google-service-account.json',

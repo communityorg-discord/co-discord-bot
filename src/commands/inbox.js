@@ -222,7 +222,7 @@ export async function handleInboxInteraction(interaction) {
 
   // ── Inbox select (from main menu) ──────────────────────────────────────────
   if (customId === 'inbox_select') {
-    await interaction.deferReply();
+    await interaction.deferReply({ ephemeral: true });
     const inboxId = interaction.values[0];
     const config = await fetchEmailConfig();
     const inbox = config[inboxId];
@@ -290,16 +290,21 @@ export async function handleInboxInteraction(interaction) {
 
   // ── Read email ─────────────────────────────────────────────────────────────
   if (customId.startsWith('inbox_read_')) {
-    const uid = customId.replace('inbox_read_', '');
     const parts = customId.split('_');
-    // inbox_read_<uid> — we stored uid after action
-    // We need inbox info — get from message or re-fetch
-    // Find inbox_id from email list message
-    const content = interaction.message.embeds[0]?.title || '';
-    // Can't easily get inbox from here — use ephemeral reply approach
-    // Instead, let's get inbox from the message reference
-    // Actually, let's store inbox_id in button customId: inbox_read_<inboxId>_<uid>
-    return; // Will be handled with proper customId format after rewrite
+    const inboxId = parts[2];
+    const uid = parts[3];
+
+    const config = await fetchEmailConfig();
+    const inbox = config[inboxId];
+    if (!inbox) return;
+
+    const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
+    if (!verified) {
+      return interaction.reply({ content: '❌ Access denied.', ephemeral: true });
+    }
+
+    await interaction.message.delete().catch(() => {});
+    return showEmail(interaction, inbox, uid, discordUserId, discordRoleIds, 0);
   }
 
   // ── Archive email ──────────────────────────────────────────────────────────
@@ -435,9 +440,26 @@ export async function handleInboxInteraction(interaction) {
   }
 
   // ── Copy content ───────────────────────────────────────────────────────────
+  // ── Back to inbox from email detail ─────────────────────────────────────
+  if (customId.startsWith('inbox_back_email_')) {
+    const parts = customId.split('_');
+    const inboxId = parts[3];
+    const page = parseInt(parts[4]) || 0;
+
+    const config = await fetchEmailConfig();
+    const inbox = config[inboxId];
+    if (!inbox) return;
+
+    const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
+    if (!verified) {
+      return interaction.reply({ content: '❌ Access denied.', ephemeral: true });
+    }
+
+    await interaction.message.delete().catch(() => {});
+    return showInbox(interaction, inbox, discordUserId, discordRoleIds, page);
+  }
+
   if (customId.startsWith('inbox_copy_')) {
-    const uid = customId.replace('inbox_copy_', '');
-    // inbox_copy_<inboxId>_<uid>
     const parts = customId.split('_');
     const inboxId = parts[2];
     const emailUid = parts[3];
