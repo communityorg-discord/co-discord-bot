@@ -167,6 +167,9 @@ export function getAllLogConfig(guildId) {
   return config;
 }
 
+// Alias for logspanel.js compatibility
+export const getLogConfig = getAllLogConfig;
+
 export function addInfraction(discordId, type, reason, moderatorId, moderatorName, expiresAt = null, appealable = 1) {
   return db.prepare(`
     INSERT INTO infractions (discord_id, type, reason, moderator_id, moderator_name, expires_at, appealable)
