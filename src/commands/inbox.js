@@ -72,11 +72,13 @@ function buildEmailListEmbed(inbox, result, page) {
   return { embed, rows, totalPages };
 }
 
-function buildEmailActionRow(uid, page, inboxId) {
+function buildEmailActionRow(uid, page, inboxId, fromAddr = '', subject = '') {
+  const safeFrom = (fromAddr || '').slice(0, 40).replace(/\|/g, '');
+  const safeSubject = (subject || '').slice(0, 30).replace(/\|/g, '');
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`inbox_read|${inboxId}|${uid}`).setLabel('Read').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`inbox_reply|${uid}|${page}|${inboxId}`).setLabel('Reply').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`inbox_forward|${uid}|${page}|${inboxId}`).setLabel('Forward').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`inbox_reply|${uid}|${page}|${inboxId}|${safeFrom}|${safeSubject}`).setLabel('Reply').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`inbox_forward|${uid}|${page}|${inboxId}|${safeFrom}|${safeSubject}`).setLabel('Forward').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`inbox_copy|${inboxId}|${uid}`).setLabel('Copy').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`inbox_archive|${uid}|${page}|${inboxId}`).setLabel('Archive').setStyle(ButtonStyle.Danger),
   );
@@ -167,13 +169,14 @@ async function showEmail(interaction, inbox, uid, discordUserId, discordRoleIds,
   }
   try {
     const email = await fetchEmailBody(inbox, uid);
-    const fromAddr = email.from?.address || 'Unknown';
+    const fromAddr = email.from?.address || '';
+    const subject = email.subject || '';
     const fromName = email.from?.name || fromAddr;
     const dateStr = email.date ? new Date(email.date).toLocaleString() : '';
     const body = email.textAsHtml || markdownToDiscord(email.text);
     const chunks = paginateText(body, 2000);
     const embed = new EmbedBuilder()
-      .setTitle(email.subject || '(no subject)')
+      .setTitle(subject || '(no subject)')
       .setColor(0x1a73e8)
       .addFields(
         { name: 'From', value: fromName, inline: true },
@@ -181,7 +184,7 @@ async function showEmail(interaction, inbox, uid, discordUserId, discordRoleIds,
         { name: 'Date', value: dateStr, inline: false },
       )
       .setFooter({ text: `UID: ${uid} | ${inbox.name}` });
-    const actionRow = buildEmailActionRow(uid, page, inbox.inbox_id);
+    const actionRow = buildEmailActionRow(uid, page, inbox.inbox_id, fromAddr, subject);
     const backButton = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`inbox_back_email|${inbox.inbox_id}|${page}`)
@@ -293,13 +296,26 @@ export async function handleInboxInteraction(interaction) {
       const uid = parts[1];
       const page = parseInt(parts[2]) || 0;
       const inboxId = parts[3];
+      const fromAddr = parts[4] || '';
+      const originalSubject = parts[5] || '';
+      const replySubject = originalSubject.startsWith('Re:') ? originalSubject : `Re: ${originalSubject}`;
+
       const modal = new ModalBuilder()
         .setCustomId(`inbox_reply_send|${inboxId}|${uid}|${page}`)
         .setTitle('Reply to Email');
       modal.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reply_to').setLabel('To').setStyle(1).setPlaceholder('recipient@example.com').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reply_subject').setLabel('Subject').setStyle(1).setPlaceholder('Re: ...').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reply_body').setLabel('Message').setStyle(2).setPlaceholder('Write your reply...').setRequired(true)),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder().setCustomId('reply_to').setLabel('To').setStyle(1)
+            .setValue(fromAddr).setPlaceholder('recipient@example.com').setRequired(true)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder().setCustomId('reply_subject').setLabel('Subject').setStyle(1)
+            .setValue(replySubject).setPlaceholder('Re: ...').setRequired(true)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder().setCustomId('reply_body').setLabel('Message').setStyle(2)
+            .setPlaceholder('Write your reply...').setRequired(true)
+        ),
       );
       await interaction.showModal(modal);
     }
@@ -309,13 +325,26 @@ export async function handleInboxInteraction(interaction) {
       const uid = parts[1];
       const page = parseInt(parts[2]) || 0;
       const inboxId = parts[3];
+      const fromAddr = parts[4] || '';
+      const originalSubject = parts[5] || '';
+      const fwdSubject = originalSubject.startsWith('Fwd:') ? originalSubject : `Fwd: ${originalSubject}`;
+
       const modal = new ModalBuilder()
         .setCustomId(`inbox_forward_send|${inboxId}|${uid}|${page}`)
         .setTitle('Forward Email');
       modal.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('forward_to').setLabel('To (email address)').setStyle(1).setPlaceholder('recipient@example.com').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('forward_subject').setLabel('Subject').setStyle(1).setPlaceholder('Fwd: ...').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('forward_body').setLabel('Additional message').setStyle(2).setPlaceholder('Add a note...').setRequired(false)),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder().setCustomId('forward_to').setLabel('To (email address)').setStyle(1)
+            .setPlaceholder('recipient@example.com').setRequired(true)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder().setCustomId('forward_subject').setLabel('Subject').setStyle(1)
+            .setValue(fwdSubject).setPlaceholder('Fwd: ...').setRequired(true)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder().setCustomId('forward_body').setLabel('Additional message').setStyle(2)
+            .setPlaceholder('Add a note...').setRequired(false)
+        ),
       );
       await interaction.showModal(modal);
     }
