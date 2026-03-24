@@ -509,4 +509,4 @@ export function markPersonalEmailSeen(discordId, uid, subject, fromAddress) {
 export function removePersonalEmailSetup(discordId) {
   db.prepare('UPDATE personal_email_setup SET enabled = 0 WHERE discord_id = ?').run(discordId);
 }
-
+export { db };

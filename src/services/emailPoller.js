@@ -154,7 +154,7 @@ export { buildEmailNotifEmbed, buildEmailNotifButtons, generateReplyCode };
 
 export async function pollPersonalInboxes(client) {
   try {
-    const { getAllPersonalEmailSetups, isPersonalEmailSeen, markPersonalEmailSeen } = await import('../utils/botDb.js');
+    const { db, getAllPersonalEmailSetups, isPersonalEmailSeen, markPersonalEmailSeen } = await import('../utils/botDb.js');
     const { fetchInboxEmails } = await import('./emailService.js');
     const setups = getAllPersonalEmailSetups();
 
@@ -174,8 +174,22 @@ export async function pollPersonalInboxes(client) {
           folders: { inbox: 'INBOX' },
         };
 
-        const result = await fetchInboxEmails(fakeInbox, 0, 10).catch(() => null);
+        // Fetch 50 on first run to seed seen history, otherwise 10
+        const seededAlready = db.prepare('SELECT COUNT(*) as c FROM personal_email_seen WHERE discord_id = ?').get(setup.discord_id)?.c || 0;
+        const fetchLimit = seededAlready === 0 ? 50 : 10;
+        const result = await fetchInboxEmails(fakeInbox, 0, fetchLimit).catch(() => null);
         if (!result || result.emails.length === 0) continue;
+
+        if (seededAlready === 0) {
+          // First run — seed all existing emails as seen, no notifications
+          for (const email of result.emails) {
+            const subject = email.headers?.subject?.[0] || '(no subject)';
+            const from = email.headers?.from?.[0] || 'Unknown';
+            markPersonalEmailSeen(setup.discord_id, email.uid, subject, from);
+          }
+          console.log(`[Personal Poller] First run for ${setup.discord_id} — seeded ${result.emails.length} existing emails, no notifications`);
+          continue;
+        }
 
         const user = await client.users.fetch(setup.discord_id).catch(() => null);
         if (!user) continue;
