@@ -39,6 +39,11 @@ import * as deleteTicketPanel from './commands/delete-ticket-panel.js';
 import { handleTicketButton, handleTicketChannelButton } from './commands/ticket-panel-send.js';
 import { handleTicketOptionsButton, handleTicketOptionsModal } from './commands/ticket-options.js';
 import * as ticketOptions from './commands/ticket-options.js';
+import * as warn from './commands/warn.js';
+import * as timeout from './commands/timeout.js';
+import * as untimeout from './commands/untimeout.js';
+import * as kick from './commands/kick.js';
+import * as serverban from './commands/serverban.js';
 
 config();
 import { logRoleAction } from './utils/logger.js';
@@ -54,7 +59,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, ban, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, ban, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, untimeout, kick, serverban];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
