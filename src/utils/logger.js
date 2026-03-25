@@ -18,8 +18,21 @@ export async function sendToWatchedUsers(client, embed) {
   for (const userId of WATCHED_LOG_USER_IDS) {
     try {
       const user = await client.users.fetch(userId).catch(() => null);
-      if (user) await user.send({ embeds: [embed] }).catch(() => {});
-    } catch (_) {}
+      if (!user) {
+        console.error(`[Logger] sendToWatchedUsers: user ${userId} not found`);
+        continue;
+      }
+      const dm = await user.createDM().catch(e => null);
+      if (!dm) {
+        console.error(`[Logger] sendToWatchedUsers: failed to create DM with ${userId}: ${e.message}`);
+        continue;
+      }
+      await dm.send({ embeds: [embed] }).catch(e => {
+        console.error(`[Logger] sendToWatchedUsers: failed to send DM to ${userId}: ${e.message}`);
+      });
+    } catch (e) {
+      console.error(`[Logger] sendToWatchedUsers: error for ${userId}: ${e.message}`);
+    }
   }
 }
 
@@ -82,8 +95,11 @@ export async function logAction(client, {
     for (const userId of WATCHED_LOG_USER_IDS) {
       try {
         const user = await client.users.fetch(userId).catch(() => null);
-        if (user) await user.send({ embeds: [embed] }).catch(() => {});
-      } catch (_) {}
+        if (!user) { console.error(`[Logger] user ${userId} not found`); continue; }
+        const dm = await user.createDM().catch(e => null);
+        if (!dm) { console.error(`[Logger] failed to create DM with ${userId}`); continue; }
+        await dm.send({ embeds: [embed] }).catch(e => console.error(`[Logger] failed to DM ${userId}: ${e.message}`));
+      } catch (e) { console.error(`[Logger] sendToWatchedUsers error for ${userId}: ${e.message}`); }
     }
   };
 
