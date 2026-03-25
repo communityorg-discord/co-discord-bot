@@ -7,12 +7,35 @@ import { getUserByDiscordId } from '../db.js';
 
 function parseDuration(str) {
   if (!str) return null;
-  const match = str.match(/^(\d+)([smhd])$/);
-  if (!match) return null;
-  const value = parseInt(match[1]);
-  const unit = match[2];
-  const multipliers = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
-  return value * multipliers[unit];
+  str = str.trim().toLowerCase();
+
+  // Supported formats: "10s", "5m", "2h", "1d", "1 second", "5 minutes", "2 hours", "3 days", "1m30s", "1 hour 30 minutes"
+  const unitMultipliers = {
+    seconds: 1000, second: 1000, s: 1000,
+    minutes: 60000, minute: 60000, m: 60000,
+    hours: 3600000, hour: 3600000, h: 3600000,
+    days: 86400000, day: 86400000, d: 86400000,
+  };
+
+  // Match patterns like "5 minutes", "10s", "1m30s", "2 hours 30 minutes"
+  const pattern = /(?:(\d+)\s*(?:second(?:s)?|minute(?:s)?|hours?|hour|days?|d|h|m|s))/gi;
+  let totalMs = 0;
+  let found = false;
+
+  for (const match of str.matchAll(pattern)) {
+    const num = parseInt(match[1]);
+    const unitStr = match[0].replace(/\d+/g, '').trim();
+    const unitLower = unitStr.toLowerCase();
+    // Strip plural 's' if present
+    const unit = unitLower.endsWith('s') ? unitLower.slice(0, -1) : unitLower;
+    const multiplier = unitMultipliers[unit] || unitMultipliers[unitLower];
+    if (multiplier && !isNaN(num)) {
+      totalMs += num * multiplier;
+      found = true;
+    }
+  }
+
+  return found && totalMs > 0 ? totalMs : null;
 }
 
 function formatDuration(ms) {
@@ -39,7 +62,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const perm = await canRunCommand(interaction.user.id, 5);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}` });
 
   let sub;
   try {
@@ -65,15 +88,15 @@ async function handleAddTimeout(interaction) {
   const reason = interaction.options.getString('reason') || 'Not specified';
 
   if (!interaction.inGuild()) {
-    return interaction.reply({ content: '❌ This command cannot be used in DMs.', ephemeral: true });
+    return interaction.reply({ content: '❌ This command cannot be used in DMs.' });
   }
 
   const durationMs = parseDuration(durationStr);
   if (!durationMs || durationMs < 10000) {
-    return interaction.reply({ content: '❌ Minimum timeout duration is 10 seconds. Use format: 10s, 5m, 2h, 1d', ephemeral: true });
+    return interaction.reply({ content: '❌ Invalid duration. Use formats like: 10s, 5m, 2h, 1d, 1 minute, 30 seconds, 1 hour 30 minutes' });
   }
   if (durationMs > 2419200000) {
-    return interaction.reply({ content: '❌ Maximum timeout duration is 28 days.', ephemeral: true });
+    return interaction.reply({ content: '❌ Maximum timeout duration is 28 days.' });
   }
 
   const portalUser = getUserByDiscordId(target.id);
@@ -81,7 +104,7 @@ async function handleAddTimeout(interaction) {
   const member = await interaction.guild.members.fetch(target.id).catch(() => null);
 
   if (!member) {
-    return interaction.reply({ content: `❌ Could not find user <@${target.id}> in this server.`, ephemeral: true });
+    return interaction.reply({ content: `❌ Could not find user <@${target.id}> in this server.` });
   }
 
   await interaction.deferReply();
@@ -155,7 +178,7 @@ async function handleRemoveTimeout(interaction) {
   const reason = interaction.options.getString('reason') || 'Not specified';
 
   if (!interaction.inGuild()) {
-    return interaction.reply({ content: '❌ This command cannot be used in DMs.', ephemeral: true });
+    return interaction.reply({ content: '❌ This command cannot be used in DMs.' });
   }
 
   const portalUser = getUserByDiscordId(target.id);
@@ -163,7 +186,7 @@ async function handleRemoveTimeout(interaction) {
   const member = await interaction.guild.members.fetch(target.id).catch(() => null);
 
   if (!member) {
-    return interaction.reply({ content: `❌ Could not find user <@${target.id}> in this server.`, ephemeral: true });
+    return interaction.reply({ content: `❌ Could not find user <@${target.id}> in this server.` });
   }
 
   await interaction.deferReply();

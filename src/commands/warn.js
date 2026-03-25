@@ -7,19 +7,19 @@ import { getUserByDiscordId } from '../db.js';
 
 export const data = new SlashCommandBuilder()
   .setName('warn')
-  .setDescription('Warn a user for misconduct')
+  .setDescription('Warn a user')
   .addUserOption(opt => opt.setName('user').setDescription('User to warn').setRequired(true))
   .addStringOption(opt => opt.setName('reason').setDescription('Reason for the warning').setRequired(true));
 
 export async function execute(interaction) {
   const perm = await canRunCommand(interaction.user.id, 4);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}` });
 
   const target = interaction.options.getUser('user');
   const reason = interaction.options.getString('reason');
 
   if (!interaction.inGuild()) {
-    return interaction.reply({ content: '❌ This command cannot be used in DMs.', ephemeral: true });
+    return interaction.reply({ content: '❌ This command cannot be used in DMs.' });
   }
 
   const portalUser = getUserByDiscordId(target.id);

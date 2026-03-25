@@ -21,7 +21,7 @@ import * as strike from './commands/strike.js';
 import * as user from './commands/user.js';
 import * as botInfo from './commands/bot.js';
 import * as help from './commands/help.js';
-import * as ban from './commands/ban.js';
+import * as ban from './commands/serverban.js';
 import * as unban from './commands/unban.js';
 import { handleButton as verifyButton, handleModal as verifyModal, handleSelect as verifySelect } from './commands/verify.js';
 import { handleButton as unverifyButton, handleModal as unverifyModal } from './commands/unverify.js';
