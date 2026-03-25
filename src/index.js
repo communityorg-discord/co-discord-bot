@@ -921,7 +921,10 @@ client.on('messageDelete', async (message) => {
 // Message edit log — tracked globally across all servers
 client.on('messageUpdate', async (oldMessage, newMessage) => {
   if (!oldMessage || !newMessage || oldMessage.author?.bot) return;
-  if (oldMessage.content === newMessage.content) return;
+  const oldContent = oldMessage.content || '';
+  const newContent = newMessage.content || '';
+  // Skip if content unchanged and no new embeds added (Discord fires update on embed changes too)
+  if (oldContent === newContent && newMessage.embeds?.length <= (oldMessage.embeds?.length || 0)) return;
 
   // Skip if message is from any log channel (prevents edit-log loop)
   const allLogChannelIds = [
