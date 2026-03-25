@@ -19,7 +19,9 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
-  const sub = interaction.options.getSubcommand();
+  let sub;
+  try { sub = interaction.options.getSubcommand(); }
+  catch { return interaction.reply({ content: 'Please select a subcommand.', ephemeral: true }); }
 
   if (sub === 'configure') {
     const portalUser = getUserByDiscordId(interaction.user.id);
