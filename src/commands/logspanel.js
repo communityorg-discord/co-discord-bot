@@ -326,18 +326,32 @@ export async function handleSelect(interaction) {
       return;
     }
 
-    // Per-guild category — show type select
+    // Per-guild category — show type select with category-specific bindings
     const categoryKey = value.replace('cat_', '');
     const cat = CATEGORIES[categoryKey];
     if (!cat) return;
 
+    const config = getAllLogConfig(interaction.guildId);
+    const typeRows = [];
+    for (const [typeKey, type] of Object.entries(cat.types)) {
+      const channelId = config[`${categoryKey}:${typeKey}`];
+      const status = channelId ? `✅ <#${channelId}>` : '❌ Not set';
+      typeRows.push(`**${cat.emoji} ${cat.label} > ${type.label}:** ${status}`);
+    }
+
+    const catEmbed = new EmbedBuilder()
+      .setTitle(`📁 ${cat.emoji} ${cat.label} — Log Bindings`)
+      .setColor(0x5865F2)
+      .addFields({ name: '​', value: typeRows.join('\n'), inline: false })
+      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setTimestamp();
+
     const typeRow = buildTypeSelect(categoryKey);
     const backRow = buildBackButton();
-    const embed = buildInfoEmbed(interaction.guildId);
 
     await interaction.update({
       content: `📁 **${cat.emoji} ${cat.label}** — Select the log type to configure, or go back:`,
-      embeds: [embed],
+      embeds: [catEmbed],
       components: [typeRow, backRow]
     });
     return;
