@@ -2,7 +2,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { isSuperuser } from '../utils/permissions.js';
 import { ALL_SERVER_IDS, APPEALS_SERVER_ID } from '../config.js';
 import { getActiveGlobalBan } from '../utils/botDb.js';
-import db from '../utils/botDb.js';
+import db, { addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { GBAN_UNGBAN_LOG_CHANNEL_ID } from '../config.js';
 
@@ -40,6 +40,8 @@ export async function execute(interaction) {
   db.prepare('UPDATE global_bans SET active = 0 WHERE discord_id = ? AND active = 1').run(userId);
   db.prepare('UPDATE infractions SET active = 0 WHERE discord_id = ? AND type = ? AND active = 1').run(userId, 'global_ban');
 
+  const inf = addInfraction(userId, 'global_unban', reason, interaction.user.id, interaction.user.username);
+
   const serverList = serverResults.map(s => `${s.success ? '🟢' : '🔴'} ${s.name}`).join('\n');
 
   await logAction(interaction.client, {
@@ -63,7 +65,8 @@ export async function execute(interaction) {
     .addFields(
       { name: 'Unbanned From', value: String(unbannedCount), inline: true },
       { name: 'Reason', value: reason, inline: false },
-      { name: 'Moderator', value: interaction.user.username, inline: true }
+      { name: 'Moderator', value: interaction.user.username, inline: true },
+      { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true }
     )
     .setFooter({ text: 'Community Organisation' })
     .setTimestamp()

@@ -3,6 +3,7 @@ import { canRunCommand } from '../utils/permissions.js';
 import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
+import { addInfraction } from '../utils/botDb.js';
 
 export const data = new SlashCommandBuilder()
   .setName('untimeout')
@@ -34,6 +35,8 @@ export async function execute(interaction) {
   // Remove timeout
   try {
     await member.timeout(null, reason);
+
+  const inf = addInfraction(target.id, 'untimeout', reason, interaction.user.id, interaction.user.username);
   } catch (err) {
     return interaction.editReply({ content: `❌ Failed to remove timeout: ${err.message}` });
   }

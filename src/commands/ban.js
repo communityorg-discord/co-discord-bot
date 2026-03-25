@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { logAction } from '../utils/logger.js';
-import db from '../utils/botDb.js';
+import db, { addInfraction } from '../utils/botDb.js';
 import { isSuperuser } from '../utils/permissions.js';
 import { ALL_SERVER_IDS } from '../config.js';
 
@@ -105,6 +105,8 @@ export async function execute(interaction) {
       "INSERT INTO banned_users (discord_id, username, banned_at, reason, banned_by, unban_at) VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?, ?)"
     ).run(targetUserId, targetUserId, reason, interaction.user.id, unbanAt);
 
+    const inf = addInfraction(targetUserId, isTempBan ? 'temp_ban' : 'global_ban', reason, interaction.user.id, interaction.user.username, isTempBan ? new Date(Date.now() + durationMs).toISOString() : null, 1);
+
     const titlePrefix = isTempBan ? '⏱️ Temporary Ban' : '🔨 Global Ban';
     const statusColor = failedGuilds.length === 0 && results.length > 0 ? 0xef4444 : 0xf59e0b;
     const unbanTs = isTempBan ? Math.floor((Date.now() + durationMs) / 1000) : null;
@@ -122,6 +124,7 @@ export async function execute(interaction) {
         { name: 'Reason', value: reason, inline: false },
         ...(isTempBan ? [{ name: 'Auto-Unban', value: `<t:${unbanTs}:R>`, inline: true }] : []),
         { name: 'Banned By', value: `<@${interaction.user.id}>`, inline: false },
+        { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },
       )
       .setTimestamp();
 

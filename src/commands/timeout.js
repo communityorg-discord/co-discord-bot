@@ -45,10 +45,11 @@ export async function execute(interaction) {
   try {
     sub = interaction.options.getSubcommand();
   } catch {
-    return interaction.reply({
-      content: '**Available subcommands:**\n`/timeout add` — Apply a timeout to a user\n`/timeout remove` — Remove a timeout from a user',
-      ephemeral: true
-    });
+    const msg = { content: '**Available subcommands:**\n`/timeout add` — Apply a timeout to a user\n`/timeout remove` — Remove a timeout from a user' };
+    if (interaction.deferred || interaction.replied) {
+      return interaction.editReply(msg).catch(() => {});
+    }
+    return interaction.reply(msg).catch(() => {});
   }
 
   if (sub === 'add') {

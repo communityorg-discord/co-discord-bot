@@ -47,7 +47,7 @@ export async function execute(interaction) {
   } catch {}
 
   await terminateAcrossGuilds(interaction.client, target.id, botDb);
-  addInfraction(target.id, 'termination', reason, interaction.user.id, interaction.user.username, null, 0);
+  const inf = addInfraction(target.id, 'termination', reason, interaction.user.id, interaction.user.username, null, 0);
 
   await logAction(interaction.client, {
     action: 'Staff Terminated',
@@ -65,7 +65,8 @@ export async function execute(interaction) {
     .setDescription(`**${portalUser?.display_name || target.username}** has been terminated.`)
     .addFields(
       { name: 'Reason', value: reason, inline: false },
-      { name: 'Moderator', value: interaction.user.username, inline: true }
+      { name: 'Moderator', value: interaction.user.username, inline: true },
+      { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true }
     )
     .setFooter({ text: 'Community Organisation' })
     .setTimestamp()

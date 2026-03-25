@@ -270,12 +270,6 @@ export async function handleSelect(interaction) {
 
     // Organisation Logs category — show orgwide type select with global + orgwide bindings
     if (value === 'cat_orgwide') {
-      const globalConfig = {};
-      for (const [key, cat] of Object.entries(GLOBAL_CATEGORIES)) {
-        const channelId = getGlobalLogChannel(key);
-        const status = channelId ? '✅ <#' + channelId + '>' : '❌ Not set';
-        globalConfig[key] = cat.emoji + ' ' + cat.label + ': ' + status;
-      }
       const orgwideTypes = ['member_join', 'member_leave', 'role_change', 'channel_change', 'message_delete', 'verification', 'mod_action', 'case_action', 'dm_log'];
       const orgwideBindings = [];
       for (const t of orgwideTypes) {
@@ -283,12 +277,10 @@ export async function handleSelect(interaction) {
         orgwideBindings.push('[' + t + '] ' + (ch ? '✅ <#' + ch + '>' : '❌ Not set'));
       }
 
-      const globalLines = Object.values(globalConfig);
-      const allLines = ['🌐 **Global Channels**'].concat(globalLines).concat(['', '🏢 **Orgwide Channels**']).concat(orgwideBindings);
       const orgwideEmbed = new EmbedBuilder()
-        .setTitle('🏢 Organisation & Global Log Bindings')
+        .setTitle('🏢 Organisation Log Bindings')
         .setColor(0x5865F2)
-        .setDescription(allLines.join('\n'))
+        .setDescription('All logs captured here come from **ALL servers**. ' + orgwideBindings.join(' | '))
         .setFooter({ text: 'Community Organisation | Staff Assistant' })
         .setTimestamp();
 
@@ -303,15 +295,26 @@ export async function handleSelect(interaction) {
       return;
     }
 
-    // Global Logs category — show global type select
+    // Global Logs category — show global type select with per-server global bindings
     if (value === 'cat_global_logs') {
+      const globalBindings = [];
+      for (const [key, cat] of Object.entries(GLOBAL_CATEGORIES)) {
+        const channelId = getGlobalLogChannel(key);
+        globalBindings.push(cat.emoji + ' ' + cat.label + ': ' + (channelId ? '✅ <#' + channelId + '>' : '❌ Not set'));
+      }
+      const globalEmbed = new EmbedBuilder()
+        .setTitle('🌐 Global Log Bindings')
+        .setColor(0x5865F2)
+        .setDescription('Logs captured here are for **this server only**.  ' + globalBindings.join('\n'))
+        .setFooter({ text: 'Community Organisation | Staff Assistant' })
+        .setTimestamp();
+
       const globalRow = buildGlobalTypeSelect();
       const backRow = buildBackButton();
-      const embed = buildInfoEmbed(interaction.guildId);
 
       await interaction.update({
         content: '🌐 **Global Logs** — Select the global log type to configure, or go back:',
-        embeds: [embed],
+        embeds: [globalEmbed],
         components: [globalRow, backRow]
       });
       return;

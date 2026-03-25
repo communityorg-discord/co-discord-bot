@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canRunCommand } from '../utils/permissions.js';
 import { unsuspendAcrossGuilds } from '../utils/roleManager.js';
-import { liftSuspension, getActiveSuspension } from '../utils/botDb.js';
+import { liftSuspension, getActiveSuspension, addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { SUSPEND_UNSUSPEND_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
@@ -27,6 +27,7 @@ export async function execute(interaction) {
   await interaction.deferReply();
 
   liftSuspension(target.id);
+  const inf = addInfraction(target.id, 'unsuspend', reason, interaction.user.id, interaction.user.username);
   await unsuspendAcrossGuilds(interaction.client, target.id, botDb);
 
   try { await target.send({ content: `✅ Your suspension from Community Organisation has been lifted. Your roles have been restored.` }); } catch {}
@@ -47,7 +48,8 @@ export async function execute(interaction) {
     .setDescription(`**${portalUser?.display_name || target.username}**'s suspension has been lifted and roles restored.`)
     .addFields(
       { name: 'Reason', value: reason, inline: false },
-      { name: 'Moderator', value: interaction.user.username, inline: true }
+      { name: 'Moderator', value: interaction.user.username, inline: true },
+      { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true }
     )
     .setFooter({ text: 'Community Organisation' })
     .setTimestamp()

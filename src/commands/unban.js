@@ -3,6 +3,7 @@ import { canRunCommand } from '../utils/permissions.js';
 import { logAction } from '../utils/logger.js';
 import { BAN_UNBAN_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
+import { addInfraction } from '../utils/botDb.js';
 
 export const data = new SlashCommandBuilder()
   .setName('unban')
@@ -31,6 +32,8 @@ export async function execute(interaction) {
       return;
     }
     await interaction.guild.bans.remove(userId, `Unban | ${reason}`);
+
+  const inf = addInfraction(userId, 'unban', reason, interaction.user.id, interaction.user.username);
   } catch (e) {
     await interaction.editReply({ embeds: [new EmbedBuilder()
       .setTitle('❌ Unban Failed')
@@ -60,7 +63,8 @@ export async function execute(interaction) {
     .setDescription(`<@${userId}> has been unbanned from this server.`)
     .addFields(
       { name: 'Reason', value: reason, inline: false },
-      { name: 'Moderator', value: interaction.user.username, inline: true }
+      { name: 'Moderator', value: interaction.user.username, inline: true },
+      { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true }
     )
     .setFooter({ text: 'Community Organisation' })
     .setTimestamp()
