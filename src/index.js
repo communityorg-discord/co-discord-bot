@@ -25,6 +25,7 @@ import * as ban from './commands/serverban.js';
 import * as unban from './commands/unban.js';
 import { handleButton as verifyButton, handleModal as verifyModal, handleSelect as verifySelect } from './commands/verify.js';
 import { handleButton as unverifyButton, handleModal as unverifyModal } from './commands/unverify.js';
+import { handleButton as infractionsButton } from './commands/infractions.js';
 import * as verify from './commands/verify.js';
 import * as dm from './commands/dm.js';
 import * as dmExempt from './commands/dm-exempt.js';
@@ -308,6 +309,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId.startsWith('verify_auth_select_')) return verifySelect(interaction);
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
     if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
+    if (interaction.customId.startsWith('infr_')) return infractionsButton(interaction);
     // Logspanel back button handlers
     if (interaction.customId?.startsWith('logspanel_back')) {
       try { return logspanel.handleSelect(interaction); }
