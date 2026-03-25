@@ -31,7 +31,7 @@ export async function execute(interaction) {
     .setFooter({ text: 'Community Organisation | Staff Directory' })
   );
 
-  await interaction.reply({ embeds: embeds.slice(0, 3) });
+  await interaction.reply({ embeds: embeds.slice(0, 3), ephemeral: true });
   } catch (err) {
     console.error('[staff] Error:', err);
     const msg = { content: 'An error occurred. Please try again.', flags: 64 };

@@ -177,12 +177,12 @@ export async function execute(interaction) {
 
   if (mass) {
     recipients = portalDb.prepare(
-      `SELECT discord_id, display_name FROM users WHERE account_status = 'Active' AND discord_id IS NOT NULL AND discord_id != '' GROUP BY discord_id`
+      `SELECT discord_id, display_name FROM users WHERE lower(account_status) = 'active' AND discord_id IS NOT NULL AND discord_id != '' GROUP BY discord_id`
     ).all();
   } else if (team) {
     const teamDept = TEAMS[team];
     recipients = portalDb.prepare(
-      `SELECT discord_id, display_name FROM users WHERE account_status = 'Active' AND discord_id IS NOT NULL AND discord_id != '' AND department = ? GROUP BY discord_id`
+      `SELECT discord_id, display_name FROM users WHERE lower(account_status) = 'active' AND discord_id IS NOT NULL AND discord_id != '' AND department = ? GROUP BY discord_id`
     ).all(teamDept);
   }
 

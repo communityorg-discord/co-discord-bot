@@ -67,6 +67,8 @@ export async function execute(interaction) {
       return interaction.reply({ content: `❌ <@${targetUserId}> is already in the global ban list.`, ephemeral: true });
     }
 
+    await interaction.deferReply({ ephemeral: true });
+
     const results = [];
     const failedGuilds = [];
     const alreadyBanned = [];
@@ -123,7 +125,7 @@ export async function execute(interaction) {
       )
       .setTimestamp();
 
-    await interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.editReply({ embeds: [embed] });
 
     // Schedule auto-unban for temp bans
     if (isTempBan) {

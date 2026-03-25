@@ -27,8 +27,8 @@ function formatDuration(ms) {
 }
 
 export const data = new SlashCommandBuilder()
-  .setName('ban')
-  .setDescription('Ban a user from this server')
+  .setName('serverban')
+  .setDescription('Ban a user from this server only')
   .addUserOption(opt => opt.setName('user').setDescription('User to ban').setRequired(true))
   .addStringOption(opt => opt.setName('duration').setDescription('Duration for temp ban: 1d, 7d (omit for permanent)').setRequired(false))
   .addStringOption(opt => opt.setName('reason').setDescription('Reason for the ban').setRequired(false))

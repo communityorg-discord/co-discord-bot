@@ -39,7 +39,7 @@ export async function execute(interaction) {
       embed.addFields({ name: '🗑️ Deleted Infractions', value: deleted.map(i => `**[Deleted]** \`${i.type}\` — ${i.reason}`).join('\n') });
     }
 
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({ embeds: [embed], ephemeral: true });
 
   } else if (sub === 'delete') {
     if (!await isSuperuser(interaction.user.id)) return interaction.reply({ content: '❌ Superuser only.', ephemeral: true });
