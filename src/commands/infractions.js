@@ -117,8 +117,7 @@ export async function execute(interaction) {
 }
 
 // Handle pagination button clicks
-export async function handleButton(interaction) {
-  const customId = interaction.customId;
+export async function handleButton(interaction) {   const customId = interaction.customId;
   if (!customId.startsWith('infr_prev_') && !customId.startsWith('infr_next_')) return false;
 
   await interaction.deferUpdate();
