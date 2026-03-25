@@ -84,7 +84,7 @@ const GLOBAL_CATEGORIES = {
   },
   global_email_log: {
     label: 'Global Email Log',
-    emoji: '📧',
+    emoji: '🌐',
     description: 'All team inbox email activity logged to one channel'
   }
 };
