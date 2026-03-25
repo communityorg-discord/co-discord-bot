@@ -97,15 +97,6 @@ function buildInfoEmbed(guildId) {
     globalConfig[key] = getGlobalLogChannel(key);
   }
 
-  const rows = [];
-  for (const [catKey, cat] of Object.entries(CATEGORIES)) {
-    for (const [typeKey, type] of Object.entries(cat.types)) {
-      const channelId = config[`${catKey}:${typeKey}`];
-      const status = channelId ? `✅ <#${channelId}>` : '❌ Not set';
-      rows.push(`**${cat.emoji} ${cat.label} > ${type.label}:** ${status}`);
-    }
-  }
-
   const globalRows = [];
   for (const [key, cat] of Object.entries(GLOBAL_CATEGORIES)) {
     const channelId = globalConfig[key];
@@ -131,14 +122,13 @@ function buildInfoEmbed(guildId) {
   }
 
 
-  const allRows = [...globalRows, ...orgwideRows, ...rows];
+  const summaryRows = [...globalRows, ...orgwideRows];
   const fields = [];
-  const content = allRows.join('\n') || 'No log channels configured yet.';
-  const chunks = chunkString(content, 1020);
-  for (let i = 0; i < chunks.length; i++) {
-    fields.push({ name: i === 0 ? '📋 Log Channels' : `📋 Log Channels (cont. ${i + 1})`, value: chunks[i], inline: false });
+  const content = summaryRows.join('\n') || 'No global or orgwide log channels configured yet.';
+  if (content) {
+    fields.push({ name: '🌐 Global / 🏢 Orgwide Channels', value: content, inline: false });
   }
-  fields.push({ name: '📌 Instructions', value: '1. Select a category below\n2. Choose a log type\n3. Pick a channel when prompted\n\nAll settings are optional.', inline: false });
+  fields.push({ name: '📌 Instructions', value: '1. Select a category below\n2. Choose a log type\n3. Pick a channel when prompted\n\nPer-server log bindings appear after selecting a category.', inline: false });
 
   return new EmbedBuilder()
     .setTitle('⚙️ Log Channel Configuration Panel')
