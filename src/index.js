@@ -922,9 +922,37 @@ client.on('messageDelete', async (message) => {
 client.on('messageUpdate', async (oldMessage, newMessage) => {
   if (!oldMessage || !newMessage || oldMessage.author?.bot) return;
   if (oldMessage.content === newMessage.content) return;
+
+  // Skip if message is from any log channel (prevents edit-log loop)
+  const allLogChannelIds = [
+    MESSAGE_EDIT_LOG_CHANNEL_ID,
+    MESSAGE_DELETE_LOG_CHANNEL_ID,
+    FULL_MESSAGE_LOGS_CHANNEL_ID,
+    getGlobalLogChannel('global_message'),
+    getGlobalLogChannel('global_moderation'),
+    getGlobalLogChannel('global_verification'),
+    getGlobalLogChannel('global_role_management'),
+  ];
+  // Also collect per-guild log channels from all guilds — check the message's guild
+  const guildId = newMessage.guildId;
+  if (guildId) {
+    const perGuildEdit = getLogChannel(guildId, 'message', 'message_edit');
+    const perGuildDelete = getLogChannel(guildId, 'message', 'message_delete');
+    const perGuildMod = getLogChannel(guildId, 'moderation', 'mod_action');
+    if (perGuildEdit) allLogChannelIds.push(perGuildEdit);
+    if (perGuildDelete) allLogChannelIds.push(perGuildDelete);
+    if (perGuildMod) allLogChannelIds.push(perGuildMod);
+  }
+  // Orgwide channels
+  for (const t of ['member_join','member_leave','role_change','channel_change','message_delete','verification','mod_action','case_action','dm_log']) {
+    const orgCh = getLogChannel('orgwide', t, null);
+    if (orgCh) allLogChannelIds.push(orgCh);
+  }
+
+  if (allLogChannelIds.includes(newMessage.channelId)) return;
+
   try {
     const editChannelId = MESSAGE_EDIT_LOG_CHANNEL_ID;
-    const guildId = newMessage.guildId;
     const perGuildChannelId = guildId ? getLogChannel(guildId, 'message', 'message_edit') : null;
     const globalChannelId = getGlobalLogChannel('global_message');
 
