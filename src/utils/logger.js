@@ -189,5 +189,5 @@ export async function logRoleAction(client, {
   }
 
   // Also DM watched users
-  await sendToWatchedUsers();
+  await sendToWatchedUsers(client, embed);
 }
