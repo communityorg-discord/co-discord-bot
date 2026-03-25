@@ -126,7 +126,7 @@ function buildInfoEmbed(guildId) {
   const orgwideRows = [];
   const orgwideTypes = ['member_join', 'member_leave', 'role_change', 'channel_change', 'message_delete', 'verification', 'mod_action', 'case_action', 'dm_log'];
   for (const t of orgwideTypes) {
-    const ch = getLogConfig('orgwide', t);
+    const ch = getLogChannel('orgwide', t, null);
     if (ch) orgwideRows.push(`[${t}] <#${ch}>`);
   }
 
@@ -505,9 +505,9 @@ export async function handleModal(interaction) {
           components: []
         });
       }
-      setLogChannel('orgwide', typeKey, targetChannel.id);
+      setLogChannel('orgwide', 'orgwide', typeKey, targetChannel.id);
     } else {
-      setLogChannel('orgwide', typeKey, null);
+      setLogChannel('orgwide', 'orgwide', typeKey, null);
     }
 
     const embed = buildInfoEmbed(interaction.guildId);

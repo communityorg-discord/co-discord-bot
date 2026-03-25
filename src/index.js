@@ -743,9 +743,123 @@ client.on('guildMemberAdd', async (member) => {
     if (toAssign.size > 0) await member.roles.add(toAssign).catch(() => {});
     await member.setNickname(verified.nickname || null).catch(() => {});
     console.log('[Verify] Auto-applied roles for', member.user.tag, 'on join to', member.guild.name);
+
+    // Member join log to orgwide channel + watched users
+    try {
+      const { EmbedBuilder: EB2 } = await import('discord.js');
+      const orgCh = getLogChannel('orgwide', 'member_join', null);
+      const jEmbed = new EB2()
+        .setTitle('👋 Member Joined')
+        .setColor(0x22C55E)
+        .addFields(
+          { name: 'Member', value: member.user.username + ' (<@' + member.user.id + '>)', inline: true },
+          { name: 'Server', value: member.guild.name, inline: true }
+        )
+        .setFooter({ text: 'Community Organisation | Staff Assistant' })
+        .setTimestamp();
+      if (orgCh) {
+        const ch = await client.channels.fetch(orgCh).catch(() => null);
+        if (ch) await ch.send({ embeds: [jEmbed] }).catch(() => {});
+      }
+      await sendToWatchedUsers(client, jEmbed);
+    } catch (e) { console.error('[guildMemberAdd log error]', e.message); }
   } catch (e) {
     console.error('[guildMemberAdd verify error]', e.message);
   }
+});
+
+
+// Member leave log
+client.on('guildMemberRemove', async (member) => {
+  try {
+    const { EmbedBuilder: EB3 } = await import('discord.js');
+    const orgCh = getLogChannel('orgwide', 'member_leave', null);
+    const lEmbed = new EB3()
+      .setTitle('👋 Member Left')
+      .setColor(0xEF4444)
+      .addFields(
+        { name: 'Member', value: member.user.username + ' (<@' + member.user.id + '>)', inline: true },
+        { name: 'Server', value: member.guild.name, inline: true }
+      )
+      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setTimestamp();
+    if (orgCh) {
+      const ch = await client.channels.fetch(orgCh).catch(() => null);
+      if (ch) await ch.send({ embeds: [lEmbed] }).catch(() => {});
+    }
+    await sendToWatchedUsers(client, lEmbed);
+  } catch (e) { console.error('[guildMemberRemove log error]', e.message); }
+});
+
+// Channel create log
+client.on('channelCreate', async (channel) => {
+  try {
+    if (!channel.isTextBased() && !channel.isVoiceBased()) return;
+    const { EmbedBuilder: EB4 } = await import('discord.js');
+    const orgCh = getLogChannel('orgwide', 'channel_change', null);
+    const cEmbed = new EB4()
+      .setTitle('📁 Channel Created')
+      .setColor(0x22C55E)
+      .addFields(
+        { name: 'Channel', value: channel.name, inline: true },
+        { name: 'Server', value: channel.guild?.name || 'Unknown', inline: true }
+      )
+      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setTimestamp();
+    if (orgCh) {
+      const logCh = await client.channels.fetch(orgCh).catch(() => null);
+      if (logCh) await logCh.send({ embeds: [cEmbed] }).catch(() => {});
+    }
+    await sendToWatchedUsers(client, cEmbed);
+  } catch (e) { console.error('[channelCreate log error]', e.message); }
+});
+
+// Channel delete log
+client.on('channelDelete', async (channel) => {
+  try {
+    if (!channel.isTextBased() && !channel.isVoiceBased()) return;
+    const { EmbedBuilder: EB5 } = await import('discord.js');
+    const orgCh = getLogChannel('orgwide', 'channel_change', null);
+    const dEmbed = new EB5()
+      .setTitle('📁 Channel Deleted')
+      .setColor(0xEF4444)
+      .addFields(
+        { name: 'Channel', value: channel.name, inline: true },
+        { name: 'Server', value: channel.guild?.name || 'Unknown', inline: true }
+      )
+      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setTimestamp();
+    if (orgCh) {
+      const logCh = await client.channels.fetch(orgCh).catch(() => null);
+      if (logCh) await logCh.send({ embeds: [dEmbed] }).catch(() => {});
+    }
+    await sendToWatchedUsers(client, dEmbed);
+  } catch (e) { console.error('[channelDelete log error]', e.message); }
+});
+
+// Channel update log
+client.on('channelUpdate', async (oldCh, newCh) => {
+  try {
+    if (!oldCh.isTextBased() && !oldCh.isVoiceBased()) return;
+    if (oldCh.name === newCh.name) return;
+    const { EmbedBuilder: EB6 } = await import('discord.js');
+    const orgChannel = getLogChannel('orgwide', 'channel_change', null);
+    const uEmbed = new EB6()
+      .setTitle('📁 Channel Updated')
+      .setColor(0xF59E0B)
+      .addFields(
+        { name: 'Channel', value: newCh.name, inline: true },
+        { name: 'Old Name', value: oldCh.name, inline: true },
+        { name: 'Server', value: newCh.guild?.name || 'Unknown', inline: true }
+      )
+      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setTimestamp();
+    if (orgChannel) {
+      const logCh = await client.channels.fetch(orgChannel).catch(() => null);
+      if (logCh) await logCh.send({ embeds: [uEmbed] }).catch(() => {});
+    }
+    await sendToWatchedUsers(client, uEmbed);
+  } catch (e) { console.error('[channelUpdate log error]', e.message); }
 });
 
 
