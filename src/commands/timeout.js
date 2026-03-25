@@ -41,7 +41,15 @@ export async function execute(interaction) {
   const perm = await canRunCommand(interaction.user.id, 5);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
-  const sub = interaction.options.getSubcommand();
+  let sub;
+  try {
+    sub = interaction.options.getSubcommand();
+  } catch {
+    return interaction.reply({
+      content: '**Available subcommands:**\n`/timeout add` — Apply a timeout to a user\n`/timeout remove` — Remove a timeout from a user',
+      ephemeral: true
+    });
+  }
 
   if (sub === 'add') {
     await handleAddTimeout(interaction);

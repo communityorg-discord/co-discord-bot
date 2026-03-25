@@ -97,38 +97,8 @@ function buildInfoEmbed(guildId) {
     globalConfig[key] = getGlobalLogChannel(key);
   }
 
-  const globalRows = [];
-  for (const [key, cat] of Object.entries(GLOBAL_CATEGORIES)) {
-    const channelId = globalConfig[key];
-    const status = channelId ? `✅ <#${channelId}>` : '❌ Not set';
-    globalRows.push(`**${cat.emoji} ${cat.label}:** ${status}`);
-  }
-
-  function chunkString(str, maxLen) {
-  const chunks = [];
-  while (str.length > maxLen) {
-    chunks.push(str.slice(0, maxLen));
-    str = str.slice(maxLen);
-  }
-  chunks.push(str);
-  return chunks;
-}
-
-  const orgwideRows = [];
-  const orgwideTypes = ['member_join', 'member_leave', 'role_change', 'channel_change', 'message_delete', 'verification', 'mod_action', 'case_action', 'dm_log'];
-  for (const t of orgwideTypes) {
-    const ch = getLogChannel('orgwide', t, null);
-    if (ch) orgwideRows.push(`[${t}] <#${ch}>`);
-  }
-
-
-  const summaryRows = [...globalRows, ...orgwideRows];
   const fields = [];
-  const content = summaryRows.join('\n') || 'No global or orgwide log channels configured yet.';
-  if (content) {
-    fields.push({ name: '🌐 Global / 🏢 Orgwide Channels', value: content, inline: false });
-  }
-  fields.push({ name: '📌 Instructions', value: '1. Select a category below\n2. Choose a log type\n3. Pick a channel when prompted\n\nPer-server log bindings appear after selecting a category.', inline: false });
+  fields.push({ name: '📌 Instructions', value: '1. Select a category below\n2. Choose a log type\n3. Pick a channel when prompted\n\nGlobal and Orgwide bindings appear after selecting their categories.', inline: false });
 
   return new EmbedBuilder()
     .setTitle('⚙️ Log Channel Configuration Panel')
@@ -298,15 +268,36 @@ export async function handleSelect(interaction) {
   if (customId === 'logspanel_category') {
     const value = interaction.values[0];
 
-    // Organisation Logs category — show orgwide type select
+    // Organisation Logs category — show orgwide type select with global + orgwide bindings
     if (value === 'cat_orgwide') {
+      const globalConfig = {};
+      for (const [key, cat] of Object.entries(GLOBAL_CATEGORIES)) {
+        const channelId = getGlobalLogChannel(key);
+        const status = channelId ? '✅ <#' + channelId + '>' : '❌ Not set';
+        globalConfig[key] = cat.emoji + ' ' + cat.label + ': ' + status;
+      }
+      const orgwideTypes = ['member_join', 'member_leave', 'role_change', 'channel_change', 'message_delete', 'verification', 'mod_action', 'case_action', 'dm_log'];
+      const orgwideBindings = [];
+      for (const t of orgwideTypes) {
+        const ch = getLogChannel('orgwide', t, null);
+        orgwideBindings.push('[' + t + '] ' + (ch ? '✅ <#' + ch + '>' : '❌ Not set'));
+      }
+
+      const globalLines = Object.values(globalConfig);
+      const allLines = ['🌐 **Global Channels**'].concat(globalLines).concat(['', '🏢 **Orgwide Channels**']).concat(orgwideBindings);
+      const orgwideEmbed = new EmbedBuilder()
+        .setTitle('🏢 Organisation & Global Log Bindings')
+        .setColor(0x5865F2)
+        .setDescription(allLines.join('\n'))
+        .setFooter({ text: 'Community Organisation | Staff Assistant' })
+        .setTimestamp();
+
       const orgwideRow = buildOrgwideTypeSelect();
       const backRow = buildBackButton();
-      const embed = buildInfoEmbed(interaction.guildId);
 
       await interaction.update({
         content: '🏢 **Organisation Logs** — Select the log type to configure, or go back:',
-        embeds: [embed],
+        embeds: [orgwideEmbed],
         components: [orgwideRow, backRow]
       });
       return;
