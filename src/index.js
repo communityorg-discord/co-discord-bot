@@ -94,7 +94,6 @@ async function setupEmailNotificationChannels(client) {
       { inboxId: 'ic', name: 'ic-inbox' },
       { inboxId: 'dgacm', name: 'dgacm-inbox' },
       { inboxId: 'dcos', name: 'dcos-inbox' },
-      { inboxId: 'audit_vault', name: 'audit-vault-inbox' },
     ];
 
     const { default: db } = await import('./utils/botDb.js');
