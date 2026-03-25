@@ -873,7 +873,7 @@ client.on('channelUpdate', async (oldCh, newCh) => {
 
 // Message delete log — tracked globally across all servers
 client.on('messageDelete', async (message) => {
-  if (!message || message.author?.bot) return;
+  if (!message || !message.author || message.author?.bot) return;
   try {
     const deleteChannelId = MESSAGE_DELETE_LOG_CHANNEL_ID;
     const guildId = message.guildId;
