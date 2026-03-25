@@ -47,8 +47,8 @@ export async function execute(interaction) {
 
     if (targetUserOption && targetUserOption.id !== interaction.user.id) {
       const canView = await canRunCommand(interaction.user.id, 5);
-      if (!canView) {
-        return interaction.reply({ content: "❌ You need Auth Level 5 or higher to view other users' BRAG records.", ephemeral: true });
+      if (!canView.allowed) {
+        return interaction.reply({ content: `❌ ${canView.reason}`, ephemeral: true });
       }
       const targetLinkedUser = getUserByDiscordId(targetUserOption.id);
       if (!targetLinkedUser) {

@@ -100,10 +100,9 @@ export async function execute(interaction) {
   // Auto-lift if timed
   if (duration) {
     setTimeout(async () => {
-      const { removeSuspendedRole, restorePositionRoles } = await import('../utils/roleManager.js');
-      const { liftSuspension } = await import('../utils/botDb.js');
-      await removeSuspendedRole(interaction.client, target.id);
-      if (portalUser?.position) await restorePositionRoles(interaction.client, target.id, portalUser.position);
+      const { unsuspendAcrossGuilds } = await import('../utils/roleManager.js');
+      const { liftSuspension, default: botDb } = await import('../utils/botDb.js');
+      await unsuspendAcrossGuilds(interaction.client, target.id, botDb);
       liftSuspension(target.id);
       try {
         await target.send({

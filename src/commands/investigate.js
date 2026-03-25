@@ -24,8 +24,8 @@ export async function execute(interaction) {
   const reason = interaction.options.getString('description');
 
   const perm = await canRunCommand(interaction.user.id, 5);
-  if (!perm) {
-    return interaction.reply({ content: '❌ You do not have permission to use this command.', ephemeral: true });
+  if (!perm.allowed) {
+    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
   }
 
   const portalUser = await getPortalUser(target.id);

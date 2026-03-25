@@ -32,7 +32,7 @@ export async function execute(interaction) {
     .setFooter({ text: 'Community Organisation | Case Management' })
     .setTimestamp();
 
-  await interaction.reply({ embeds: [embed] });
+  await interaction.reply({ embeds: [embed], ephemeral: true });
   } catch (err) {
     console.error('[cases] Error:', err);
     const msg = { content: 'An error occurred. Please try again.', flags: 64 };

@@ -467,16 +467,16 @@ client.on('interactionCreate', async interaction => {
       catch(e) { console.error('[inbox notif error]', e.message, 'customId:', interaction.customId); throw e; }
     }
 
-    // Inbox button handlers
-    if (interaction.customId?.startsWith('inbox_')) {
-      try { return inbox.handleInboxInteraction(interaction); }
-      catch(e) { console.error('[inbox error]', e.message, 'customId:', interaction.customId); throw e; }
-    }
-
     // Personal inbox email button handlers
     if (interaction.customId?.startsWith('inbox_personal_')) {
       try { return inbox.handlePersonalEmailButton(interaction); }
       catch(e) { console.error('[inbox personal btn error]', e.message); throw e; }
+    }
+
+    // Inbox button handlers (generic — must be after specific handlers)
+    if (interaction.customId?.startsWith('inbox_')) {
+      try { return inbox.handleInboxInteraction(interaction); }
+      catch(e) { console.error('[inbox error]', e.message, 'customId:', interaction.customId); throw e; }
     }
 
     // Personal compose skip button
@@ -554,6 +554,14 @@ client.on('interactionCreate', async interaction => {
       try { return logspanel.handleSelect(interaction); }
       catch(e) { console.error('[logspanel handleSelect error]', e.message, 'customId:', interaction.customId, 'values:', interaction.values); throw e; }
     }
+    // Personal compose CC select menu
+    if (interaction.customId?.startsWith('personal_compose_cc|')) {
+      const to = decodeURIComponent(interaction.customId.split('|')[1]);
+      const cc = interaction.values.join(', ');
+      const { showPersonalComposeModal } = await import('./commands/compose.js');
+      return showPersonalComposeModal(interaction, to, cc);
+    }
+
     // Inbox button/select handlers
     if (interaction.customId?.startsWith('inbox_')) {
       try { return inbox.handleInboxInteraction(interaction); }

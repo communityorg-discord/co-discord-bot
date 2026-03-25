@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canRunCommand } from '../utils/permissions.js';
+import { unsuspendAcrossGuilds } from '../utils/roleManager.js';
 import { liftSuspension, getActiveSuspension } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { SUSPEND_UNSUSPEND_LOG_CHANNEL_ID } from '../config.js';

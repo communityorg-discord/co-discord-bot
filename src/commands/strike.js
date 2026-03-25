@@ -19,6 +19,8 @@ export async function execute(interaction) {
   const reason = interaction.options.getString('reason');
   const portalUser = getUserByDiscordId(target.id);
 
+  await interaction.deferReply();
+
   const inf = addInfraction(target.id, 'staff_strike', reason, interaction.user.id, interaction.user.username);
 
   try {
@@ -45,7 +47,7 @@ export async function execute(interaction) {
     logType: 'moderation.strike',
   });
 
-  await interaction.reply({ embeds: [new EmbedBuilder()
+  await interaction.editReply({ embeds: [new EmbedBuilder()
     .setTitle('⚠️ Staff Strike Issued')
     .setColor(0xF59E0B)
     .setDescription(`Strike issued to **${portalUser?.display_name || target.username}**.`)
