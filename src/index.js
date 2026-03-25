@@ -21,11 +21,10 @@ import * as strike from './commands/strike.js';
 import * as user from './commands/user.js';
 import * as botInfo from './commands/bot.js';
 import * as help from './commands/help.js';
-import * as ban from './commands/serverban.js';
+import * as ban from './commands/ban.js';
 import * as unban from './commands/unban.js';
 import { handleButton as verifyButton, handleModal as verifyModal, handleSelect as verifySelect } from './commands/verify.js';
 import { handleButton as unverifyButton, handleModal as unverifyModal } from './commands/unverify.js';
-import { handleButton as infractionsButton } from './commands/infractions.js';
 import * as verify from './commands/verify.js';
 import * as dm from './commands/dm.js';
 import * as dmExempt from './commands/dm-exempt.js';
@@ -36,8 +35,6 @@ import * as authorisationOverride from './commands/authorisation-override.js';
 import * as logspanel from './commands/logspanel.js';
 import * as inbox from './commands/inbox.js';
 import * as compose from './commands/compose.js';
-import * as setupEmail from './commands/setup-email.js';
-import * as inboxReply from './commands/inbox-reply.js';
 import * as cooldown from './commands/cooldown.js';
 import * as massUnban from './commands/mass-unban.js';
 import * as createTicketPanel from './commands/create-ticket-panel.js';
@@ -48,7 +45,9 @@ import { handleTicketOptionsButton, handleTicketOptionsModal } from './commands/
 import * as ticketOptions from './commands/ticket-options.js';
 import * as warn from './commands/warn.js';
 import * as timeout from './commands/timeout.js';
+import * as untimeout from './commands/untimeout.js';
 import * as kick from './commands/kick.js';
+import * as serverban from './commands/serverban.js';
 
 config();
 import { logRoleAction } from './utils/logger.js';
@@ -64,7 +63,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, ban, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, help, inbox, inboxReply, setupEmail, compose];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, strike, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, untimeout, kick, serverban, help, inbox];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -86,14 +85,15 @@ async function setupEmailNotificationChannels(client) {
     }
 
     const inboxChannels = [
-      { inboxId: 'executive_operations', name: 'eob-inbox' },
-      { inboxId: 'board_of_directors', name: 'bod-inbox' },
-      { inboxId: 'extended_board', name: 'ebod-inbox' },
+      { inboxId: 'eob', name: 'eob-inbox' },
+      { inboxId: 'bod', name: 'bod-inbox' },
+      { inboxId: 'ebod', name: 'ebod-inbox' },
       { inboxId: 'dss', name: 'dss-inbox' },
       { inboxId: 'dmspc', name: 'dmspc-inbox' },
       { inboxId: 'ic', name: 'ic-inbox' },
       { inboxId: 'dgacm', name: 'dgacm-inbox' },
       { inboxId: 'dcos', name: 'dcos-inbox' },
+      { inboxId: 'audit_vault', name: 'audit-vault-inbox' },
     ];
 
     const { default: db } = await import('./utils/botDb.js');
@@ -229,16 +229,6 @@ client.once('ready', async () => {
   }, 60000);
 
   await setupEmailNotificationChannels(client);
-
-  // Start email poller — every 60 seconds
-  const { pollAllInboxes } = await import('./services/emailPoller.js');
-  setInterval(() => pollAllInboxes(client), 60 * 1000);
-  console.log('[Email Poller] Started — polling every 60 seconds');
-
-  const { pollPersonalInboxes } = await import('./services/emailPoller.js');
-  setInterval(() => pollPersonalInboxes(client), 60 * 1000);
-  console.log('[Personal Email Poller] Started');
-
 });
 
 client.on('interactionCreate', async interaction => {
@@ -308,7 +298,6 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId.startsWith('verify_auth_select_')) return verifySelect(interaction);
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
     if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
-    if (interaction.customId.startsWith('infr_')) return infractionsButton(interaction);
     // Logspanel back button handlers
     if (interaction.customId?.startsWith('logspanel_back')) {
       try { return logspanel.handleSelect(interaction); }
@@ -460,29 +449,10 @@ client.on('interactionCreate', async interaction => {
       });
       return;
     }
-    // Inbox notification button handlers
-    if (interaction.customId?.startsWith('inbox_notif_')) {
-      try { return inbox.handleNotifButton(interaction); }
-      catch(e) { console.error('[inbox notif error]', e.message, 'customId:', interaction.customId); throw e; }
-    }
-
-    // Personal inbox email button handlers
-    if (interaction.customId?.startsWith('inbox_personal_')) {
-      try { return inbox.handlePersonalEmailButton(interaction); }
-      catch(e) { console.error('[inbox personal btn error]', e.message); throw e; }
-    }
-
-    // Inbox button handlers (generic — must be after specific handlers)
+    // Inbox button handlers
     if (interaction.customId?.startsWith('inbox_')) {
       try { return inbox.handleInboxInteraction(interaction); }
       catch(e) { console.error('[inbox error]', e.message, 'customId:', interaction.customId); throw e; }
-    }
-
-    // Personal compose skip button
-    if (interaction.customId?.startsWith('personal_compose_skip|')) {
-      const to = decodeURIComponent(interaction.customId.split('|')[1]);
-      const { showPersonalComposeModal } = await import('./commands/compose.js');
-      return showPersonalComposeModal(interaction, to, '');
     }
 
   }
@@ -553,14 +523,6 @@ client.on('interactionCreate', async interaction => {
       try { return logspanel.handleSelect(interaction); }
       catch(e) { console.error('[logspanel handleSelect error]', e.message, 'customId:', interaction.customId, 'values:', interaction.values); throw e; }
     }
-    // Personal compose CC select menu
-    if (interaction.customId?.startsWith('personal_compose_cc|')) {
-      const to = decodeURIComponent(interaction.customId.split('|')[1]);
-      const cc = interaction.values.join(', ');
-      const { showPersonalComposeModal } = await import('./commands/compose.js');
-      return showPersonalComposeModal(interaction, to, cc);
-    }
-
     // Inbox button/select handlers
     if (interaction.customId?.startsWith('inbox_')) {
       try { return inbox.handleInboxInteraction(interaction); }
@@ -576,61 +538,10 @@ client.on('interactionCreate', async interaction => {
       try { return logspanel.handleModal(interaction); }
       catch(e) { console.error('[logspanel handleModal error]', e.message, 'customId:', interaction.customId); throw e; }
     }
-    // Inbox notification modal handlers
-    if (interaction.customId?.startsWith('inbox_notif_')) {
-      try { return inbox.handleInboxModal(interaction); }
-      catch(e) { console.error('[inbox notif modal error]', e.message, 'customId:', interaction.customId); throw e; }
-    }
-
     // Inbox modal handler
     if (interaction.customId?.startsWith('inbox_')) {
       try { return inbox.handleInboxModal(interaction); }
       catch(e) { console.error('[inbox modal error]', e.message, 'customId:', interaction.customId); throw e; }
-    }
-
-    // Setup email modal
-    if (interaction.customId === 'setup_email_modal') {
-      return setupEmail.handleModal(interaction);
-    }
-
-    // Personal compose submit modal
-    if (interaction.customId?.startsWith('personal_compose_submit|')) {
-      const parts = interaction.customId.split('|');
-      const to = decodeURIComponent(parts[1] || '');
-      const ccFromId = decodeURIComponent(parts[2] || '');
-      const discordUserId = interaction.user.id;
-
-      const { getPersonalEmailSetup } = await import('./utils/botDb.js');
-      const setup = getPersonalEmailSetup(discordUserId);
-      if (!setup) return interaction.reply({ content: '❌ No personal email setup found.', ephemeral: true });
-
-      const ccFromField = interaction.fields.getTextInputValue('compose_cc').trim();
-      const cc = ccFromField || ccFromId || undefined;
-      const subject = interaction.fields.getTextInputValue('compose_subject').trim();
-      const body = interaction.fields.getTextInputValue('compose_body').trim();
-      const toField = interaction.fields.getTextInputValue('compose_to').trim();
-
-      await interaction.deferReply({ ephemeral: true });
-
-      try {
-        const { sendReply } = await import('./services/emailService.js');
-        const fakeInbox = {
-          inbox_id: `personal_${discordUserId}`,
-          name: setup.co_email,
-          emoji: '📧',
-          imap: { host: setup.imap_host, port: setup.imap_port, user: setup.co_email, password: setup.imap_password, secure: setup.imap_port === 993 },
-        };
-        await sendReply(fakeInbox, { to: toField, cc, subject, body }, discordUserId);
-        return interaction.editReply({ content: `✅ Email sent to **${toField}**${cc ? ` (CC: ${cc})` : ''} from **${setup.co_email}**.` });
-      } catch (err) {
-        return interaction.editReply({ content: `⚠️ Failed to send: \`${err.message}\`` });
-      }
-    }
-
-    // Personal inbox email modal handlers
-    if (interaction.customId?.startsWith('inbox_personal_')) {
-      try { return inbox.handleInboxModal(interaction); }
-      catch(e) { console.error('[inbox personal modal error]', e.message); throw e; }
     }
 
     if (interaction.customId.startsWith('ticketopts_renamemodal_')) {
@@ -750,129 +661,15 @@ client.on('guildMemberAdd', async (member) => {
     if (toAssign.size > 0) await member.roles.add(toAssign).catch(() => {});
     await member.setNickname(verified.nickname || null).catch(() => {});
     console.log('[Verify] Auto-applied roles for', member.user.tag, 'on join to', member.guild.name);
-
-    // Member join log to orgwide channel + watched users
-    try {
-      const { EmbedBuilder: EB2 } = await import('discord.js');
-      const orgCh = getLogChannel('orgwide', 'member_join', null);
-      const jEmbed = new EB2()
-        .setTitle('👋 Member Joined')
-        .setColor(0x22C55E)
-        .addFields(
-          { name: 'Member', value: member.user.username + ' (<@' + member.user.id + '>)', inline: true },
-          { name: 'Server', value: member.guild.name, inline: true }
-        )
-        .setFooter({ text: 'Community Organisation | Staff Assistant' })
-        .setTimestamp();
-      if (orgCh) {
-        const ch = await client.channels.fetch(orgCh).catch(() => null);
-        if (ch) await ch.send({ embeds: [jEmbed] }).catch(() => {});
-      }
-      await sendToWatchedUsers(client, jEmbed);
-    } catch (e) { console.error('[guildMemberAdd log error]', e.message); }
   } catch (e) {
     console.error('[guildMemberAdd verify error]', e.message);
   }
 });
 
 
-// Member leave log
-client.on('guildMemberRemove', async (member) => {
-  try {
-    const { EmbedBuilder: EB3 } = await import('discord.js');
-    const orgCh = getLogChannel('orgwide', 'member_leave', null);
-    const lEmbed = new EB3()
-      .setTitle('👋 Member Left')
-      .setColor(0xEF4444)
-      .addFields(
-        { name: 'Member', value: member.user.username + ' (<@' + member.user.id + '>)', inline: true },
-        { name: 'Server', value: member.guild.name, inline: true }
-      )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
-      .setTimestamp();
-    if (orgCh) {
-      const ch = await client.channels.fetch(orgCh).catch(() => null);
-      if (ch) await ch.send({ embeds: [lEmbed] }).catch(() => {});
-    }
-    await sendToWatchedUsers(client, lEmbed);
-  } catch (e) { console.error('[guildMemberRemove log error]', e.message); }
-});
-
-// Channel create log
-client.on('channelCreate', async (channel) => {
-  try {
-    if (!channel.isTextBased() && !channel.isVoiceBased()) return;
-    const { EmbedBuilder: EB4 } = await import('discord.js');
-    const orgCh = getLogChannel('orgwide', 'channel_change', null);
-    const cEmbed = new EB4()
-      .setTitle('📁 Channel Created')
-      .setColor(0x22C55E)
-      .addFields(
-        { name: 'Channel', value: channel.name, inline: true },
-        { name: 'Server', value: channel.guild?.name || 'Unknown', inline: true }
-      )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
-      .setTimestamp();
-    if (orgCh) {
-      const logCh = await client.channels.fetch(orgCh).catch(() => null);
-      if (logCh) await logCh.send({ embeds: [cEmbed] }).catch(() => {});
-    }
-    await sendToWatchedUsers(client, cEmbed);
-  } catch (e) { console.error('[channelCreate log error]', e.message); }
-});
-
-// Channel delete log
-client.on('channelDelete', async (channel) => {
-  try {
-    if (!channel.isTextBased() && !channel.isVoiceBased()) return;
-    const { EmbedBuilder: EB5 } = await import('discord.js');
-    const orgCh = getLogChannel('orgwide', 'channel_change', null);
-    const dEmbed = new EB5()
-      .setTitle('📁 Channel Deleted')
-      .setColor(0xEF4444)
-      .addFields(
-        { name: 'Channel', value: channel.name, inline: true },
-        { name: 'Server', value: channel.guild?.name || 'Unknown', inline: true }
-      )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
-      .setTimestamp();
-    if (orgCh) {
-      const logCh = await client.channels.fetch(orgCh).catch(() => null);
-      if (logCh) await logCh.send({ embeds: [dEmbed] }).catch(() => {});
-    }
-    await sendToWatchedUsers(client, dEmbed);
-  } catch (e) { console.error('[channelDelete log error]', e.message); }
-});
-
-// Channel update log
-client.on('channelUpdate', async (oldCh, newCh) => {
-  try {
-    if (!oldCh.isTextBased() && !oldCh.isVoiceBased()) return;
-    if (oldCh.name === newCh.name) return;
-    const { EmbedBuilder: EB6 } = await import('discord.js');
-    const orgChannel = getLogChannel('orgwide', 'channel_change', null);
-    const uEmbed = new EB6()
-      .setTitle('📁 Channel Updated')
-      .setColor(0xF59E0B)
-      .addFields(
-        { name: 'Channel', value: newCh.name, inline: true },
-        { name: 'Old Name', value: oldCh.name, inline: true },
-        { name: 'Server', value: newCh.guild?.name || 'Unknown', inline: true }
-      )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
-      .setTimestamp();
-    if (orgChannel) {
-      const logCh = await client.channels.fetch(orgChannel).catch(() => null);
-      if (logCh) await logCh.send({ embeds: [uEmbed] }).catch(() => {});
-    }
-    await sendToWatchedUsers(client, uEmbed);
-  } catch (e) { console.error('[channelUpdate log error]', e.message); }
-});
-
-
 // Message delete log — tracked globally across all servers
 client.on('messageDelete', async (message) => {
-  if (!message || !message.author || message.author?.bot) return;
+  if (!message || message.author?.bot) return;
   try {
     const deleteChannelId = MESSAGE_DELETE_LOG_CHANNEL_ID;
     const guildId = message.guildId;
@@ -927,45 +724,11 @@ client.on('messageDelete', async (message) => {
 
 // Message edit log — tracked globally across all servers
 client.on('messageUpdate', async (oldMessage, newMessage) => {
-  if (!oldMessage || !newMessage) return;
-  // Skip messages from this bot entirely (prevents log loops)
-  if (oldMessage.author?.id === client.user.id) return;
-  const oldContent = oldMessage.content || '';
-  const newContent = newMessage.content || '';
-  // Skip if content unchanged and no new embeds added (Discord fires update on embed changes too)
-  // Only log actual text content edits — Discord fires messageUpdate for embed rebuilds too
-  if (oldContent === newContent) return;
-
-  // Skip if message is from any log channel (prevents edit-log loop)
-  const allLogChannelIds = [
-    MESSAGE_EDIT_LOG_CHANNEL_ID,
-    MESSAGE_DELETE_LOG_CHANNEL_ID,
-    FULL_MESSAGE_LOGS_CHANNEL_ID,
-    getGlobalLogChannel('global_message'),
-    getGlobalLogChannel('global_moderation'),
-    getGlobalLogChannel('global_verification'),
-    getGlobalLogChannel('global_role_management'),
-  ];
-  // Also collect per-guild log channels from all guilds — check the message's guild
-  const guildId = newMessage.guildId;
-  if (guildId) {
-    const perGuildEdit = getLogChannel(guildId, 'message', 'message_edit');
-    const perGuildDelete = getLogChannel(guildId, 'message', 'message_delete');
-    const perGuildMod = getLogChannel(guildId, 'moderation', 'mod_action');
-    if (perGuildEdit) allLogChannelIds.push(perGuildEdit);
-    if (perGuildDelete) allLogChannelIds.push(perGuildDelete);
-    if (perGuildMod) allLogChannelIds.push(perGuildMod);
-  }
-  // Orgwide channels
-  for (const t of ['member_join','member_leave','role_change','channel_change','message_delete','verification','mod_action','case_action','dm_log']) {
-    const orgCh = getLogChannel('orgwide', t, null);
-    if (orgCh) allLogChannelIds.push(orgCh);
-  }
-
-  if (allLogChannelIds.includes(newMessage.channelId)) return;
-
+  if (!oldMessage || !newMessage || oldMessage.author?.bot) return;
+  if (oldMessage.content === newMessage.content) return;
   try {
     const editChannelId = MESSAGE_EDIT_LOG_CHANNEL_ID;
+    const guildId = newMessage.guildId;
     const perGuildChannelId = guildId ? getLogChannel(guildId, 'message', 'message_edit') : null;
     const globalChannelId = getGlobalLogChannel('global_message');
 
@@ -1008,9 +771,6 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
       const globalChannel = await client.channels.fetch(globalChannelId).catch(() => null);
       if (globalChannel) await globalChannel.send({ embeds: [embed] });
     }
-
-    // Also DM watched users (Evan + Dion)
-    await sendToWatchedUsers(client, embed);
   } catch (e) {
     console.error('[messageUpdate log error]', e.message);
   }

@@ -193,8 +193,8 @@ function createImapConnection(inbox) {
     port: inbox.imap.port,
     tls: inbox.imap.secure,
     tlsOptions: { rejectUnauthorized: false },
-    connTimeout: 10000,
-    authTimeout: 10000,
+    connTimeout: 30000,
+    authTimeout: 30000,
   });
 }
 
