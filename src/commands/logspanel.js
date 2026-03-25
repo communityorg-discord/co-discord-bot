@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, TextInputBuilder, ModalBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { logAction } from '../utils/logger.js';
-import { getLogConfig, setLogChannel, getGlobalLogChannel, setGlobalLogChannel, getLogChannel } from '../utils/botDb.js';
+import { getLogConfig, setLogChannel, getGlobalLogChannel, setGlobalLogChannel, getLogChannel, getAllLogConfig } from '../utils/botDb.js';
 
 // Per-guild log categories and their types
 const CATEGORIES = {
