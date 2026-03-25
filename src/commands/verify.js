@@ -174,7 +174,7 @@ export async function handleSelect(interaction) {
         return;
       }
       if (!(await isSuperuser(interaction.user.id))) {
-        await interaction.update({ content: 'Only superusers can approve verification requests.', ephemeral: true });
+        await interaction.reply({ content: '❌ Only superusers can approve verification requests.', ephemeral: true });
         return;
       }
       await interaction.deferUpdate();

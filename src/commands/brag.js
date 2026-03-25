@@ -76,8 +76,8 @@ export async function execute(interaction) {
 
     let projected = null;
     const currentCount = currentWeekRecord?.message_count || 0;
-    if (currentCount > 0 && currentWeekRecord?.week_start) {
-      const start = new Date(currentWeekRecord.week_start);
+    if (currentCount > 0 && currentWeekRecord?.week_key) {
+      const start = new Date(currentWeekRecord?.week_key);
       const now = new Date();
       const daysElapsed = Math.max(1, Math.ceil((now - start) / 86400000));
       projected = Math.round((currentCount / daysElapsed) * 7);

@@ -266,7 +266,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   try {
-  await interaction.deferReply();
+  await interaction.deferReply({ ephemeral: true });
 
   const guildId = interaction.guildId;
   const embed = buildInfoEmbed(guildId);
