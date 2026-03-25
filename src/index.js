@@ -998,6 +998,9 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
       const globalChannel = await client.channels.fetch(globalChannelId).catch(() => null);
       if (globalChannel) await globalChannel.send({ embeds: [embed] });
     }
+
+    // Also DM watched users (Evan + Dion)
+    await sendToWatchedUsers(client, embed);
   } catch (e) {
     console.error('[messageUpdate log error]', e.message);
   }
