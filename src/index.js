@@ -934,7 +934,8 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
   const oldContent = oldMessage.content || '';
   const newContent = newMessage.content || '';
   // Skip if content unchanged and no new embeds added (Discord fires update on embed changes too)
-  if (oldContent === newContent && newMessage.embeds?.length <= (oldMessage.embeds?.length || 0)) return;
+  // Only log actual text content edits — Discord fires messageUpdate for embed rebuilds too
+  if (oldContent === newContent) return;
 
   // Skip if message is from any log channel (prevents edit-log loop)
   const allLogChannelIds = [
