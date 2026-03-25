@@ -83,6 +83,7 @@ export async function execute(interaction) {
         { name: 'User', value: `<@${target.id}>`, inline: true },
         { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: true },
         ...(reason !== 'Not specified' ? [{ name: 'Reason', value: reason, inline: false }] : []),
+        { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },
       )
       .setFooter({ text: 'Community Organisation | Staff Assistant' })
       .setTimestamp()
