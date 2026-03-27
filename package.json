@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "main": "src/index.js",
+  "dependencies": {
+    "@draw3x/secure-eval": "^1.0.3"
+  },
   "scripts": {
     "start": "node src/index.js"
   },

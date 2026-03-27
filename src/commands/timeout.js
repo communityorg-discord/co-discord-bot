@@ -111,7 +111,7 @@ async function handleAddTimeout(interaction) {
 
   const expiresAt = new Date(Date.now() + durationMs);
   try {
-    await member.timeout(expiresAt, reason);
+    await member.timeout(durationMs, reason);
   } catch (err) {
     return interaction.editReply({ content: `❌ Failed to timeout <@${targetId}>: ${err.message}` });
   }
