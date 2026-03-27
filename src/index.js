@@ -229,6 +229,24 @@ client.once('ready', async () => {
   }, 60000);
 
   await setupEmailNotificationChannels(client);
+
+  // Email polling — team inboxes every 60s
+  setInterval(async () => {
+    try {
+      const { pollAllInboxes } = await import('./services/emailPoller.js');
+      await pollAllInboxes(client);
+    } catch (e) { console.error('[Email Poller]', e.message); }
+  }, 60_000);
+  console.log('[Email Poller] Started — polling every 60 seconds');
+
+  // Personal email polling — per-user inboxes every 60s
+  setInterval(async () => {
+    try {
+      const { pollPersonalInboxes } = await import('./services/emailPoller.js');
+      await pollPersonalInboxes(client);
+    } catch (e) { console.error('[Personal Email Poller]', e.message); }
+  }, 60_000);
+  console.log('[Personal Email Poller] Started');
 });
 
 client.on('interactionCreate', async interaction => {

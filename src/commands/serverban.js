@@ -4,15 +4,32 @@ import { addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
+import { resolveUser } from '../utils/resolveUser.js';
 
 function parseDuration(str) {
   if (!str) return null;
-  const match = str.match(/^(\d+)([smhd])$/);
-  if (!match) return null;
-  const value = parseInt(match[1]);
-  const unit = match[2];
-  const multipliers = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
-  return value * multipliers[unit];
+  str = str.trim().toLowerCase();
+  const unitMultipliers = {
+    seconds: 1000, second: 1000, s: 1000,
+    minutes: 60000, minute: 60000, m: 60000,
+    hours: 3600000, hour: 3600000, h: 3600000,
+    days: 86400000, day: 86400000, d: 86400000,
+  };
+  const pattern = /(?:(\d+)\s*(?:second(?:s)?|minute(?:s)?|hours?|hour|days?|d|h|m|s))/gi;
+  let totalMs = 0;
+  let found = false;
+  for (const match of str.matchAll(pattern)) {
+    const num = parseInt(match[1]);
+    const unitStr = match[0].replace(/\d+/g, '').trim();
+    const unitLower = unitStr.toLowerCase();
+    const unit = unitLower.endsWith('s') ? unitLower.slice(0, -1) : unitLower;
+    const multiplier = unitMultipliers[unit] || unitMultipliers[unitLower];
+    if (multiplier && !isNaN(num)) {
+      totalMs += num * multiplier;
+      found = true;
+    }
+  }
+  return found && totalMs > 0 ? totalMs : null;
 }
 
 function formatDuration(ms) {
@@ -29,36 +46,41 @@ function formatDuration(ms) {
 export const data = new SlashCommandBuilder()
   .setName('ban')
   .setDescription('Ban a user from this server')
-  .addUserOption(opt => opt.setName('user').setDescription('User to ban').setRequired(true))
+  .addStringOption(opt => opt.setName('user').setDescription('User to ban (@mention or user ID)').setRequired(true))
   .addStringOption(opt => opt.setName('duration').setDescription('Duration for temp ban: 1d, 7d (omit for permanent)').setRequired(false))
   .addStringOption(opt => opt.setName('reason').setDescription('Reason for the ban').setRequired(false))
   .addIntegerOption(opt => opt.setName('delete_messages').setDescription('Delete message history: 0–7 days').setRequired(false));
 
 export async function execute(interaction) {
   const perm = await canRunCommand(interaction.user.id, 5);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}` });
 
-  const target = interaction.options.getUser('user');
+  const userArg = interaction.options.getString('user');
   const durationStr = interaction.options.getString('duration');
   const reason = interaction.options.getString('reason') || 'Not specified';
   const deleteDays = interaction.options.getInteger('delete_messages') ?? 0;
 
   if (!interaction.inGuild()) {
-    return interaction.reply({ content: '❌ This command cannot be used in DMs.', ephemeral: true });
+    return interaction.reply({ content: '❌ This command cannot be used in DMs.' });
   }
 
   if (deleteDays < 0 || deleteDays > 7) {
-    return interaction.reply({ content: '❌ Delete messages must be between 0 and 7 days.', ephemeral: true });
+    return interaction.reply({ content: '❌ Delete messages must be between 0 and 7 days.' });
   }
 
-  const portalUser = getUserByDiscordId(target.id);
+  const resolved = await resolveUser(userArg, interaction.guild);
+  if (!resolved) {
+    return interaction.reply({ content: `❌ Could not find user: ${userArg}. Use @mention or a user ID.` });
+  }
+  const { id: targetId, user: target } = resolved;
+
+  const portalUser = getUserByDiscordId(targetId);
   const targetName = portalUser?.display_name || target.username;
-  const member = await interaction.guild.members.fetch(target.id).catch(() => null);
 
   // Check if already banned
   try {
-    await interaction.guild.bans.fetch(target.id);
-    return interaction.reply({ content: `❌ <@${target.id}> is already banned from this server.`, ephemeral: true });
+    await interaction.guild.bans.fetch(targetId);
+    return interaction.reply({ content: `❌ <@${targetId}> is already banned from this server.` });
   } catch {}
 
   const isTempBan = !!durationStr;
@@ -66,57 +88,53 @@ export async function execute(interaction) {
   if (isTempBan) {
     durationMs = parseDuration(durationStr);
     if (!durationMs || durationMs < 60000) {
-      return interaction.reply({ content: '❌ Minimum temp ban duration is 1 minute. Use format: 1d, 7d, 12h, 30m', ephemeral: true });
+      return interaction.reply({ content: '❌ Minimum temp ban duration is 1 minute. Use formats like: 1d, 7d, 12h, 30m' });
     }
     if (durationMs > 604800000) {
-      return interaction.reply({ content: '❌ Maximum temp ban duration is 7 days.', ephemeral: true });
+      return interaction.reply({ content: '❌ Maximum temp ban duration is 7 days.' });
     }
   }
 
   await interaction.deferReply();
 
-  // Create audit reason string
   const auditReason = `${reason}${isTempBan ? ` | Temp: ${durationStr}` : ''} | Banned by ${interaction.user.username}`;
 
-  // Ban options
-  const banOptions = {
-    reason: auditReason,
-    deleteMessageSeconds: deleteDays * 86400,
-  };
-
   try {
-    await interaction.guild.bans.create(target.id, banOptions);
+    await interaction.guild.bans.create(targetId, {
+      reason: auditReason,
+      deleteMessageSeconds: deleteDays * 86400,
+    });
   } catch (err) {
-    return interaction.editReply({ content: `❌ Failed to ban <@${target.id}>: ${err.message}` });
+    return interaction.editReply({ content: `❌ Failed to ban <@${targetId}>: ${err.message}` });
   }
 
-  const inf = addInfraction(target.id, isTempBan ? 'temp_ban' : 'ban', reason, interaction.user.id, interaction.user.username);
+  const inf = addInfraction(targetId, isTempBan ? 'temp_ban' : 'ban', reason, interaction.user.id, interaction.user.username);
 
-  // DM the user
   try {
-    const dmEmbed = new EmbedBuilder()
-      .setTitle(isTempBan ? '⏱️ You Have Been Temporarily Banned' : '🔨 You Have Been Banned')
-      .setColor(0xEF4444)
-      .setDescription(`You have been banned from **${interaction.guild.name}**.`)
-      .addFields(
-        { name: '📋 Reason', value: reason, inline: false },
-        ...(isTempBan ? [{ name: '⏱️ Duration', value: formatDuration(durationMs), inline: true }, { name: 'Expires', value: `<t:${Math.floor((Date.now() + durationMs) / 1000)}:R>`, inline: true }] : []),
-        { name: 'Banned By', value: `<@${interaction.user.id}>`, inline: true },
-      )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
-      .setTimestamp();
-    await target.send({ embeds: [dmEmbed] });
+    await target.send({
+      embeds: [new EmbedBuilder()
+        .setTitle(isTempBan ? '⏱️ You Have Been Temporarily Banned' : '🔨 You Have Been Banned')
+        .setColor(0xEF4444)
+        .setDescription(`You have been banned from **${interaction.guild.name}**.`)
+        .addFields(
+          { name: '📋 Reason', value: reason, inline: false },
+          ...(isTempBan ? [{ name: '⏱️ Duration', value: formatDuration(durationMs), inline: true }, { name: 'Expires', value: `<t:${Math.floor((Date.now() + durationMs) / 1000)}:R>`, inline: true }] : []),
+          { name: 'Banned By', value: `<@${interaction.user.id}>`, inline: true },
+        )
+        .setFooter({ text: 'Community Organisation | Staff Assistant' })
+        .setTimestamp()
+      ]
+    });
   } catch {}
 
-  // Log
   await logAction(interaction.client, {
     action: `${isTempBan ? '⏱️ Temporary Ban' : '🔨 User Banned'}`,
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
-    target: { discordId: target.id, name: targetName },
+    target: { discordId: targetId, name: targetName },
     reason,
     color: 0xEF4444,
     fields: [
-      { name: 'User', value: `<@${target.id}>`, inline: true },
+      { name: 'User', value: `<@${targetId}>`, inline: true },
       { name: 'Server', value: interaction.guild.name, inline: true },
       { name: 'Duration', value: isTempBan ? formatDuration(durationMs) : 'Permanent', inline: true },
       { name: 'Messages Deleted', value: deleteDays > 0 ? `${deleteDays} day${deleteDays !== 1 ? 's' : ''}` : 'None', inline: true },
@@ -135,7 +153,7 @@ export async function execute(interaction) {
       .setColor(0xEF4444)
       .setDescription(`**${targetName}** has been banned from this server.`)
       .addFields(
-        { name: 'User', value: `<@${target.id}>`, inline: true },
+        { name: 'User', value: `<@${targetId}>`, inline: true },
         { name: 'Duration', value: isTempBan ? formatDuration(durationMs) : 'Permanent', inline: true },
         { name: 'Messages Deleted', value: deleteDays > 0 ? `${deleteDays} day${deleteDays !== 1 ? 's' : ''}` : 'None', inline: true },
         { name: 'Reason', value: reason, inline: false },
@@ -152,11 +170,11 @@ export async function execute(interaction) {
   if (isTempBan) {
     setTimeout(async () => {
       try {
-        await interaction.guild.members.unban(target.id, `Temporary ban (${durationStr}) expired.`);
+        await interaction.guild.members.unban(targetId, `Temporary ban (${durationStr}) expired.`);
         await logAction(interaction.client, {
           action: '✅ Temp Ban Expired — Auto Unbanned',
           moderator: { discordId: 'SYSTEM', name: 'Auto (Duration Expired)' },
-          target: { discordId: target.id, name: targetName },
+          target: { discordId: targetId, name: targetName },
           reason: `Temp ban (${durationStr}) expired. Originally banned by <@${interaction.user.id}>`,
           color: 0x22C55E,
           fields: [

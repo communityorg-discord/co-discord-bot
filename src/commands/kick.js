@@ -4,46 +4,50 @@ import { addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
+import { resolveUser } from '../utils/resolveUser.js';
 
 export const data = new SlashCommandBuilder()
   .setName('kick')
   .setDescription('Kick a user from the server (they can rejoin)')
-  .addUserOption(opt => opt.setName('user').setDescription('User to kick').setRequired(true))
+  .addStringOption(opt => opt.setName('user').setDescription('User to kick (@mention or user ID)').setRequired(true))
   .addStringOption(opt => opt.setName('reason').setDescription('Reason for the kick').setRequired(false));
 
 export async function execute(interaction) {
   const perm = await canRunCommand(interaction.user.id, 5);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}` });
 
-  const target = interaction.options.getUser('user');
+  const userArg = interaction.options.getString('user');
   const reason = interaction.options.getString('reason') || 'Not specified';
 
   if (!interaction.inGuild()) {
-    return interaction.reply({ content: '❌ This command cannot be used in DMs.', ephemeral: true });
+    return interaction.reply({ content: '❌ This command cannot be used in DMs.' });
   }
 
-  const portalUser = getUserByDiscordId(target.id);
-  const targetName = portalUser?.display_name || target.username;
-  const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+  const resolved = await resolveUser(userArg, interaction.guild);
+  if (!resolved) {
+    return interaction.reply({ content: `❌ Could not find user: ${userArg}. Use @mention or a user ID.` });
+  }
+  const { id: targetId, user: target } = resolved;
 
+  const member = await interaction.guild.members.fetch(targetId).catch(() => null);
   if (!member) {
-    return interaction.reply({ content: `❌ Could not find user <@${target.id}> in this server.`, ephemeral: true });
+    return interaction.reply({ content: `❌ Could not find user <@${targetId}> in this server.` });
+  }
+  if (!member.kickable) {
+    return interaction.reply({ content: `❌ I cannot kick <@${targetId}>. They may have higher permissions than me.` });
   }
 
-  if (!member.kickable) {
-    return interaction.reply({ content: `❌ I cannot kick <@${target.id}>. They may have higher permissions than me.`, ephemeral: true });
-  }
+  const portalUser = getUserByDiscordId(targetId);
+  const targetName = portalUser?.display_name || target.username;
 
   await interaction.deferReply();
 
-  const inf = addInfraction(target.id, 'kick', reason, interaction.user.id, interaction.user.username);
+  const inf = addInfraction(targetId, 'kick', reason, interaction.user.id, interaction.user.username);
 
-  // Kick the user
   await member.kick(reason).catch(err => {
-    return interaction.editReply({ content: `❌ Failed to kick <@${target.id}>: ${err.message}` });
+    return interaction.editReply({ content: `❌ Failed to kick <@${targetId}>: ${err.message}` });
   });
 
-  // DM the user
   try {
     await target.send({
       embeds: [new EmbedBuilder()
@@ -61,15 +65,14 @@ export async function execute(interaction) {
     });
   } catch {}
 
-  // Log
   await logAction(interaction.client, {
     action: '👢 User Kicked',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
-    target: { discordId: target.id, name: targetName },
+    target: { discordId: targetId, name: targetName },
     reason,
     color: 0xEF4444,
     fields: [
-      { name: 'User', value: `<@${target.id}>`, inline: true },
+      { name: 'User', value: `<@${targetId}>`, inline: true },
       { name: 'Server', value: interaction.guild.name, inline: true },
       { name: 'Reason', value: reason, inline: false },
     ],
@@ -84,7 +87,7 @@ export async function execute(interaction) {
       .setColor(0xEF4444)
       .setDescription(`**${targetName}** has been kicked from the server.`)
       .addFields(
-        { name: 'User', value: `<@${target.id}>`, inline: true },
+        { name: 'User', value: `<@${targetId}>`, inline: true },
         { name: 'Reason', value: reason, inline: false },
         { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: true },
         { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },

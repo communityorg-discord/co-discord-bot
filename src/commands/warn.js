@@ -4,32 +4,38 @@ import { addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
+import { resolveUser } from '../utils/resolveUser.js';
 
 export const data = new SlashCommandBuilder()
   .setName('warn')
   .setDescription('Warn a user')
-  .addUserOption(opt => opt.setName('user').setDescription('User to warn').setRequired(true))
+  .addStringOption(opt => opt.setName('user').setDescription('User to warn (@mention or user ID)').setRequired(true))
   .addStringOption(opt => opt.setName('reason').setDescription('Reason for the warning').setRequired(true));
 
 export async function execute(interaction) {
   const perm = await canRunCommand(interaction.user.id, 4);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}` });
 
-  const target = interaction.options.getUser('user');
+  const userArg = interaction.options.getString('user');
   const reason = interaction.options.getString('reason');
 
   if (!interaction.inGuild()) {
     return interaction.reply({ content: '❌ This command cannot be used in DMs.' });
   }
 
-  const portalUser = getUserByDiscordId(target.id);
+  const resolved = await resolveUser(userArg, interaction.guild);
+  if (!resolved) {
+    return interaction.reply({ content: `❌ Could not find user: ${userArg}. Use @mention or a user ID.` });
+  }
+  const { id: targetId, user: target } = resolved;
+
+  const portalUser = getUserByDiscordId(targetId);
   const targetName = portalUser?.display_name || target.username;
 
   await interaction.deferReply();
 
-  const inf = addInfraction(target.id, 'warning', reason, interaction.user.id, interaction.user.username);
+  const inf = addInfraction(targetId, 'warning', reason, interaction.user.id, interaction.user.username);
 
-  // DM the user
   try {
     await target.send({
       embeds: [new EmbedBuilder()
@@ -46,15 +52,14 @@ export async function execute(interaction) {
     });
   } catch {}
 
-  // Log
   await logAction(interaction.client, {
     action: '⚠️ Warning Issued',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
-    target: { discordId: target.id, name: targetName },
+    target: { discordId: targetId, name: targetName },
     reason,
     color: 0xF59E0B,
     fields: [
-      { name: 'User', value: `<@${target.id}>`, inline: true },
+      { name: 'User', value: `<@${targetId}>`, inline: true },
       { name: 'Reason', value: reason, inline: false },
     ],
     specificChannelId: MOD_LOG_CHANNEL_ID,

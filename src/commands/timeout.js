@@ -4,29 +4,24 @@ import { addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
+import { resolveUser } from '../utils/resolveUser.js';
 
 function parseDuration(str) {
   if (!str) return null;
   str = str.trim().toLowerCase();
-
-  // Supported formats: "10s", "5m", "2h", "1d", "1 second", "5 minutes", "2 hours", "3 days", "1m30s", "1 hour 30 minutes"
   const unitMultipliers = {
     seconds: 1000, second: 1000, s: 1000,
     minutes: 60000, minute: 60000, m: 60000,
     hours: 3600000, hour: 3600000, h: 3600000,
     days: 86400000, day: 86400000, d: 86400000,
   };
-
-  // Match patterns like "5 minutes", "10s", "1m30s", "2 hours 30 minutes"
   const pattern = /(?:(\d+)\s*(?:second(?:s)?|minute(?:s)?|hours?|hour|days?|d|h|m|s))/gi;
   let totalMs = 0;
   let found = false;
-
   for (const match of str.matchAll(pattern)) {
     const num = parseInt(match[1]);
     const unitStr = match[0].replace(/\d+/g, '').trim();
     const unitLower = unitStr.toLowerCase();
-    // Strip plural 's' if present
     const unit = unitLower.endsWith('s') ? unitLower.slice(0, -1) : unitLower;
     const multiplier = unitMultipliers[unit] || unitMultipliers[unitLower];
     if (multiplier && !isNaN(num)) {
@@ -34,7 +29,6 @@ function parseDuration(str) {
       found = true;
     }
   }
-
   return found && totalMs > 0 ? totalMs : null;
 }
 
@@ -53,11 +47,11 @@ export const data = new SlashCommandBuilder()
   .setName('timeout')
   .setDescription('Timeout management — add or remove a timeout from a user')
   .addSubcommand(sub => sub.setName('add').setDescription('Apply a timeout to a user')
-    .addUserOption(opt => opt.setName('user').setDescription('User to timeout').setRequired(true))
+    .addStringOption(opt => opt.setName('user').setDescription('User to timeout (@mention or user ID)').setRequired(true))
     .addStringOption(opt => opt.setName('duration').setDescription('Duration: 10s, 5m, 2h, 1d').setRequired(true))
     .addStringOption(opt => opt.setName('reason').setDescription('Reason for the timeout').setRequired(false)))
   .addSubcommand(sub => sub.setName('remove').setDescription('Remove a timeout from a user')
-    .addUserOption(opt => opt.setName('user').setDescription('User to remove timeout from').setRequired(true))
+    .addStringOption(opt => opt.setName('user').setDescription('User to remove timeout from (@mention or user ID)').setRequired(true))
     .addStringOption(opt => opt.setName('reason').setDescription('Reason for removing the timeout').setRequired(false)));
 
 export async function execute(interaction) {
@@ -83,13 +77,19 @@ export async function execute(interaction) {
 }
 
 async function handleAddTimeout(interaction) {
-  const target = interaction.options.getUser('user');
+  const userArg = interaction.options.getString('user');
   const durationStr = interaction.options.getString('duration');
   const reason = interaction.options.getString('reason') || 'Not specified';
 
   if (!interaction.inGuild()) {
     return interaction.reply({ content: '❌ This command cannot be used in DMs.' });
   }
+
+  const resolved = await resolveUser(userArg, interaction.guild);
+  if (!resolved) {
+    return interaction.reply({ content: `❌ Could not find user: ${userArg}. Use @mention or a user ID.` });
+  }
+  const { id: targetId, user: target } = resolved;
 
   const durationMs = parseDuration(durationStr);
   if (!durationMs || durationMs < 10000) {
@@ -99,13 +99,13 @@ async function handleAddTimeout(interaction) {
     return interaction.reply({ content: '❌ Maximum timeout duration is 28 days.' });
   }
 
-  const portalUser = getUserByDiscordId(target.id);
-  const targetName = portalUser?.display_name || target.username;
-  const member = await interaction.guild.members.fetch(target.id).catch(() => null);
-
+  const member = await interaction.guild.members.fetch(targetId).catch(() => null);
   if (!member) {
-    return interaction.reply({ content: `❌ Could not find user <@${target.id}> in this server.` });
+    return interaction.reply({ content: `❌ Could not find user <@${targetId}> in this server.` });
   }
+
+  const portalUser = getUserByDiscordId(targetId);
+  const targetName = portalUser?.display_name || target.username;
 
   await interaction.deferReply();
 
@@ -113,10 +113,10 @@ async function handleAddTimeout(interaction) {
   try {
     await member.timeout(expiresAt, reason);
   } catch (err) {
-    return interaction.editReply({ content: `❌ Failed to timeout <@${target.id}>: ${err.message}` });
+    return interaction.editReply({ content: `❌ Failed to timeout <@${targetId}>: ${err.message}` });
   }
 
-  const inf = addInfraction(target.id, 'timeout', reason, interaction.user.id, interaction.user.username);
+  const inf = addInfraction(targetId, 'timeout', reason, interaction.user.id, interaction.user.username);
   const durationDisplay = formatDuration(durationMs);
 
   try {
@@ -140,11 +140,11 @@ async function handleAddTimeout(interaction) {
   await logAction(interaction.client, {
     action: '⏱️ User Timed Out',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
-    target: { discordId: target.id, name: targetName },
+    target: { discordId: targetId, name: targetName },
     reason,
     color: 0xF59E0B,
     fields: [
-      { name: 'User', value: `<@${target.id}>`, inline: true },
+      { name: 'User', value: `<@${targetId}>`, inline: true },
       { name: 'Duration', value: durationDisplay, inline: true },
       { name: 'Expires', value: `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>`, inline: true },
       { name: 'Reason', value: reason, inline: false },
@@ -160,7 +160,7 @@ async function handleAddTimeout(interaction) {
       .setColor(0xF59E0B)
       .setDescription(`**${targetName}** has been timed out.`)
       .addFields(
-        { name: 'User', value: `<@${target.id}>`, inline: true },
+        { name: 'User', value: `<@${targetId}>`, inline: true },
         { name: 'Duration', value: durationDisplay, inline: true },
         { name: 'Expires', value: `<t:${Math.floor(expiresAt.getTime() / 1000)}:R>`, inline: true },
         { name: 'Reason', value: reason, inline: false },
@@ -174,20 +174,26 @@ async function handleAddTimeout(interaction) {
 }
 
 async function handleRemoveTimeout(interaction) {
-  const target = interaction.options.getUser('user');
+  const userArg = interaction.options.getString('user');
   const reason = interaction.options.getString('reason') || 'Not specified';
 
   if (!interaction.inGuild()) {
     return interaction.reply({ content: '❌ This command cannot be used in DMs.' });
   }
 
-  const portalUser = getUserByDiscordId(target.id);
-  const targetName = portalUser?.display_name || target.username;
-  const member = await interaction.guild.members.fetch(target.id).catch(() => null);
-
-  if (!member) {
-    return interaction.reply({ content: `❌ Could not find user <@${target.id}> in this server.` });
+  const resolved = await resolveUser(userArg, interaction.guild);
+  if (!resolved) {
+    return interaction.reply({ content: `❌ Could not find user: ${userArg}. Use @mention or a user ID.` });
   }
+  const { id: targetId, user: target } = resolved;
+
+  const member = await interaction.guild.members.fetch(targetId).catch(() => null);
+  if (!member) {
+    return interaction.reply({ content: `❌ Could not find user <@${targetId}> in this server.` });
+  }
+
+  const portalUser = getUserByDiscordId(targetId);
+  const targetName = portalUser?.display_name || target.username;
 
   await interaction.deferReply();
 
@@ -216,11 +222,11 @@ async function handleRemoveTimeout(interaction) {
   await logAction(interaction.client, {
     action: '✅ Timeout Removed',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
-    target: { discordId: target.id, name: targetName },
+    target: { discordId: targetId, name: targetName },
     reason,
     color: 0x22C55E,
     fields: [
-      { name: 'User', value: `<@${target.id}>`, inline: true },
+      { name: 'User', value: `<@${targetId}>`, inline: true },
       { name: 'Reason', value: reason, inline: false },
     ],
     specificChannelId: MOD_LOG_CHANNEL_ID,
@@ -234,7 +240,7 @@ async function handleRemoveTimeout(interaction) {
       .setColor(0x22C55E)
       .setDescription(`Timeout for **${targetName}** has been removed.`)
       .addFields(
-        { name: 'User', value: `<@${target.id}>`, inline: true },
+        { name: 'User', value: `<@${targetId}>`, inline: true },
         { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: true },
         ...(reason !== 'Not specified' ? [{ name: 'Reason', value: reason, inline: false }] : []),
       )
