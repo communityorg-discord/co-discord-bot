@@ -23,7 +23,11 @@ db.exec(`
     appeal_denied_until DATETIME,
     deleted INTEGER DEFAULT 0,
     deleted_by TEXT,
-    deleted_at DATETIME
+    deleted_at DATETIME,
+    appealed INTEGER DEFAULT 0,
+    appeal_reason TEXT,
+    appeal_by TEXT,
+    appeal_at DATETIME
   );
 
   CREATE TABLE IF NOT EXISTS infraction_deleted_history (
@@ -220,6 +224,16 @@ try {
   db.exec('ALTER TABLE ticket_panels ADD COLUMN transcripts_channel_id TEXT');
 }
 
+// Migration: add appeal columns to infractions
+try {
+  db.prepare('SELECT appealed FROM infractions LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE infractions ADD COLUMN appealed INTEGER DEFAULT 0');
+  db.exec('ALTER TABLE infractions ADD COLUMN appeal_reason TEXT');
+  db.exec('ALTER TABLE infractions ADD COLUMN appeal_by TEXT');
+  db.exec('ALTER TABLE infractions ADD COLUMN appeal_at DATETIME');
+}
+
 export default db;
 
 export function addDmExemption(discordId, displayName, exemptedBy) {
@@ -305,6 +319,18 @@ export function addInfraction(discordId, type, reason, moderatorId, moderatorNam
     INSERT INTO infractions (discord_id, type, reason, moderator_id, moderator_name, expires_at, appealable)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(discordId, type, reason, moderatorId, moderatorName, expiresAt, appealable);
+}
+
+export function updateInfraction(id, fields) {
+  const sets = Object.keys(fields)
+    .filter(k => fields[k] !== undefined)
+    .map(k => `${k} = ?`)
+    .join(', ');
+  if (!sets) return;
+  const values = Object.keys(fields)
+    .filter(k => fields[k] !== undefined)
+    .map(k => fields[k]);
+  return db.prepare(`UPDATE infractions SET ${sets} WHERE id = ?`).run(...values, id);
 }
 
 export function getInfractions(discordId, includeDeleted = false) {
