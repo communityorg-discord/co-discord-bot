@@ -12,19 +12,14 @@ function isOfficialBypass(discordId) {
 
 export const data = new SlashCommandBuilder()
   .setName('verify')
-  .setDescription('Verify your CO staff identity and apply your roles across all servers')
-  .addStringOption(opt =>
-    opt.setName('nickname')
-      .setDescription('Your display name (e.g. Aaron C)')
-      .setRequired(true)
-  );
+  .setDescription('Verify your CO staff identity and apply your roles across all servers');
 
 export async function execute(interaction) {
   try {
     await interaction.deferReply({ ephemeral: true });
 
     const discordId = interaction.user.id;
-    const nickname = interaction.options.getString('nickname').trim();
+    const nickname = '(pending approver input)';
 
     // Check if already pending
     const pending = db.prepare("SELECT id FROM verification_queue WHERE discord_id = ? AND status = 'pending'").get(discordId);
@@ -372,9 +367,8 @@ export async function handleButton(interaction) {
     return;
   }
 
-  // ── Approve ──────────────────────────────────────────────────────────────
+  // ── Approve — show nickname modal ─────────────────────────────────────
   if (customId.startsWith('verify_approve_')) {
-    // Format: verify_approve_{queueId}_{level}  (level 0 = no override, 1-7 = override)
     const parts = customId.replace('verify_approve_', '').split('_');
     const queueId = parts[0];
     const overrideLevel = parts.length > 1 ? parseInt(parts[1]) : 0;
@@ -386,130 +380,24 @@ export async function handleButton(interaction) {
     const entry = db.prepare("SELECT * FROM verification_queue WHERE id = ? AND status = 'pending'").get(queueId);
     if (!entry) return interaction.reply({ content: '❌ Request not found or already processed.', ephemeral: true });
 
-    const isOfficial = Number(entry.verified_official) === 1;
+    // Show modal for approver to input the nickname
+    const modal = new ModalBuilder()
+      .setCustomId(`verify_nickname_${queueId}_${overrideLevel}`)
+      .setTitle('Set Verification Nickname')
+      .addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('nickname')
+            .setLabel('Nickname (e.g. Evan S. | Secretary-General)')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true)
+            .setMaxLength(32)
+            .setPlaceholder('Firstname L. | Position')
+            .setValue(entry.position ? `| ${entry.position}` : '')
+        )
+      );
 
-    await interaction.deferUpdate();
-
-    // Fetch the original message using stored message_id (interaction.message may be stale)
-    let originalMsg = null;
-    try {
-      const channel = await interaction.client.channels.fetch(entry.channel_id);
-      console.log(`[Verify] Fetching message ${entry.message_id} from channel ${entry.channel_id}`);
-      originalMsg = await channel.messages.fetch(entry.message_id);
-      console.log(`[Verify] Got originalMsg: ${originalMsg.id}`);
-    } catch (e) {
-      console.warn(`[Verify] Could not fetch original message: ${e.message} (entry msg_id=${entry.message_id} channel=${entry.channel_id})`);
-    }
-
-    // Apply roles + nickname across all guilds — get detailed results
-    const override = overrideLevel > 0 ? overrideLevel : null;
-    const results = await applyVerification(interaction.client, entry.discord_id, entry.position, entry.requested_nickname, { isProbation: !!Number(entry.is_probation), overrideAuthLevel: override });
-
-    // Save to verified_members
-    db.prepare(`
-      INSERT OR REPLACE INTO verified_members (discord_id, portal_user_id, position, employee_number, nickname, verified_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    `).run(entry.discord_id, entry.portal_user_id || null, entry.position, entry.employee_number, entry.requested_nickname);
-
-    // Update queue status
-    db.prepare("UPDATE verification_queue SET status = 'approved', reviewed_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-      .run(interaction.user.id, queueId);
-
-    const guildFieldLines = buildGuildResultsField(results, 'verify');
-    const successCount = results.filter(r => r.success && !r.rolesAddFailed.length && !r.rolesRemoveFailed.length).length;
-    const partialCount = results.filter(r => r.success && (r.rolesAddFailed.length || r.rolesRemoveFailed.length)).length;
-    const failedCount = results.filter(r => !r.success).length;
-
-    const fields = [
-      { name: 'User', value: `<@${entry.discord_id}> (${entry.discord_id})`, inline: false },
-      { name: 'Position', value: entry.position, inline: true },
-      { name: 'Nickname', value: entry.requested_nickname, inline: true },
-      { name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false },
-      { name: 'Auth Level', value: overrideLevel > 0 ? `Override → Level ${overrideLevel}` : 'Default (No Override)', inline: true },
-    ];
-
-    if (isOfficial) fields.push({ name: 'Account Type', value: 'Official Account (Bypass)', inline: false });
-
-    const updatedEmbed = new EmbedBuilder()
-      .setColor(0x22C55E)
-      .setTitle(`✅ Verification #${queueId} — Approved${overrideLevel > 0 ? ` [Lvl ${overrideLevel} Override]` : ''}${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
-      .addFields(...fields)
-      .setTimestamp();
-
-    try {
-      if (originalMsg) {
-        console.log(`[Verify] Editing originalMsg ${originalMsg.id}`);
-        await originalMsg.edit({ embeds: [updatedEmbed], components: [] });
-        console.log(`[Verify] Edit successful`);
-      } else {
-        console.log(`[Verify] No originalMsg, using editOriginalMessage`);
-        await interaction.editOriginalMessage({ embeds: [updatedEmbed] });
-      }
-    } catch (e) {
-      console.warn(`[Verify] Could not edit message: ${e.message}`);
-      try {
-        await interaction.editOriginalMessage({ embeds: [updatedEmbed] });
-      } catch (_) {}
-    }
-
-    // Log to verify-unverify-logs + full-mod-logs
-    await logAction(interaction.client, {
-      action: `✅ Staff Verified${overrideLevel > 0 ? ` [Lvl ${overrideLevel} Override]` : ''}${isOfficial ? ' [Official Account]' : ''}`,
-      moderator: { discordId: interaction.user.id, name: interaction.user.username },
-      target: { discordId: entry.discord_id, name: entry.requested_nickname },
-      reason: entry.position,
-      color: 0x22C55E,
-      fields: [
-        { name: 'Position', value: entry.position, inline: true },
-        { name: 'Auth Level', value: overrideLevel > 0 ? `Override → Level ${overrideLevel}` : 'Default (No Override)', inline: true },
-        { name: 'Nickname', value: entry.requested_nickname, inline: true },
-        { name: 'Servers Applied', value: `${successCount} ✅ | ${partialCount} ⚠️ | ${failedCount} ❌`, inline: false },
-        { name: 'Per-Server Results', value: guildFieldLines.slice(0, 1024) || 'None', inline: false },
-      ],
-      specificChannelId: VERIFY_UNVERIFY_LOG_CHANNEL_ID,
-    });
-
-    // DM the user — welcome message with 7-day invite links
-    try {
-      const user = await interaction.client.users.fetch(entry.discord_id);
-      const inviteLines = [];
-      const EXCLUDED_GUILDS = ['1485423163817988186'];
-
-      for (const [, guild] of interaction.client.guilds.cache) {
-        if (EXCLUDED_GUILDS.includes(guild.id)) continue;
-        try {
-          const channel = guild.channels.cache
-            .filter(c => c.isTextBased() && c.permissionsFor(guild.members.me)?.has("CreateInstantInvite"))
-            .first();
-          if (channel) {
-            const invite = await channel.createInvite({ maxAge: 604800, maxUses: 1, reason: "Verification approved — 7-day invite" });
-            inviteLines.push("[" + guild.name + "](" + invite.url + ")");
-          } else {
-            inviteLines.push("~~" + guild.name + "~~ *(no invite permission)*");
-          }
-        } catch {
-          inviteLines.push("~~" + guild.name + "~~ *(could not create invite)*");
-        }
-      }
-
-      await user.send({
-        embeds: [new EmbedBuilder()
-          .setTitle("🏛️ Welcome to the Community Organisation!")
-          .setColor(0x22C55E)
-          .setDescription("Hello and welcome to Community Organisation! We're delighted to have you on board. Here's key info to help you settle in:\n\n**Onboarding**\nPlease ensure your supervisor has your current email. We recommend a Google account email (@gmail.com), as we use Google Drive for documentation and policies.\n\nTo get your CO email set up, please contact a member of the EOB team directly.\n\nThe DMSPC Email (**dmspc@communityorg.co.uk**) is your contact for accessing and updating your personnel file.\n\n**CO Utilities**\nAll staff are required to use the Staff Portal for leave requests, performance tracking (BRAG), and accessing your staff records.\n\n**Policies**\nBy joining, you agree to follow all Community Organisation policies, available on Google Drive and CO Utilities. If unsure, ask your supervisor. You are also expected to:\n• Check for policy updates regularly\n• Read all official communications\n\nLinked below are invites to all servers you are required to join. **These invites will expire in 7 days.**")
-          .addFields(
-            { name: "📌 Server Invites", value: inviteLines.join("\n") || "No invites available", inline: false },
-            { name: "Your Position", value: entry.position, inline: true },
-            { name: "Approved By", value: `<@${interaction.user.id}>`, inline: true },
-          )
-          .setFooter({ text: "Community Organisation | Staff Assistant" })
-          .setTimestamp()
-        ]
-      });
-    } catch (e) {
-      console.warn("[Verify] Could not DM user:", e.message);
-    }
-    return;
+    return interaction.showModal(modal);
   }
 
   // ── Deny — show modal for reason ─────────────────────────────────────────
@@ -540,6 +428,119 @@ export async function handleButton(interaction) {
 
 // Modal submit handler
 export async function handleModal(interaction) {
+  // ── Nickname modal for approval ──
+  if (interaction.customId.startsWith('verify_nickname_')) {
+    const parts = interaction.customId.replace('verify_nickname_', '').split('_');
+    const queueId = parts[0];
+    const overrideLevel = parts.length > 1 ? parseInt(parts[1]) : 0;
+    const nickname = interaction.fields.getTextInputValue('nickname').trim();
+
+    const entry = db.prepare("SELECT * FROM verification_queue WHERE id = ? AND status = 'pending'").get(queueId);
+    if (!entry) return interaction.reply({ content: '❌ Request not found or already processed.', ephemeral: true });
+
+    const isOfficial = Number(entry.verified_official) === 1;
+
+    await interaction.deferUpdate();
+
+    // Fetch the original message
+    let originalMsg = null;
+    try {
+      const channel = await interaction.client.channels.fetch(entry.channel_id);
+      originalMsg = await channel.messages.fetch(entry.message_id);
+    } catch (e) {
+      console.warn(`[Verify] Could not fetch original message: ${e.message}`);
+    }
+
+    // Apply roles + nickname across all guilds
+    const override = overrideLevel > 0 ? overrideLevel : null;
+    const results = await applyVerification(interaction.client, entry.discord_id, entry.position, nickname, { isProbation: !!Number(entry.is_probation), overrideAuthLevel: override });
+
+    // Save to verified_members
+    db.prepare(`
+      INSERT OR REPLACE INTO verified_members (discord_id, portal_user_id, position, employee_number, nickname, verified_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(entry.discord_id, entry.portal_user_id || null, entry.position, entry.employee_number, nickname);
+
+    // Update queue status
+    db.prepare("UPDATE verification_queue SET status = 'approved', reviewed_by = ?, requested_nickname = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .run(interaction.user.id, nickname, queueId);
+
+    const guildFieldLines = buildGuildResultsField(results, 'verify');
+    const successCount = results.filter(r => r.success && !r.rolesAddFailed.length && !r.rolesRemoveFailed.length).length;
+    const partialCount = results.filter(r => r.success && (r.rolesAddFailed.length || r.rolesRemoveFailed.length)).length;
+    const failedCount = results.filter(r => !r.success).length;
+
+    const fields = [
+      { name: 'User', value: `<@${entry.discord_id}> (${entry.discord_id})`, inline: false },
+      { name: 'Position', value: entry.position, inline: true },
+      { name: 'Nickname', value: nickname, inline: true },
+      { name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false },
+      { name: 'Auth Level', value: overrideLevel > 0 ? `Override → Level ${overrideLevel}` : 'Default (No Override)', inline: true },
+    ];
+    if (isOfficial) fields.push({ name: 'Account Type', value: 'Official Account (Bypass)', inline: false });
+
+    const updatedEmbed = new EmbedBuilder()
+      .setColor(0x22C55E)
+      .setTitle(`✅ Verification #${queueId} — Approved${overrideLevel > 0 ? ` [Lvl ${overrideLevel} Override]` : ''}${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
+      .addFields(...fields)
+      .setTimestamp();
+
+    if (originalMsg) {
+      await originalMsg.edit({ embeds: [updatedEmbed], components: [] }).catch(() => {});
+    }
+
+    await logAction(interaction.client, {
+      action: `✅ Staff Verified${overrideLevel > 0 ? ` [Lvl ${overrideLevel} Override]` : ''}${isOfficial ? ' [Official Account]' : ''}`,
+      moderator: { discordId: interaction.user.id, name: interaction.user.username },
+      target: { discordId: entry.discord_id, name: nickname },
+      reason: entry.position,
+      color: 0x22C55E,
+      fields: [
+        { name: 'Position', value: entry.position, inline: true },
+        { name: 'Auth Level', value: overrideLevel > 0 ? `Override → Level ${overrideLevel}` : 'Default (No Override)', inline: true },
+        { name: 'Nickname', value: nickname, inline: true },
+        { name: 'Servers Applied', value: `${successCount} ✅ | ${partialCount} ⚠️ | ${failedCount} ❌`, inline: false },
+      ],
+      specificChannelId: VERIFY_UNVERIFY_LOG_CHANNEL_ID,
+      guildId: interaction.guildId,
+      logType: 'verification.verify_unverify',
+    });
+
+    // DM the user — welcome message with 7-day invite links
+    try {
+      const user = await interaction.client.users.fetch(entry.discord_id);
+      const inviteLines = [];
+      const EXCLUDED_GUILDS = ['1485423163817988186'];
+      for (const [, guild] of interaction.client.guilds.cache) {
+        if (EXCLUDED_GUILDS.includes(guild.id)) continue;
+        try {
+          const channel = guild.channels.cache.filter(c => c.isTextBased() && c.permissionsFor(guild.members.me)?.has("CreateInstantInvite")).first();
+          if (channel) {
+            const invite = await channel.createInvite({ maxAge: 604800, maxUses: 1, reason: "Verification approved — 7-day invite" });
+            inviteLines.push("[" + guild.name + "](" + invite.url + ")");
+          }
+        } catch {}
+      }
+      await user.send({
+        embeds: [new EmbedBuilder()
+          .setTitle("🏛️ Welcome to the Community Organisation!")
+          .setColor(0x22C55E)
+          .setDescription("Hello and welcome to Community Organisation! We're delighted to have you on board. Here's key info to help you settle in:\n\n**Onboarding**\nPlease ensure your supervisor has your current email. We recommend a Google account email (@gmail.com), as we use Google Drive for documentation and policies.\n\nTo get your CO email set up, please contact a member of the EOB team directly.\n\nThe DMSPC Email (**dmspc@communityorg.co.uk**) is your contact for accessing and updating your personnel file.\n\n**CO Utilities**\nAll staff are required to use the Staff Portal for leave requests, performance tracking (BRAG), and accessing your staff records.\n\n**Policies**\nBy joining, you agree to follow all Community Organisation policies, available on Google Drive and CO Utilities. If unsure, ask your supervisor. You are also expected to:\n• Check for policy updates regularly\n• Read all official communications\n\nLinked below are invites to all servers you are required to join. **These invites will expire in 7 days.**")
+          .addFields(
+            { name: "📌 Server Invites", value: inviteLines.join("\n") || "No invites available", inline: false },
+            { name: "Your Position", value: entry.position, inline: true },
+            { name: "Approved By", value: `<@${interaction.user.id}>`, inline: true },
+          )
+          .setFooter({ text: "Community Organisation | Staff Assistant" })
+          .setTimestamp()
+        ]
+      });
+    } catch (e) {
+      console.warn("[Verify] Could not DM user:", e.message);
+    }
+    return;
+  }
+
   if (!interaction.customId.startsWith('verify_deny_reason_')) return;
   const queueId = interaction.customId.replace('verify_deny_reason_', '');
   const reason = interaction.fields.getTextInputValue('reason');

@@ -423,6 +423,77 @@ client.once('ready', async () => {
       if (pending.length) console.log(`[Acting Midnight] Activated ${pending.length} pending acting assignments`);
     } catch (e) { console.error('[Acting Midnight]', e.message); }
   }, 'Acting Midnight Cron');
+
+  // Sunday 10AM — BRAG submission reminder
+  function scheduleSundayCron() {
+    const now = new Date();
+    let next = new Date(now);
+    // Find next Sunday
+    const daysUntilSunday = (7 - now.getDay()) % 7;
+    next.setDate(now.getDate() + (daysUntilSunday === 0 && now.getHours() >= 10 ? 7 : daysUntilSunday));
+    next.setHours(10, 0, 0, 0);
+    const delay = next - now;
+    setTimeout(async () => {
+      await sendBragReminders();
+      setInterval(sendBragReminders, 7 * 86400000);
+    }, delay);
+    console.log(`[BRAG Reminder] Scheduled — next Sunday 10AM in ${Math.round(delay / 60000)}m`);
+  }
+
+  async function sendBragReminders() {
+    try {
+      const Database = (await import('better-sqlite3')).default;
+      const portalDb = new Database(process.env.PORTAL_DB_PATH, { readonly: true });
+
+      const d = new Date();
+      const day = d.getDay();
+      const diff = (day === 0 ? -6 : 1) - day;
+      d.setDate(d.getDate() + diff);
+      d.setHours(0, 0, 0, 0);
+      const weekKey = d.toISOString().slice(0, 10);
+
+      const notSubmitted = portalDb.prepare(
+        `SELECT u.discord_id, u.display_name, u.full_name
+         FROM users u
+         LEFT JOIN brag_reports br ON br.user_id = u.id AND br.week_key = ?
+         WHERE lower(u.account_status) = 'active'
+           AND u.discord_id IS NOT NULL AND u.discord_id != ''
+           AND br.id IS NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM performance_adjustments pa
+             WHERE pa.user_id = u.id AND pa.adjustment_type = 'full_brag_exemption'
+               AND lower(pa.status) = 'approved'
+               AND (pa.expires_at IS NULL OR pa.expires_at > strftime('%s','now') * 1000)
+           )`
+      ).all(weekKey);
+
+      console.log(`[BRAG Reminder] Sending to ${notSubmitted.length} staff`);
+
+      for (const staff of notSubmitted) {
+        try {
+          const user = await client.users.fetch(staff.discord_id);
+          await user.send({ embeds: [new EmbedBuilder()
+            .setColor(0xF59E0B)
+            .setTitle('⏰ BRAG Report Due Today')
+            .setDescription(`Hi ${staff.display_name || staff.full_name}!\n\nYour weekly BRAG self-assessment is due by **12PM today (Sunday)**.\n\nFailure to submit will result in an automatic **Black** rating for Tasks and Contact this week per policy §3.2.`)
+            .addFields({ name: 'Submit via', value: '[portal.communityorg.co.uk](https://portal.communityorg.co.uk/performance?tab=brag)', inline: false })
+            .setFooter({ text: 'Community Organisation | BRAG System' })
+            .setTimestamp()
+          ]});
+          await new Promise(r => setTimeout(r, 500));
+        } catch (e) {
+          console.error(`[BRAG Reminder] Failed for ${staff.discord_id}:`, e.message);
+        }
+      }
+
+      portalDb.close();
+      console.log(`[BRAG Reminder] Complete — sent to ${notSubmitted.length} staff`);
+    } catch (e) {
+      console.error('[BRAG Reminder]', e.message);
+    }
+  }
+
+  scheduleSundayCron();
 });
 
 client.on('interactionCreate', async interaction => {
@@ -643,6 +714,14 @@ client.on('interactionCreate', async interaction => {
       });
       return;
     }
+    // Directive acknowledge button
+    if (interaction.customId?.startsWith('directive_ack_')) {
+      try {
+        const { handleDirectiveAcknowledge } = await import('./services/directiveService.js');
+        return handleDirectiveAcknowledge(interaction);
+      } catch(e) { console.error('[directive_ack error]', e.message); throw e; }
+    }
+
     // Assignment button handlers
     if (interaction.customId?.startsWith('assign_')) {
       try { return assignButton(interaction); }
@@ -732,6 +811,7 @@ client.on('interactionCreate', async interaction => {
 
   // Verify/Unverify modal handlers
   if (interaction.isModalSubmit()) {
+    if (interaction.customId.startsWith('verify_nickname_')) return verifyModal(interaction);
     if (interaction.customId.startsWith('verify_deny_reason_')) return verifyModal(interaction);
     if (interaction.customId.startsWith('unverify_approve_reason_')) return unverifyModal(interaction);
     if (interaction.customId?.startsWith('logspanel_')) {
@@ -1333,6 +1413,42 @@ webhookApp.post('/bot/assignment-extension', async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error('[BOT WEBHOOK /assignment-extension]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// POST /webhook — general webhook handler for portal events
+webhookApp.post('/webhook', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { type } = req.body;
+  if (!type) return res.status(400).json({ error: 'type required' });
+
+  try {
+    const { postDirectiveEmbed, revokeDirectiveEmbed, postMemoEmbed, revokeMemoEmbed, handleTransferApproved } = await import('./services/directiveService.js');
+
+    switch (type) {
+      case 'directive_issued':
+        await postDirectiveEmbed(client, req.body);
+        break;
+      case 'directive_revoked':
+        await revokeDirectiveEmbed(client, req.body);
+        break;
+      case 'iac_memo_issued':
+        await postMemoEmbed(client, req.body);
+        break;
+      case 'iac_memo_revoked':
+        await revokeMemoEmbed(client, req.body);
+        break;
+      case 'transfer_approved':
+        await handleTransferApproved(client, req.body);
+        break;
+      default:
+        console.log(`[Webhook] Unknown type: ${type}`);
+    }
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(`[Webhook] Error handling ${type}:`, e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });

@@ -673,6 +673,20 @@ function getWeekKeyForBot() {
   return d.toISOString().slice(0, 10);
 }
 
+db.exec(`CREATE TABLE IF NOT EXISTS directive_messages (
+  directive_id INTEGER PRIMARY KEY,
+  message_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS memo_messages (
+  memo_id INTEGER PRIMARY KEY,
+  message_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
 // ── Stored Roles ─────────────────────────────────────────────────────────────
 
 export function storeRoles(discordId, guildId, roles, nickname, reason) {
