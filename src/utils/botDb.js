@@ -225,6 +225,47 @@ db.exec(`CREATE TABLE IF NOT EXISTS assignment_counter (
   counter INTEGER NOT NULL DEFAULT 0
 )`);
 
+db.exec(`CREATE TABLE IF NOT EXISTS acting_assignments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  leave_request_id INTEGER,
+  on_leave_discord_id TEXT NOT NULL,
+  on_leave_user_id INTEGER,
+  acting_discord_id TEXT NOT NULL,
+  position TEXT NOT NULL,
+  roles_applied TEXT NOT NULL DEFAULT '[]',
+  original_roles TEXT NOT NULL DEFAULT '[]',
+  original_nickname TEXT,
+  started_at DATETIME,
+  ended_at DATETIME,
+  status TEXT DEFAULT 'pending',
+  assigned_by TEXT DEFAULT 'system',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS leave_role_queue (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  leave_request_id INTEGER NOT NULL,
+  discord_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  scheduled_for DATE NOT NULL,
+  processed INTEGER DEFAULT 0,
+  processed_at DATETIME,
+  acting_discord_id TEXT,
+  position TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS stored_roles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  discord_id TEXT NOT NULL,
+  guild_id TEXT NOT NULL,
+  roles TEXT NOT NULL DEFAULT '[]',
+  nickname TEXT,
+  stored_reason TEXT,
+  stored_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(discord_id, guild_id, stored_reason)
+)`);
+
 // Migration: add ticket_count column if missing (existing DBs)
 try {
   db.prepare('SELECT ticket_count FROM ticket_panels LIMIT 1').get();
@@ -630,6 +671,47 @@ function getWeekKeyForBot() {
   d.setDate(d.getDate() + diff);
   d.setHours(0, 0, 0, 0);
   return d.toISOString().slice(0, 10);
+}
+
+// ── Stored Roles ─────────────────────────────────────────────────────────────
+
+export function storeRoles(discordId, guildId, roles, nickname, reason) {
+  db.prepare(`INSERT OR REPLACE INTO stored_roles (discord_id, guild_id, roles, nickname, stored_reason)
+    VALUES (?, ?, ?, ?, ?)`).run(discordId, guildId, JSON.stringify(roles), nickname || null, reason);
+}
+
+export function getStoredRoles(discordId, guildId, reason) {
+  return db.prepare('SELECT * FROM stored_roles WHERE discord_id = ? AND guild_id = ? AND stored_reason = ?').get(discordId, guildId, reason);
+}
+
+export function deleteStoredRoles(id) {
+  db.prepare('DELETE FROM stored_roles WHERE id = ?').run(id);
+}
+
+// ── Acting Assignments ───────────────────────────────────────────────────────
+
+export function createActingAssignment({ leaveRequestId, onLeaveDiscordId, onLeaveUserId, actingDiscordId, position, rolesApplied, originalRoles, originalNickname, assignedBy }) {
+  return db.prepare(`INSERT INTO acting_assignments (leave_request_id, on_leave_discord_id, on_leave_user_id, acting_discord_id, position, roles_applied, original_roles, original_nickname, started_at, assigned_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)`).run(
+    leaveRequestId || null, onLeaveDiscordId, onLeaveUserId || null, actingDiscordId, position,
+    JSON.stringify(rolesApplied || []), JSON.stringify(originalRoles || []), originalNickname || null, assignedBy || 'system'
+  );
+}
+
+export function getActiveActingAssignment(actingDiscordId) {
+  return db.prepare("SELECT * FROM acting_assignments WHERE acting_discord_id = ? AND status = 'active'").get(actingDiscordId);
+}
+
+export function getActiveActingByLeave(leaveRequestId) {
+  return db.prepare("SELECT * FROM acting_assignments WHERE leave_request_id = ? AND status IN ('active','pending')").get(leaveRequestId);
+}
+
+export function endActingAssignment(id) {
+  db.prepare("UPDATE acting_assignments SET status = 'ended', ended_at = datetime('now') WHERE id = ?").run(id);
+}
+
+export function activateActingAssignment(id) {
+  db.prepare("UPDATE acting_assignments SET status = 'active', started_at = datetime('now') WHERE id = ?").run(id);
 }
 
 export { db };

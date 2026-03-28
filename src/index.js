@@ -50,6 +50,7 @@ import * as kick from './commands/kick.js';
 import * as serverban from './commands/serverban.js';
 import * as assign from './commands/assign.js';
 import { handleButton as assignButton, handleModal as assignModal } from './commands/assign.js';
+import * as acting from './commands/acting.js';
 
 config();
 import { logRoleAction } from './utils/logger.js';
@@ -65,7 +66,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -379,6 +380,49 @@ client.once('ready', async () => {
     } catch (e) { console.error('[Assignment Overdue Check]', e.message); }
   }, 1800000); // 30 minutes
   console.log('[Assignment Overdue Check] Started — checking every 30 minutes');
+
+  // Leave role crons
+  // Midnight (00:00) — process leave starts and ends
+  function scheduleAtTime(hour, min, fn, label) {
+    const now = new Date();
+    let next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, min, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    const delay = next - now;
+    setTimeout(() => {
+      fn();
+      setInterval(fn, 86400000); // repeat daily
+    }, delay);
+    console.log(`[${label}] Scheduled — next run in ${Math.round(delay / 60000)}m`);
+  }
+
+  scheduleAtTime(0, 0, async () => {
+    try {
+      const { processLeaveRoles } = await import('./services/leaveRoles.js');
+      await processLeaveRoles(client);
+    } catch (e) { console.error('[Leave Cron Midnight]', e.message); }
+  }, 'Leave Midnight Cron');
+
+  // 9AM — acting nomination requests
+  scheduleAtTime(9, 0, async () => {
+    try {
+      const { sendActingNominationRequests } = await import('./services/leaveRoles.js');
+      await sendActingNominationRequests(client);
+    } catch (e) { console.error('[Acting Nomination Cron]', e.message); }
+  }, 'Acting Nomination Cron');
+
+  // Process any pending acting assignments at midnight too
+  scheduleAtTime(0, 1, async () => {
+    try {
+      const { db } = await import('./utils/botDb.js');
+      const { applyActingRoles } = await import('./services/leaveRoles.js');
+      const pending = db.prepare("SELECT * FROM acting_assignments WHERE status = 'pending'").all();
+      for (const a of pending) {
+        await applyActingRoles(client, a.acting_discord_id, a.position, a.leave_request_id, a.on_leave_discord_id, a.assigned_by);
+        db.prepare("UPDATE acting_assignments SET status = 'active', started_at = datetime('now') WHERE id = ?").run(a.id);
+      }
+      if (pending.length) console.log(`[Acting Midnight] Activated ${pending.length} pending acting assignments`);
+    } catch (e) { console.error('[Acting Midnight]', e.message); }
+  }, 'Acting Midnight Cron');
 });
 
 client.on('interactionCreate', async interaction => {
@@ -1289,6 +1333,25 @@ webhookApp.post('/bot/assignment-extension', async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error('[BOT WEBHOOK /assignment-extension]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// POST /api/send-dm — unified DM endpoint for portal
+webhookApp.post('/api/send-dm', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { discord_id, message, embed } = req.body;
+  if (!discord_id) return res.status(400).json({ error: 'discord_id required' });
+  try {
+    const user = await client.users.fetch(String(discord_id));
+    if (embed) {
+      await user.send({ embeds: [typeof embed === 'string' ? JSON.parse(embed) : embed] });
+    } else {
+      await user.send(message || 'No message provided');
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[DM API]', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
