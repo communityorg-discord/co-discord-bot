@@ -1,5 +1,10 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } from 'discord.js';
 import { db } from '../utils/botDb.js';
+import { execFile } from 'child_process';
+import { writeFile, readFile, unlink } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import fetch from 'node-fetch';
 
 const DIRECTIVES_CHANNEL = '1487321447461556354';
 
@@ -14,9 +19,61 @@ const PURPOSE_LABELS = {
 
 const URGENCY_COLORS = { High: 0xEF4444, Medium: 0xF59E0B, Low: 0x3B82F6 };
 
-// ── PDF generation via pdfkit ────────────────────────────────────────────────
+// ── Download Google Doc as PDF via portal API ────────────────────────────────
 
-async function generateDirectivePdf(data) {
+async function downloadGoogleDocAsPdf(documentId) {
+  const res = await fetch(`http://localhost:3016/api/drive/export-pdf/${documentId}`, {
+    headers: { 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET }
+  });
+  if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+  return Buffer.from(await res.arrayBuffer());
+}
+
+// ── Get PDF: try Drive export first, pdfkit fallback ─────────────────────────
+
+async function getDirectivePdf(data) {
+  // Try 1: Export Google Doc via portal API
+  if (data.document_id) {
+    try {
+      const buffer = await downloadGoogleDocAsPdf(data.document_id);
+      if (buffer && buffer.length > 100) {
+        console.log(`[Directive PDF] Got PDF from Drive export (${buffer.length} bytes)`);
+        return { buffer, filename: `${data.directive_number}.pdf` };
+      }
+    } catch (e) {
+      console.error('[Directive PDF] Drive export failed:', e.message);
+    }
+  }
+
+  // Try 2: Extract doc ID from URL
+  if (data.document_url && !data.document_id) {
+    const docId = data.document_url.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1];
+    if (docId) {
+      try {
+        const buffer = await downloadGoogleDocAsPdf(docId);
+        if (buffer && buffer.length > 100) {
+          console.log(`[Directive PDF] Got PDF from URL-derived ID (${buffer.length} bytes)`);
+          return { buffer, filename: `${data.directive_number}.pdf` };
+        }
+      } catch (e) {
+        console.error('[Directive PDF] URL export failed:', e.message);
+      }
+    }
+  }
+
+  // Fallback: generate with pdfkit
+  console.warn('[Directive PDF] Falling back to pdfkit generation');
+  return generateDirectivePdfFallback(data);
+}
+
+async function getMemoPdf(data) {
+  // Memos may not have a document_id — use pdfkit directly
+  return generateMemoPdfFallback(data);
+}
+
+// ── pdfkit fallback generators ───────────────────────────────────────────────
+
+async function generateDirectivePdfFallback(data) {
   try {
     const PDFDocument = (await import('pdfkit')).default;
     const doc = new PDFDocument({ margin: 60 });
@@ -29,42 +86,36 @@ async function generateDirectivePdf(data) {
       doc.fontSize(18).font('Helvetica-Bold')
         .text(`CO | Secretariat Directive No. ${data.directive_number}`, { align: 'center' });
       doc.moveDown(0.5);
-
       const dateStr = new Date(data.issued_at).toLocaleDateString('en-GB');
       doc.fontSize(11).font('Helvetica').text(`${dateStr} — Subject: ${data.subject}`);
       doc.moveDown(0.5);
       doc.moveTo(60, doc.y).lineTo(540, doc.y).stroke();
       doc.moveDown(0.5);
-
       doc.font('Helvetica-Bold').text('Purpose:');
       doc.font('Helvetica').text(PURPOSE_LABELS[data.purpose] || data.purpose || 'Not specified');
       doc.moveDown(0.5);
-
       doc.font('Helvetica-Bold').text('Directive:');
       doc.font('Helvetica').text(data.directive_text || '');
       doc.moveDown(1);
       doc.moveTo(60, doc.y).lineTo(540, doc.y).stroke();
       doc.moveDown(0.5);
-
       doc.font('Helvetica-Bold').text('Issued by:');
       doc.moveDown(0.3);
       doc.font('Helvetica').fontSize(10);
       doc.text(`Secretary-General: ${data.issued_by_sg}`);
       doc.text(`Deputy Secretary-General: ${data.issued_by_dsg}`);
-
       doc.moveDown(1);
       doc.fontSize(8).fillColor('#666')
         .text('This directive is immediately binding on all staff from the time of issue.', { align: 'center' });
-
       doc.end();
     });
   } catch (e) {
-    console.error('[Directive PDF]', e.message);
+    console.error('[Directive PDF fallback]', e.message);
     return null;
   }
 }
 
-async function generateMemoPdf(data) {
+async function generateMemoPdfFallback(data) {
   try {
     const PDFDocument = (await import('pdfkit')).default;
     const doc = new PDFDocument({ margin: 60 });
@@ -74,41 +125,56 @@ async function generateMemoPdf(data) {
     return new Promise((resolve) => {
       doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), filename: `${data.memo_number}.pdf` }));
 
-      doc.fontSize(18).font('Helvetica-Bold')
-        .text(`IAC Memo — ${data.memo_number}`, { align: 'center' });
+      doc.fontSize(18).font('Helvetica-Bold').text(`IAC Memo — ${data.memo_number}`, { align: 'center' });
       doc.moveDown(0.5);
-
       const dateStr = new Date(data.created_at).toLocaleDateString('en-GB');
       doc.fontSize(11).font('Helvetica').text(`${dateStr} — ${data.title}`);
       doc.moveDown(0.5);
       doc.moveTo(60, doc.y).lineTo(540, doc.y).stroke();
       doc.moveDown(0.5);
-
-      if (data.description) {
-        doc.font('Helvetica').text(data.description);
-        doc.moveDown(0.5);
-      }
-
-      if (data.action_required) {
-        doc.font('Helvetica-Bold').text('Action Required:');
-        doc.font('Helvetica').text(data.action_required);
-        doc.moveDown(0.5);
-      }
-
+      if (data.description) { doc.font('Helvetica').text(data.description); doc.moveDown(0.5); }
+      if (data.action_required) { doc.font('Helvetica-Bold').text('Action Required:'); doc.font('Helvetica').text(data.action_required); doc.moveDown(0.5); }
       doc.moveTo(60, doc.y).lineTo(540, doc.y).stroke();
       doc.moveDown(0.5);
       doc.font('Helvetica').fontSize(10).text(`Issued by: ${data.issued_by}`);
       doc.text(`Urgency: ${data.urgency || 'Medium'}`);
-
       doc.moveDown(1);
-      doc.fontSize(8).fillColor('#666')
-        .text('Internal Audit and Compliance Team | Community Organisation', { align: 'center' });
-
+      doc.fontSize(8).fillColor('#666').text('Internal Audit and Compliance Team | Community Organisation', { align: 'center' });
       doc.end();
     });
   } catch (e) {
-    console.error('[Memo PDF]', e.message);
+    console.error('[Memo PDF fallback]', e.message);
     return null;
+  }
+}
+
+// ── PDF first page to image via pdftoppm ─────────────────────────────────────
+
+async function pdfFirstPageToImage(pdfBuffer, filename) {
+  const id = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  const pdfPath = join(tmpdir(), `directive-${id}.pdf`);
+  const outPrefix = join(tmpdir(), `directive-${id}`);
+  const outPath = `${outPrefix}-1.png`;
+
+  try {
+    await writeFile(pdfPath, pdfBuffer);
+
+    await new Promise((resolve, reject) => {
+      execFile('pdftoppm', ['-png', '-f', '1', '-l', '1', '-r', '150', pdfPath, outPrefix], (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    const imgBuffer = await readFile(outPath);
+    console.log(`[PDF→Image] pdftoppm success (${imgBuffer.length} bytes)`);
+    return { buffer: imgBuffer, filename: filename.replace('.pdf', '.png') };
+  } catch (e) {
+    console.error('[PDF→Image] pdftoppm failed:', e.message);
+    return null;
+  } finally {
+    await unlink(pdfPath).catch(() => {});
+    await unlink(outPath).catch(() => {});
   }
 }
 
@@ -118,9 +184,30 @@ export async function postDirectiveEmbed(client, data) {
   const channel = await client.channels.fetch(DIRECTIVES_CHANNEL).catch(() => null);
   if (!channel) return console.error('[Directive] Channel not found:', DIRECTIVES_CHANNEL);
 
-  const pdf = await generateDirectivePdf(data);
+  // If no document_id, wait 10s and retry (doc generation is async)
+  if (!data.document_id) {
+    console.log('[Directive] No document_id — waiting 10s for doc generation...');
+    await new Promise(r => setTimeout(r, 10000));
+    try {
+      const freshData = await fetch(`http://localhost:3016/api/directives/${data.directive_id}`, {
+        headers: { 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET }
+      }).then(r => r.ok ? r.json() : null);
+      if (freshData?.directive?.document_id) {
+        data.document_id = freshData.directive.document_id;
+        data.document_url = freshData.directive.document_url;
+        console.log('[Directive] Got document_id from retry:', data.document_id);
+      }
+    } catch (e) {
+      console.error('[Directive] Retry fetch failed:', e.message);
+    }
+  }
+
+  const pdf = await getDirectivePdf(data);
+  const image = pdf ? await pdfFirstPageToImage(pdf.buffer, pdf.filename) : null;
+
   const attachments = [];
   if (pdf) attachments.push(new AttachmentBuilder(pdf.buffer, { name: pdf.filename }));
+  if (image) attachments.push(new AttachmentBuilder(image.buffer, { name: image.filename }));
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
@@ -136,6 +223,8 @@ export async function postDirectiveEmbed(client, data) {
     )
     .setFooter({ text: `Directive ${data.directive_number} | Immediately binding on all staff` })
     .setTimestamp(new Date(data.issued_at));
+
+  if (image) embed.setThumbnail(`attachment://${image.filename}`);
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -155,7 +244,7 @@ export async function postDirectiveEmbed(client, data) {
   db.prepare('INSERT OR REPLACE INTO directive_messages (directive_id, message_id, channel_id) VALUES (?, ?, ?)')
     .run(data.directive_id, msg.id, DIRECTIVES_CHANNEL);
 
-  console.log(`[Directive] Posted ${data.directive_number} to ${DIRECTIVES_CHANNEL}`);
+  console.log(`[Directive] Posted ${data.directive_number} to ${DIRECTIVES_CHANNEL} (PDF: ${pdf ? 'yes' : 'no'}, Image: ${image ? 'yes' : 'no'})`);
 }
 
 // ── Post memo embed ──────────────────────────────────────────────────────────
@@ -164,14 +253,15 @@ export async function postMemoEmbed(client, data) {
   const channel = await client.channels.fetch(DIRECTIVES_CHANNEL).catch(() => null);
   if (!channel) return console.error('[Memo] Channel not found:', DIRECTIVES_CHANNEL);
 
-  const pdf = await generateMemoPdf(data);
+  const pdf = await getMemoPdf(data);
+  const image = pdf ? await pdfFirstPageToImage(pdf.buffer, pdf.filename) : null;
+
   const attachments = [];
   if (pdf) attachments.push(new AttachmentBuilder(pdf.buffer, { name: pdf.filename }));
+  if (image) attachments.push(new AttachmentBuilder(image.buffer, { name: image.filename }));
 
   let pingContent = '';
-  if (data.affected_user_discord_id) {
-    pingContent = `<@${data.affected_user_discord_id}>`;
-  }
+  if (data.affected_user_discord_id) pingContent = `<@${data.affected_user_discord_id}>`;
 
   const embed = new EmbedBuilder()
     .setColor(URGENCY_COLORS[data.urgency] || URGENCY_COLORS.Medium)
@@ -186,9 +276,8 @@ export async function postMemoEmbed(client, data) {
     .setFooter({ text: `Memo ${data.memo_number} | Internal Audit and Compliance Team` })
     .setTimestamp(new Date(data.created_at));
 
-  if (data.action_required) {
-    embed.addFields({ name: '⚠️ Action Required', value: data.action_required, inline: false });
-  }
+  if (data.action_required) embed.addFields({ name: '⚠️ Action Required', value: data.action_required, inline: false });
+  if (image) embed.setThumbnail(`attachment://${image.filename}`);
 
   const msg = await channel.send({
     content: pingContent || undefined,
@@ -219,7 +308,7 @@ export async function postMemoEmbed(client, data) {
     }
   }
 
-  console.log(`[Memo] Posted ${data.memo_number} to ${DIRECTIVES_CHANNEL}`);
+  console.log(`[Memo] Posted ${data.memo_number} (PDF: ${pdf ? 'yes' : 'no'}, Image: ${image ? 'yes' : 'no'})`);
 }
 
 // ── Revoke directive embed ───────────────────────────────────────────────────
@@ -234,17 +323,13 @@ export async function revokeDirectiveEmbed(client, data) {
   const msg = await channel.messages.fetch(stored.message_id).catch(() => null);
   if (!msg || !msg.embeds[0]) return;
 
-  const updatedEmbed = EmbedBuilder.from(msg.embeds[0])
-    .setColor(0xEF4444);
-
-  // Update status field
+  const updatedEmbed = EmbedBuilder.from(msg.embeds[0]).setColor(0xEF4444);
   const statusIdx = updatedEmbed.data.fields?.findIndex(f => f.name === 'Status');
   if (statusIdx >= 0) {
     updatedEmbed.data.fields[statusIdx] = {
       name: 'Status', value: `🔴 **REVOKED**\nReason: ${data.revocation_reason || 'No reason'}\nRevoked by: ${data.revoked_by || 'Unknown'}`, inline: false
     };
   }
-
   updatedEmbed.setFooter({ text: `Directive ${data.directive_number} | REVOKED — No longer in effect` });
 
   await msg.edit({ embeds: [updatedEmbed], components: [] });
@@ -263,16 +348,13 @@ export async function revokeMemoEmbed(client, data) {
   const msg = await channel.messages.fetch(stored.message_id).catch(() => null);
   if (!msg || !msg.embeds[0]) return;
 
-  const updatedEmbed = EmbedBuilder.from(msg.embeds[0])
-    .setColor(0xEF4444);
-
+  const updatedEmbed = EmbedBuilder.from(msg.embeds[0]).setColor(0xEF4444);
   const statusIdx = updatedEmbed.data.fields?.findIndex(f => f.name === 'Status');
   if (statusIdx >= 0) {
     updatedEmbed.data.fields[statusIdx] = {
       name: 'Status', value: `🔴 **CANCELLED**\nReason: ${data.revocation_reason || 'No reason'}`, inline: false
     };
   }
-
   updatedEmbed.setFooter({ text: `Memo ${data.memo_number} | CANCELLED — No longer in effect` });
 
   await msg.edit({ embeds: [updatedEmbed], components: [] });
@@ -312,49 +394,37 @@ export async function handleTransferApproved(client, data) {
   if (!data.discord_id) return console.warn('[Transfer] No discord_id for transferred user');
 
   const { POSITIONS } = await import('../utils/positions.js');
-  const { applyVerification } = await import('../utils/verifyHelper.js');
 
   const oldRoles = POSITIONS[data.old_position] || [];
   const newRoles = POSITIONS[data.new_position] || [];
 
-  // Strip old position roles + apply new ones across all guilds
   for (const guild of client.guilds.cache.values()) {
     try {
       const member = await guild.members.fetch(data.discord_id).catch(() => null);
       if (!member) continue;
 
-      // Remove old position-specific roles
       for (const roleName of oldRoles) {
         const role = guild.roles.cache.find(r => r.name === roleName);
-        if (role && member.roles.cache.has(role.id)) {
-          await member.roles.remove(role).catch(() => {});
-        }
+        if (role && member.roles.cache.has(role.id)) await member.roles.remove(role).catch(() => {});
       }
-
-      // Add new position roles
       for (const roleName of newRoles) {
         const role = guild.roles.cache.find(r => r.name === roleName);
-        if (role && !member.roles.cache.has(role.id)) {
-          await member.roles.add(role).catch(() => {});
-        }
+        if (role && !member.roles.cache.has(role.id)) await member.roles.add(role).catch(() => {});
       }
     } catch (e) {
       console.error(`[Transfer] Role sync failed in ${guild.name}:`, e.message);
     }
   }
 
-  // Update verified_members
-  const { db: botDb } = await import('../utils/botDb.js');
-  botDb.prepare("UPDATE verified_members SET position = ?, updated_at = CURRENT_TIMESTAMP WHERE discord_id = ?")
+  db.prepare("UPDATE verified_members SET position = ?, updated_at = CURRENT_TIMESTAMP WHERE discord_id = ?")
     .run(data.new_position, data.discord_id);
 
-  // DM the transferred staff member
   try {
     const user = await client.users.fetch(data.discord_id);
     await user.send({ embeds: [new EmbedBuilder()
       .setTitle('🔄 Transfer Processed')
       .setColor(0x22C55E)
-      .setDescription(`Your transfer to **${data.new_position}** has been processed. Your Discord roles and nickname have been updated.`)
+      .setDescription(`Your transfer to **${data.new_position}** has been processed. Your Discord roles have been updated.`)
       .addFields(
         { name: 'Old Position', value: data.old_position || 'Unknown', inline: true },
         { name: 'New Position', value: data.new_position, inline: true },
@@ -364,7 +434,6 @@ export async function handleTransferApproved(client, data) {
     ]});
   } catch {}
 
-  // Log
   const { logAction } = await import('../utils/logger.js');
   await logAction(client, {
     action: '🔄 Transfer Role Sync',
@@ -372,12 +441,8 @@ export async function handleTransferApproved(client, data) {
     target: { discordId: data.discord_id, name: data.display_name || data.discord_id },
     reason: `${data.old_position} → ${data.new_position}`,
     color: 0x22C55E,
-    fields: [
-      { name: 'Old Position', value: data.old_position || 'Unknown', inline: true },
-      { name: 'New Position', value: data.new_position, inline: true },
-    ],
     logType: 'verification.verify_unverify'
   });
 
-  console.log(`[Transfer] Role sync complete for ${data.display_name}: ${data.old_position} → ${data.new_position}`);
+  console.log(`[Transfer] Role sync complete: ${data.old_position} → ${data.new_position}`);
 }
