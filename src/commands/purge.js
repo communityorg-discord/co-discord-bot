@@ -101,6 +101,21 @@ export const data = new SlashCommandBuilder()
     opt.setName('bots')
       .setDescription('Only delete bot messages')
       .setRequired(false)
+  )
+  .addStringOption(opt =>
+    opt.setName('scope')
+      .setDescription('Scope: channel (default), full_server (auth 7+), global (superuser)')
+      .setRequired(false)
+      .addChoices(
+        { name: 'Channel (default)', value: 'channel' },
+        { name: 'Full Server (auth 7+)', value: 'full_server' },
+        { name: 'Global — All Servers (superuser)', value: 'global' }
+      )
+  )
+  .addStringOption(opt =>
+    opt.setName('confirm')
+      .setDescription('Type CONFIRM for full_server or global scope')
+      .setRequired(false)
   );
 
 export async function execute(interaction) {
@@ -116,6 +131,78 @@ export async function execute(interaction) {
   const moderatorName = moderatorPortalUser?.display_name || interaction.user.username;
 
   await interaction.deferReply({ ephemeral: true });
+
+  const scope = interaction.options.getString('scope') || 'channel';
+  const confirmText = interaction.options.getString('confirm');
+
+  // Handle full_server and global scopes
+  if (scope === 'full_server' || scope === 'global') {
+    if (scope === 'full_server') {
+      const authCheck = canRunCommand(interaction.user.id, 7);
+      if (!authCheck.allowed) return interaction.editReply({ content: '❌ Full server purge requires Auth Level 7+.' });
+    }
+    if (scope === 'global') {
+      const { SUPERUSER_IDS } = await import('../config.js');
+      if (!SUPERUSER_IDS.includes(interaction.user.id) && !['723199054514749450', '415922272956710912'].includes(interaction.user.id)) {
+        return interaction.editReply({ content: '❌ Global purge is superuser only.' });
+      }
+    }
+    if (confirmText !== 'CONFIRM') {
+      return interaction.editReply({ content: '❌ You must set the `confirm` option to `CONFIRM` for this scope.' });
+    }
+
+    const guilds = scope === 'global' ? [...interaction.client.guilds.cache.values()] : [interaction.guild];
+    let totalDeleted = 0;
+    let processedChannels = 0;
+
+    for (const guild of guilds) {
+      const channels = guild.channels.cache.filter(c =>
+        c.isTextBased() && c.permissionsFor(guild.members.me)?.has('ManageMessages')
+      );
+      for (const [, ch] of channels) {
+        try {
+          let fetched = await ch.messages.fetch({ limit: 100 }).catch(() => null);
+          if (!fetched) continue;
+          let msgs = [...fetched.values()];
+          if (targetUser) msgs = msgs.filter(m => m.author.id === targetUser.id);
+          if (botsOnly) msgs = msgs.filter(m => m.author.bot);
+          const deletable = msgs.filter(m => Date.now() - m.createdTimestamp < 14 * 24 * 60 * 60 * 1000);
+          if (deletable.length > 1) {
+            const result = await ch.bulkDelete(deletable, true).catch(() => null);
+            totalDeleted += result?.size || 0;
+          } else if (deletable.length === 1) {
+            await deletable[0].delete().catch(() => {});
+            totalDeleted++;
+          }
+          processedChannels++;
+        } catch {}
+      }
+      if (scope === 'global') await new Promise(r => setTimeout(r, 500));
+    }
+
+    await logAction(interaction.client, {
+      action: `🗑️ ${scope === 'global' ? 'Global' : 'Server'} Purge`,
+      moderator: { discordId: interaction.user.id, name: moderatorName },
+      target: { discordId: 'ALL', name: scope === 'global' ? 'All Servers' : interaction.guild.name },
+      reason,
+      color: 0xef4444,
+      fields: [
+        { name: 'Scope', value: scope, inline: true },
+        { name: 'Channels', value: String(processedChannels), inline: true },
+        { name: 'Deleted', value: String(totalDeleted), inline: true },
+      ],
+      specificChannelId: PURGE_SCRIBE_LOG_CHANNEL_ID,
+      guildId: interaction.guildId,
+      logType: 'moderation.purge_scribe',
+    });
+
+    return interaction.editReply({ embeds: [new EmbedBuilder()
+      .setTitle(`✅ ${scope === 'global' ? 'Global' : 'Server'} Purge Complete`)
+      .setColor(0x22c55e)
+      .setDescription(`Deleted **${totalDeleted}** messages across **${processedChannels}** channels.`)
+      .setTimestamp()
+    ]});
+  }
 
   try {
     let messages = await channel.messages.fetch({ limit: 100 });

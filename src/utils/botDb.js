@@ -283,6 +283,144 @@ db.exec(`CREATE TABLE IF NOT EXISTS reminders (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )`);
 
+// ── Security & Moderation tables ─────────────────────────────────────────────
+
+db.exec(`CREATE TABLE IF NOT EXISTS eliminate_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  target_discord_id TEXT NOT NULL,
+  target_username TEXT,
+  executor_discord_id TEXT NOT NULL,
+  global_banned INTEGER DEFAULT 0,
+  messages_deleted INTEGER DEFAULT 0,
+  infractions_deleted INTEGER DEFAULT 0,
+  guilds_processed INTEGER DEFAULT 0,
+  reason TEXT,
+  executed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS lockdown_state (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT,
+  lockdown_type TEXT NOT NULL,
+  locked_by TEXT NOT NULL,
+  reason TEXT,
+  auto_unlock_at DATETIME,
+  is_active INTEGER DEFAULT 1,
+  locked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  unlocked_at DATETIME
+)`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS lockdown_permission_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  lockdown_id INTEGER NOT NULL,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  role_id TEXT NOT NULL,
+  allow_permissions TEXT NOT NULL,
+  deny_permissions TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS automod_config (
+  guild_id TEXT PRIMARY KEY,
+  enabled INTEGER DEFAULT 1,
+  spam_enabled INTEGER DEFAULT 1,
+  spam_threshold INTEGER DEFAULT 5,
+  spam_window_seconds INTEGER DEFAULT 5,
+  spam_action TEXT DEFAULT 'timeout',
+  spam_timeout_minutes INTEGER DEFAULT 10,
+  mention_spam_enabled INTEGER DEFAULT 1,
+  mention_threshold INTEGER DEFAULT 5,
+  mention_window_seconds INTEGER DEFAULT 10,
+  mention_action TEXT DEFAULT 'timeout',
+  role_mention_enabled INTEGER DEFAULT 1,
+  role_mention_threshold INTEGER DEFAULT 3,
+  role_mention_action TEXT DEFAULT 'delete_warn',
+  invite_links_enabled INTEGER DEFAULT 1,
+  invite_links_action TEXT DEFAULT 'delete_warn',
+  new_account_enabled INTEGER DEFAULT 1,
+  new_account_min_age_days INTEGER DEFAULT 7,
+  new_account_action TEXT DEFAULT 'kick',
+  raid_detection_enabled INTEGER DEFAULT 1,
+  raid_join_threshold INTEGER DEFAULT 10,
+  raid_join_window_seconds INTEGER DEFAULT 30,
+  raid_action TEXT DEFAULT 'lockdown',
+  permission_guard_enabled INTEGER DEFAULT 1,
+  channel_creation_guard_enabled INTEGER DEFAULT 1,
+  role_creation_guard_enabled INTEGER DEFAULT 1,
+  verify_timeout_enabled INTEGER DEFAULT 1,
+  verify_warning_hours INTEGER DEFAULT 24,
+  verify_terminate_hours INTEGER DEFAULT 48,
+  alert_channel_id TEXT,
+  quarantine_role_id TEXT,
+  quarantine_channel_id TEXT,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS automod_incidents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id TEXT NOT NULL,
+  incident_type TEXT NOT NULL,
+  target_discord_id TEXT,
+  target_username TEXT,
+  severity TEXT DEFAULT 'medium',
+  action_taken TEXT,
+  details TEXT,
+  channel_id TEXT,
+  message_id TEXT,
+  auto_resolved INTEGER DEFAULT 0,
+  reviewed_by TEXT,
+  reviewed_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS automod_immunity (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id TEXT,
+  target_type TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  immune_from TEXT NOT NULL,
+  granted_by TEXT NOT NULL,
+  reason TEXT,
+  expires_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(guild_id, target_type, target_id, immune_from)
+)`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS approval_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id TEXT NOT NULL,
+  requester_discord_id TEXT NOT NULL,
+  requester_username TEXT,
+  action_type TEXT NOT NULL,
+  action_description TEXT NOT NULL,
+  status TEXT DEFAULT 'pending',
+  approved_by TEXT,
+  token TEXT UNIQUE,
+  expires_at DATETIME,
+  used_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS verify_pending (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id TEXT NOT NULL,
+  discord_id TEXT NOT NULL,
+  joined_at DATETIME NOT NULL,
+  warning_sent INTEGER DEFAULT 0,
+  warning_sent_at DATETIME,
+  terminated INTEGER DEFAULT 0,
+  UNIQUE(guild_id, discord_id)
+)`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS join_rate_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id TEXT NOT NULL,
+  discord_id TEXT NOT NULL,
+  joined_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
 // Migration: add ticket_count column if missing (existing DBs)
 try {
   db.prepare('SELECT ticket_count FROM ticket_panels LIMIT 1').get();

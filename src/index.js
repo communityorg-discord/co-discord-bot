@@ -54,6 +54,11 @@ import * as acting from './commands/acting.js';
 import * as remind from './commands/remind.js';
 import * as onboard from './commands/onboard.js';
 import { handleModal as onboardModal } from './commands/onboard.js';
+import * as eliminate from './commands/eliminate.js';
+import * as lockdown from './commands/lockdown.js';
+import * as automodCmd from './commands/automod.js';
+import { handleButton as approvalButton } from './commands/automod.js';
+import { automod } from './services/automod.js';
 
 config();
 import { logRoleAction } from './utils/logger.js';
@@ -69,7 +74,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -157,6 +162,10 @@ client.once('ready', async () => {
       console.error('[CO Bot] Failed to register commands:', e.message);
     }
   }
+
+  // Initialize AutoMod
+  automod.init(client);
+  console.log('[AutoMod] Initialized');
 
   // C-05: Re-schedule timed suspensions and bans on startup
   const { default: db, getActiveSuspension, liftSuspension, getActiveGlobalBan } = await import('./utils/botDb.js');
@@ -525,6 +534,15 @@ client.once('ready', async () => {
     } catch (e) { console.error('[Reminder cron]', e.message); }
   }, 60000);
   console.log('[Reminder Cron] Started — checking every 60s');
+
+  // AutoMod crons — lockdown auto-unlock every 60s, verify timeout hourly
+  setInterval(async () => {
+    try { await automod.processAutoUnlocks(); } catch (e) { console.error('[AutoMod auto-unlock]', e.message); }
+  }, 60000);
+  setInterval(async () => {
+    try { await automod.processVerifyTimeouts(); } catch (e) { console.error('[AutoMod verify-timeout]', e.message); }
+  }, 3600000);
+  console.log('[AutoMod Crons] Started — auto-unlock 60s, verify-timeout 1h');
 });
 
 client.on('interactionCreate', async interaction => {
@@ -745,6 +763,12 @@ client.on('interactionCreate', async interaction => {
       });
       return;
     }
+    // Approval buttons
+    if (interaction.customId?.startsWith('approval_')) {
+      try { return approvalButton(interaction); }
+      catch(e) { console.error('[approval button error]', e.message); throw e; }
+    }
+
     // Directive acknowledge button
     if (interaction.customId?.startsWith('directive_ack_')) {
       try {
@@ -987,8 +1011,19 @@ client.on('guildMemberAdd', async (member) => {
   } catch (e) {
     console.error('[guildMemberAdd verify error]', e.message);
   }
+
+  // AutoMod checks
+  try { await automod.checkMemberAdd(member); } catch (e) { console.error('[AutoMod guildMemberAdd]', e.message); }
 });
 
+client.on('guildMemberRemove', async (member) => {
+  try { await automod.checkMemberLeave(member); } catch (e) { console.error('[AutoMod guildMemberRemove]', e.message); }
+});
+
+// AutoMod message handler
+client.on('messageCreate', async (message) => {
+  try { await automod.checkMessage(message); } catch (e) { console.error('[AutoMod messageCreate]', e.message); }
+});
 
 // Message delete log — tracked globally across all servers
 client.on('messageDelete', async (message) => {
@@ -1102,6 +1137,11 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
 // ============ ROLE MANAGEMENT LOGGING ============
 
 // Role created
+// AutoMod channel creation guard
+client.on('channelCreate', async (channel) => {
+  try { await automod.checkChannelCreate(channel); } catch (e) { console.error('[AutoMod channelCreate]', e.message); }
+});
+
 client.on('roleCreate', async (role) => {
   try {
     if (!role || !role.guild) return;
@@ -1123,6 +1163,8 @@ client.on('roleCreate', async (role) => {
   } catch (e) {
     console.error('[roleCreate log error]', e.message);
   }
+  // AutoMod check
+  try { await automod.checkRoleCreate(role); } catch (e) { console.error('[AutoMod roleCreate]', e.message); }
 });
 
 // Role deleted
@@ -1228,6 +1270,8 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
   } catch (e) {
     console.error('[guildMemberUpdate log error]', e.message);
   }
+  // AutoMod permission guard
+  try { await automod.checkMemberUpdate(oldMember, newMember); } catch (e) { console.error('[AutoMod guildMemberUpdate]', e.message); }
 });
 
 // ============ BOT WEBHOOK SERVER ============
