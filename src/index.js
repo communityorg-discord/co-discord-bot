@@ -55,6 +55,7 @@ import * as remind from './commands/remind.js';
 import * as onboard from './commands/onboard.js';
 import { handleModal as onboardModal } from './commands/onboard.js';
 import * as eliminate from './commands/eliminate.js';
+import * as stats from './commands/stats.js';
 import * as lockdown from './commands/lockdown.js';
 import * as automodCmd from './commands/automod.js';
 import { automod } from './services/automod.js';
@@ -74,7 +75,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -1696,6 +1697,42 @@ webhookApp.post('/api/send-dm', async (req, res) => {
   } catch (e) {
     console.error('[DM API]', e.message);
     res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// POST /api/send-channel — send embed to a Discord channel
+webhookApp.post('/api/send-channel', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { channel_id, embed, content } = req.body;
+  if (!channel_id) return res.status(400).json({ error: 'channel_id required' });
+  try {
+    const channel = await client.channels.fetch(channel_id);
+    const payload = {};
+    if (content) payload.content = content;
+    if (embed) payload.embeds = [typeof embed === 'string' ? JSON.parse(embed) : embed];
+    await channel.send(payload);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[Channel API]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// GET /api/discord-user/:id — fetch Discord user info (avatar, username)
+webhookApp.get('/api/discord-user/:id', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const user = await client.users.fetch(req.params.id);
+    res.json({
+      ok: true,
+      id: user.id,
+      username: user.username,
+      tag: user.tag,
+      avatar: user.avatar,
+      avatarUrl: user.displayAvatarURL({ size: 128, extension: 'png' }),
+    });
+  } catch (e) {
+    res.status(404).json({ ok: false, error: 'User not found' });
   }
 });
 
