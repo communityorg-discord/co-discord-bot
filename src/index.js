@@ -57,8 +57,8 @@ import { handleModal as onboardModal } from './commands/onboard.js';
 import * as eliminate from './commands/eliminate.js';
 import * as lockdown from './commands/lockdown.js';
 import * as automodCmd from './commands/automod.js';
-import { handleButton as approvalButton } from './commands/automod.js';
 import { automod } from './services/automod.js';
+import { handleInteraction as automodPanelHandler } from './services/automodPanels.js';
 
 config();
 import { logRoleAction } from './utils/logger.js';
@@ -763,10 +763,10 @@ client.on('interactionCreate', async interaction => {
       });
       return;
     }
-    // Approval buttons
-    if (interaction.customId?.startsWith('approval_')) {
-      try { return approvalButton(interaction); }
-      catch(e) { console.error('[approval button error]', e.message); throw e; }
+    // AutoMod panel buttons (all automod_ prefixed interactions)
+    if (interaction.customId?.startsWith('automod_')) {
+      try { const handled = await automodPanelHandler(interaction); if (handled) return; }
+      catch(e) { console.error('[automod panel error]', e.message); throw e; }
     }
 
     // Directive acknowledge button
@@ -793,6 +793,12 @@ client.on('interactionCreate', async interaction => {
 
   // String select menu handlers
   if (interaction.isStringSelectMenu()) {
+    // AutoMod panel select menus
+    if (interaction.customId?.startsWith('automod_')) {
+      try { const handled = await automodPanelHandler(interaction); if (handled) return; }
+      catch(e) { console.error('[automod select error]', e.message); throw e; }
+    }
+
     if (interaction.customId === 'dm_exempt_user_select') {
       const { addDmExemption, getDmExemptions } = await import('./utils/botDb.js');
 
@@ -866,6 +872,12 @@ client.on('interactionCreate', async interaction => {
 
   // Verify/Unverify modal handlers
   if (interaction.isModalSubmit()) {
+    // AutoMod panel modals
+    if (interaction.customId?.startsWith('automod_')) {
+      try { const handled = await automodPanelHandler(interaction); if (handled) return; }
+      catch(e) { console.error('[automod modal error]', e.message); throw e; }
+    }
+
     if (interaction.customId.startsWith('verify_nickname_')) return verifyModal(interaction);
     if (interaction.customId.startsWith('verify_deny_reason_')) return verifyModal(interaction);
     if (interaction.customId.startsWith('unverify_approve_reason_')) return unverifyModal(interaction);

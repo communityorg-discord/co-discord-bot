@@ -421,6 +421,16 @@ db.exec(`CREATE TABLE IF NOT EXISTS join_rate_log (
   joined_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )`);
 
+db.exec(`CREATE TABLE IF NOT EXISTS automod_panels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  panel_type TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(guild_id, panel_type)
+)`);
+
 // Migration: add missing columns to verified_members
 try { db.exec('ALTER TABLE verified_members ADD COLUMN portal_user_id INTEGER'); } catch {}
 try { db.exec('ALTER TABLE verified_members ADD COLUMN employee_number TEXT'); } catch {}

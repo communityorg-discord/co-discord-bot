@@ -43,8 +43,16 @@ export class AutoMod {
   }
 
   logIncident(guildId, type, targetId, targetUsername, severity, action, details, channelId) {
-    db.prepare(`INSERT INTO automod_incidents (guild_id, incident_type, target_discord_id, target_username, severity, action_taken, details, channel_id)
+    const result = db.prepare(`INSERT INTO automod_incidents (guild_id, incident_type, target_discord_id, target_username, severity, action_taken, details, channel_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(guildId, type, targetId || null, targetUsername || null, severity, action, details, channelId || null);
+
+    // Post incident embed with action buttons to alert channel
+    if (this.client) {
+      import('./automodPanels.js').then(({ postIncidentEmbed, refreshPanel }) => {
+        postIncidentEmbed(this.client, guildId, { id: result.lastInsertRowid, incident_type: type, target_discord_id: targetId, target_username: targetUsername, severity, action_taken: action, details });
+        refreshPanel(this.client, guildId, 'status');
+      }).catch(() => {});
+    }
   }
 
   async notifyEOB(guildId, type, targetId, targetUsername, severity, action, details) {
