@@ -26,7 +26,7 @@ const CATEGORIES = [
     { name: 'cooldown', desc: 'Rate-limit commands (superuser)' },
     { name: 'eliminate', desc: 'Remove all traces of a user (superuser)' },
   ]},
-  { name: 'HR & Cases', emoji: '📋', commands: [
+  { name: 'DMSPC & Cases', emoji: '📋', commands: [
     { name: 'suspend', desc: 'Suspend staff member (auth 5+)' },
     { name: 'unsuspend', desc: 'Lift suspension (auth 5+)' },
     { name: 'investigate', desc: 'Start investigation (auth 5+)' },
