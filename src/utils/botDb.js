@@ -266,6 +266,23 @@ db.exec(`CREATE TABLE IF NOT EXISTS stored_roles (
   UNIQUE(discord_id, guild_id, stored_reason)
 )`);
 
+// Drop legacy election tables
+try { db.exec('DROP TABLE IF EXISTS elections'); } catch {}
+try { db.exec('DROP TABLE IF EXISTS election_candidates'); } catch {}
+try { db.exec('DROP TABLE IF EXISTS election_votes'); } catch {}
+
+db.exec(`CREATE TABLE IF NOT EXISTS reminders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  requester_discord_id TEXT NOT NULL,
+  target_discord_id TEXT NOT NULL,
+  guild_id TEXT,
+  channel_id TEXT,
+  message TEXT NOT NULL,
+  remind_at DATETIME NOT NULL,
+  sent INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
 // Migration: add ticket_count column if missing (existing DBs)
 try {
   db.prepare('SELECT ticket_count FROM ticket_panels LIMIT 1').get();

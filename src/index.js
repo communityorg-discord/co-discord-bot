@@ -51,6 +51,9 @@ import * as serverban from './commands/serverban.js';
 import * as assign from './commands/assign.js';
 import { handleButton as assignButton, handleModal as assignModal } from './commands/assign.js';
 import * as acting from './commands/acting.js';
+import * as remind from './commands/remind.js';
+import * as onboard from './commands/onboard.js';
+import { handleModal as onboardModal } from './commands/onboard.js';
 
 config();
 import { logRoleAction } from './utils/logger.js';
@@ -66,7 +69,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -494,6 +497,34 @@ client.once('ready', async () => {
   }
 
   scheduleSundayCron();
+
+  // Reminder cron — every 60 seconds
+  setInterval(async () => {
+    try {
+      const { db } = await import('./utils/botDb.js');
+      const due = db.prepare("SELECT * FROM reminders WHERE sent = 0 AND remind_at <= datetime('now')").all();
+      for (const reminder of due) {
+        try {
+          const targetUser = await client.users.fetch(reminder.target_discord_id);
+          const requesterUser = reminder.requester_discord_id !== reminder.target_discord_id
+            ? await client.users.fetch(reminder.requester_discord_id).catch(() => null) : null;
+
+          await targetUser.send({ embeds: [new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle('⏰ Reminder')
+            .setDescription(reminder.message)
+            .addFields(requesterUser ? [{ name: 'Set by', value: `<@${requesterUser.id}>`, inline: true }] : [])
+            .setFooter({ text: 'Community Organisation | Reminder' })
+            .setTimestamp()
+          ]});
+        } catch (e) {
+          console.error('[Remind]', e.message);
+        }
+        db.prepare('UPDATE reminders SET sent = 1 WHERE id = ?').run(reminder.id);
+      }
+    } catch (e) { console.error('[Reminder cron]', e.message); }
+  }, 60000);
+  console.log('[Reminder Cron] Started — checking every 60s');
 });
 
 client.on('interactionCreate', async interaction => {
@@ -828,6 +859,12 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId?.startsWith('assign_')) {
       try { return assignModal(interaction); }
       catch(e) { console.error('[assign modal error]', e.message); throw e; }
+    }
+
+    // Onboard modal handlers
+    if (interaction.customId?.startsWith('onboard_nickname_')) {
+      try { return onboardModal(interaction); }
+      catch(e) { console.error('[onboard modal error]', e.message); throw e; }
     }
 
     if (interaction.customId.startsWith('ticketopts_renamemodal_')) {
@@ -1413,6 +1450,137 @@ webhookApp.post('/bot/assignment-extension', async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error('[BOT WEBHOOK /assignment-extension]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// POST /bot/disciplinary — handle disciplinary role actions from portal
+webhookApp.post('/bot/disciplinary', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { action, discordId, caseRef, notes, newPosition, targetName } = req.body;
+  if (!action || !discordId) return res.status(400).json({ ok: false, error: 'action and discordId required' });
+
+  try {
+    const { removeAllStaffRoles, kickFromAllServers, restorePositionRoles } = await import('./utils/roleManager.js');
+    const { addInfraction } = await import('./utils/botDb.js');
+    const { logAction } = await import('./utils/logger.js');
+    const { POSITIONS, ALL_MANAGED_ROLES } = await import('./utils/positions.js');
+    const { ALL_SERVER_IDS } = await import('./config.js');
+
+    // Log infraction to bot DB
+    if (caseRef) {
+      addInfraction(discordId, action, `${notes || ''} [Case: ${caseRef}]`, 'PORTAL', 'Portal');
+    }
+
+    const results = { action, servers: [], errors: [] };
+
+    switch (action) {
+      case 'remove_roles': {
+        for (const gid of ALL_SERVER_IDS) {
+          try {
+            const guild = await client.guilds.fetch(gid).catch(() => null);
+            if (!guild) continue;
+            const member = await guild.members.fetch(discordId).catch(() => null);
+            if (!member) continue;
+            const managed = ALL_MANAGED_ROLES;
+            for (const roleName of managed) {
+              const role = guild.roles.cache.find(r => r.name === roleName);
+              if (role && member.roles.cache.has(role.id)) await member.roles.remove(role).catch(() => {});
+            }
+            results.servers.push(guild.name);
+          } catch (e) { results.errors.push(e.message); }
+        }
+        break;
+      }
+      case 'kick': {
+        for (const gid of ALL_SERVER_IDS) {
+          try {
+            const guild = await client.guilds.fetch(gid).catch(() => null);
+            if (!guild) continue;
+            const member = await guild.members.fetch(discordId).catch(() => null);
+            if (member) { await member.kick(notes || 'Disciplinary action'); results.servers.push(guild.name); }
+          } catch (e) { results.errors.push(e.message); }
+        }
+        break;
+      }
+      case 'ban': {
+        for (const gid of ALL_SERVER_IDS) {
+          try {
+            const guild = await client.guilds.fetch(gid).catch(() => null);
+            if (!guild) continue;
+            await guild.members.ban(discordId, { reason: notes || 'Staff disciplinary action' }).catch(() => {});
+            results.servers.push(guild.name);
+          } catch (e) { results.errors.push(e.message); }
+        }
+        break;
+      }
+      case 'global_ban': {
+        for (const guild of client.guilds.cache.values()) {
+          try {
+            await guild.members.ban(discordId, { reason: notes || 'Global ban - disciplinary action' }).catch(() => {});
+            results.servers.push(guild.name);
+          } catch (e) { results.errors.push(e.message); }
+        }
+        break;
+      }
+      case 'demote': {
+        // Remove all managed roles, then apply new position roles
+        for (const gid of ALL_SERVER_IDS) {
+          try {
+            const guild = await client.guilds.fetch(gid).catch(() => null);
+            if (!guild) continue;
+            const member = await guild.members.fetch(discordId).catch(() => null);
+            if (!member) continue;
+            for (const roleName of ALL_MANAGED_ROLES) {
+              const role = guild.roles.cache.find(r => r.name === roleName);
+              if (role && member.roles.cache.has(role.id)) await member.roles.remove(role).catch(() => {});
+            }
+            if (newPosition && POSITIONS[newPosition]) {
+              for (const roleName of POSITIONS[newPosition]) {
+                const role = guild.roles.cache.find(r => r.name === roleName);
+                if (role) await member.roles.add(role).catch(() => {});
+              }
+            }
+            results.servers.push(guild.name);
+          } catch (e) { results.errors.push(e.message); }
+        }
+        break;
+      }
+      case 'reinstate': {
+        if (newPosition && POSITIONS[newPosition]) {
+          for (const gid of ALL_SERVER_IDS) {
+            try {
+              const guild = await client.guilds.fetch(gid).catch(() => null);
+              if (!guild) continue;
+              const member = await guild.members.fetch(discordId).catch(() => null);
+              if (!member) continue;
+              for (const roleName of POSITIONS[newPosition]) {
+                const role = guild.roles.cache.find(r => r.name === roleName);
+                if (role && !member.roles.cache.has(role.id)) await member.roles.add(role).catch(() => {});
+              }
+              results.servers.push(guild.name);
+            } catch (e) { results.errors.push(e.message); }
+          }
+        }
+        break;
+      }
+    }
+
+    await logAction(client, {
+      action: `📋 Disciplinary Action (Portal): ${action}`,
+      moderator: { discordId: 'PORTAL', name: 'Portal Case Management' },
+      target: { discordId, name: targetName || discordId },
+      reason: notes || caseRef || 'No reason',
+      color: 0xEF4444,
+      fields: [
+        { name: 'Action', value: action, inline: true },
+        { name: 'Servers', value: results.servers.join(', ') || 'None', inline: true },
+      ]
+    });
+
+    res.json({ ok: true, ...results });
+  } catch (e) {
+    console.error('[BOT WEBHOOK /disciplinary]', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
