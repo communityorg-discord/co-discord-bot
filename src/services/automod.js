@@ -155,9 +155,18 @@ export class AutoMod {
   }
 
   async triggerRaidLockdown(guild, reason) {
+    const result = db.prepare(`INSERT OR REPLACE INTO lockdown_state (guild_id, lockdown_type, locked_by, reason, is_active)
+      VALUES (?, 'server', 'automod', ?, 1)`).run(guild.id, reason);
+    const ldId = result.lastInsertRowid;
+
     const channels = guild.channels.cache.filter(c => c.isTextBased());
     for (const [, ch] of channels) {
-      await ch.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false }).catch(() => {});
+      // Snapshot @everyone SendMessages state before locking
+      const evOw = ch.permissionOverwrites.cache.get(guild.id);
+      const prev = evOw?.allow.has('SendMessages') ? 'allow' : evOw?.deny.has('SendMessages') ? 'deny' : 'neutral';
+      db.prepare(`INSERT OR REPLACE INTO lockdown_permission_snapshots (lockdown_id, guild_id, channel_id, role_id, allow_permissions, deny_permissions) VALUES (?, ?, ?, ?, ?, '')`).run(ldId, guild.id, ch.id, guild.id, prev);
+      // Only touch @everyone SendMessages
+      await ch.permissionOverwrites.edit(guild.id, { SendMessages: false }).catch(() => {});
     }
     const sysChannel = guild.systemChannel || channels.first();
     if (sysChannel) {
@@ -167,8 +176,6 @@ export class AutoMod {
         .setTimestamp()
       ]}).catch(() => {});
     }
-    db.prepare(`INSERT OR REPLACE INTO lockdown_state (guild_id, lockdown_type, locked_by, reason, is_active)
-      VALUES (?, 'server', 'automod', ?, 1)`).run(guild.id, reason);
   }
 
   // ── Detection modules ──────────────────────────────────────────────────────
@@ -432,16 +439,28 @@ export class AutoMod {
       try {
         const guild = this.client?.guilds.cache.get(ld.guild_id);
         if (!guild) continue;
-        if (ld.channel_id) {
-          const ch = guild.channels.cache.get(ld.channel_id);
-          if (ch) {
-            const snaps = db.prepare('SELECT * FROM lockdown_permission_snapshots WHERE lockdown_id = ? AND channel_id = ?').all(ld.id, ld.channel_id);
-            for (const snap of snaps) {
-              await ch.permissionOverwrites.edit(snap.role_id, { allow: BigInt(snap.allow_permissions), deny: BigInt(snap.deny_permissions) }).catch(() => {});
-            }
-            await ch.send({ embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('🔓 Auto-Unlocked').setDescription('Lockdown duration expired.').setTimestamp()] }).catch(() => {});
+
+        // Get all snapshot channels for this lockdown
+        const snaps = db.prepare('SELECT * FROM lockdown_permission_snapshots WHERE lockdown_id = ?').all(ld.id);
+        for (const snap of snaps) {
+          const ch = guild.channels.cache.get(snap.channel_id);
+          if (!ch) continue;
+          // Restore only @everyone SendMessages from snapshot
+          if (snap.allow_permissions === 'allow') {
+            await ch.permissionOverwrites.edit(guild.id, { SendMessages: true }).catch(() => {});
+          } else if (snap.allow_permissions === 'deny') {
+            // Was already denied — leave it
+          } else {
+            await ch.permissionOverwrites.edit(guild.id, { SendMessages: null }).catch(() => {});
           }
         }
+
+        // If single channel lockdown, also notify
+        if (ld.channel_id) {
+          const ch = guild.channels.cache.get(ld.channel_id);
+          if (ch) await ch.send({ embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('🔓 Auto-Unlocked').setDescription('Lockdown duration expired.').setTimestamp()] }).catch(() => {});
+        }
+
         db.prepare("UPDATE lockdown_state SET is_active = 0, unlocked_at = datetime('now') WHERE id = ?").run(ld.id);
         db.prepare('DELETE FROM lockdown_permission_snapshots WHERE lockdown_id = ?').run(ld.id);
         console.log(`[AutoMod] Auto-unlocked lockdown #${ld.id}`);

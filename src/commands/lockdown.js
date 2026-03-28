@@ -13,38 +13,41 @@ function parseDuration(input) {
   return new Date(Date.now() + ms);
 }
 
+// Only snapshot and modify @everyone SendMessages — never touch anything else
 async function snapshotAndLock(channel, lockdownId) {
   const guild = channel.guild;
-  const overwrites = channel.permissionOverwrites.cache;
+  const everyoneOverwrite = channel.permissionOverwrites.cache.get(guild.id);
 
-  // Snapshot existing overwrites
-  for (const [id, overwrite] of overwrites) {
-    db.prepare(`INSERT INTO lockdown_permission_snapshots (lockdown_id, guild_id, channel_id, role_id, allow_permissions, deny_permissions)
-      VALUES (?, ?, ?, ?, ?, ?)`).run(lockdownId, guild.id, channel.id, id, overwrite.allow.bitfield.toString(), overwrite.deny.bitfield.toString());
-  }
+  // Record only @everyone's current SendMessages state
+  const prevState = everyoneOverwrite?.allow.has('SendMessages')
+    ? 'allow'
+    : everyoneOverwrite?.deny.has('SendMessages')
+      ? 'deny'
+      : 'neutral';
 
-  // Deny sending for @everyone
-  await channel.permissionOverwrites.edit(guild.roles.everyone, {
-    SendMessages: false,
-    AddReactions: false,
-    CreatePublicThreads: false,
-    SendMessagesInThreads: false,
-  }).catch(() => {});
+  db.prepare(`INSERT OR REPLACE INTO lockdown_permission_snapshots (lockdown_id, guild_id, channel_id, role_id, allow_permissions, deny_permissions)
+    VALUES (?, ?, ?, ?, ?, '')`).run(lockdownId, guild.id, channel.id, guild.id, prevState);
+
+  // ONLY set SendMessages to false on @everyone — nothing else
+  await channel.permissionOverwrites.edit(guild.id, { SendMessages: false }).catch(() => {});
 }
 
 async function restoreChannel(channel, lockdownId) {
-  const snapshots = db.prepare('SELECT * FROM lockdown_permission_snapshots WHERE lockdown_id = ? AND channel_id = ?').all(lockdownId, channel.id);
+  const snapshot = db.prepare('SELECT * FROM lockdown_permission_snapshots WHERE lockdown_id = ? AND channel_id = ? AND role_id = ?')
+    .get(lockdownId, channel.id, channel.guild.id);
 
-  // Reset to snapshot
-  for (const snap of snapshots) {
-    const allow = BigInt(snap.allow_permissions);
-    const deny = BigInt(snap.deny_permissions);
-    await channel.permissionOverwrites.edit(snap.role_id, { allow, deny }).catch(() => {});
-  }
-
-  // If no snapshots existed for @everyone, remove our deny
-  if (!snapshots.find(s => s.role_id === channel.guild.id)) {
-    await channel.permissionOverwrites.delete(channel.guild.roles.everyone).catch(() => {});
+  if (snapshot) {
+    if (snapshot.allow_permissions === 'allow') {
+      await channel.permissionOverwrites.edit(channel.guild.id, { SendMessages: true }).catch(() => {});
+    } else if (snapshot.allow_permissions === 'deny') {
+      // Was already denied — leave it denied
+    } else {
+      // Was neutral — remove our deny so it inherits
+      await channel.permissionOverwrites.edit(channel.guild.id, { SendMessages: null }).catch(() => {});
+    }
+  } else {
+    // No snapshot — safe default: set back to inherit
+    await channel.permissionOverwrites.edit(channel.guild.id, { SendMessages: null }).catch(() => {});
   }
 }
 

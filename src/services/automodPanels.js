@@ -425,16 +425,24 @@ export async function handleInteraction(interaction) {
     if (scope === 'channel') {
       const channel = interaction.channel;
       const result = db.prepare(`INSERT INTO lockdown_state (guild_id, channel_id, lockdown_type, locked_by, reason, auto_unlock_at) VALUES (?, ?, 'channel', ?, ?, ?)`).run(guildId, channel.id, interaction.user.id, reason, autoUnlockAt);
-      await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: false, AddReactions: false }).catch(() => {});
+      // Snapshot @everyone SendMessages state
+      const evOw = channel.permissionOverwrites.cache.get(guildId);
+      const prev = evOw?.allow.has('SendMessages') ? 'allow' : evOw?.deny.has('SendMessages') ? 'deny' : 'neutral';
+      db.prepare(`INSERT OR REPLACE INTO lockdown_permission_snapshots (lockdown_id, guild_id, channel_id, role_id, allow_permissions, deny_permissions) VALUES (?, ?, ?, ?, ?, '')`).run(result.lastInsertRowid, guildId, channel.id, guildId, prev);
+      await channel.permissionOverwrites.edit(guildId, { SendMessages: false }).catch(() => {});
       await interaction.editReply({ content: `🔒 Channel locked. Reason: ${reason}` });
     } else {
       const guilds = scope === 'global' ? [...interaction.client.guilds.cache.values()] : [interaction.guild];
       let count = 0;
       for (const guild of guilds) {
-        db.prepare(`INSERT OR REPLACE INTO lockdown_state (guild_id, lockdown_type, locked_by, reason, is_active, auto_unlock_at) VALUES (?, ?, ?, ?, 1, ?)`).run(guild.id, scope, interaction.user.id, reason, autoUnlockAt);
+        const result = db.prepare(`INSERT OR REPLACE INTO lockdown_state (guild_id, lockdown_type, locked_by, reason, is_active, auto_unlock_at) VALUES (?, ?, ?, ?, 1, ?)`).run(guild.id, scope, interaction.user.id, reason, autoUnlockAt);
+        const ldId = result.lastInsertRowid;
         const channels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText);
         for (const [, ch] of channels) {
-          await ch.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false }).catch(() => {});
+          const evOw = ch.permissionOverwrites.cache.get(guild.id);
+          const prev = evOw?.allow.has('SendMessages') ? 'allow' : evOw?.deny.has('SendMessages') ? 'deny' : 'neutral';
+          db.prepare(`INSERT OR REPLACE INTO lockdown_permission_snapshots (lockdown_id, guild_id, channel_id, role_id, allow_permissions, deny_permissions) VALUES (?, ?, ?, ?, ?, '')`).run(ldId, guild.id, ch.id, guild.id, prev);
+          await ch.permissionOverwrites.edit(guild.id, { SendMessages: false }).catch(() => {});
         }
         count++;
       }
@@ -453,20 +461,37 @@ export async function handleInteraction(interaction) {
     if (scope === 'channel') {
       const ld = db.prepare("SELECT * FROM lockdown_state WHERE guild_id = ? AND channel_id = ? AND is_active = 1").get(guildId, interaction.channelId);
       if (!ld) return interaction.editReply({ content: '❌ No active lockdown on this channel.' });
-      await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: null, AddReactions: null }).catch(() => {});
+      // Restore from snapshot
+      const snap = db.prepare('SELECT * FROM lockdown_permission_snapshots WHERE lockdown_id = ? AND channel_id = ? AND role_id = ?').get(ld.id, interaction.channelId, guildId);
+      if (snap?.allow_permissions === 'allow') {
+        await interaction.channel.permissionOverwrites.edit(guildId, { SendMessages: true }).catch(() => {});
+      } else if (snap?.allow_permissions === 'deny') {
+        // Was already denied — leave it
+      } else {
+        await interaction.channel.permissionOverwrites.edit(guildId, { SendMessages: null }).catch(() => {});
+      }
       db.prepare("UPDATE lockdown_state SET is_active = 0, unlocked_at = datetime('now') WHERE id = ?").run(ld.id);
+      db.prepare('DELETE FROM lockdown_permission_snapshots WHERE lockdown_id = ?').run(ld.id);
       await interaction.editReply({ content: '🔓 Channel unlocked.' });
     } else {
       const guilds = scope === 'global' ? [...interaction.client.guilds.cache.values()] : [interaction.guild];
       for (const guild of guilds) {
-        const lockdowns = db.prepare("SELECT id FROM lockdown_state WHERE guild_id = ? AND is_active = 1").all(guild.id);
+        const lockdowns = db.prepare("SELECT * FROM lockdown_state WHERE guild_id = ? AND is_active = 1").all(guild.id);
         const { ChannelType } = await import('discord.js');
         const channels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText);
-        for (const [, ch] of channels) {
-          await ch.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: null }).catch(() => {});
-        }
         for (const ld of lockdowns) {
+          for (const [, ch] of channels) {
+            const snap = db.prepare('SELECT * FROM lockdown_permission_snapshots WHERE lockdown_id = ? AND channel_id = ? AND role_id = ?').get(ld.id, ch.id, guild.id);
+            if (snap?.allow_permissions === 'allow') {
+              await ch.permissionOverwrites.edit(guild.id, { SendMessages: true }).catch(() => {});
+            } else if (snap?.allow_permissions === 'deny') {
+              // Was already denied
+            } else {
+              await ch.permissionOverwrites.edit(guild.id, { SendMessages: null }).catch(() => {});
+            }
+          }
           db.prepare("UPDATE lockdown_state SET is_active = 0, unlocked_at = datetime('now') WHERE id = ?").run(ld.id);
+          db.prepare('DELETE FROM lockdown_permission_snapshots WHERE lockdown_id = ?').run(ld.id);
         }
       }
       await interaction.editReply({ content: `🔓 ${scope === 'global' ? 'Global' : 'Server'} unlock complete.` });
