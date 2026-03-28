@@ -51,12 +51,13 @@ export async function execute(interaction) {
       .run(guildId, interaction.user.id, interaction.user.tag, actionType, description, token, expiresAt);
     const reqId = db.prepare('SELECT last_insert_rowid() as id').get().id;
 
-    // Post to alert channel
-    if (config.alert_channel_id) {
+    // Post to approval channel
+    const APPROVAL_CHANNEL_ID = '1487556103364673616';
+    try {
       const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import('discord.js');
-      const alertCh = interaction.client.channels.cache.get(config.alert_channel_id);
-      if (alertCh) {
-        await alertCh.send({
+      const approvalCh = await interaction.client.channels.fetch(APPROVAL_CHANNEL_ID).catch(() => null);
+      if (approvalCh) {
+        await approvalCh.send({
           content: `@here New approval request from <@${interaction.user.id}>`,
           embeds: [new EmbedBuilder()
             .setColor(0xF59E0B).setTitle('📋 Approval Request')
@@ -73,7 +74,7 @@ export async function execute(interaction) {
           )]
         });
       }
-    }
+    } catch (e) { console.error('[Approval] Channel post failed:', e.message); }
 
     // Refresh approvals panel
     const { refreshPanel } = await import('../services/automodPanels.js');
