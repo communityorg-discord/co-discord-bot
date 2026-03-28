@@ -60,6 +60,8 @@ import * as lockdown from './commands/lockdown.js';
 import * as automodCmd from './commands/automod.js';
 import { automod } from './services/automod.js';
 import { handleInteraction as automodPanelHandler } from './services/automodPanels.js';
+import * as officeSetup from './commands/officeSetup.js';
+import { handleButton as officeButton, handleSelect as officeSelect, handleModal as officeModal, handleWaitingRoomJoin, enforceOfficeRestrictions, getOfficeByChannel, getWaitingRoomOffice, processExpiredKeys, refreshOfficePanels } from './services/officeManager.js';
 
 config();
 import { logRoleAction } from './utils/logger.js';
@@ -71,11 +73,11 @@ if (!process.env.BOT_WEBHOOK_SECRET) {
 
 const client = new Client({
   partials: [Partials.Channel, Partials.Message],
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildVoiceStates]
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -544,6 +546,12 @@ client.once('ready', async () => {
     try { await automod.processVerifyTimeouts(); } catch (e) { console.error('[AutoMod verify-timeout]', e.message); }
   }, 3600000);
   console.log('[AutoMod Crons] Started — auto-unlock 60s, verify-timeout 1h');
+
+  // Office key expiry cron — every 5 minutes
+  setInterval(async () => {
+    try { await processExpiredKeys(client); } catch (e) { console.error('[Office Key Expiry]', e.message); }
+  }, 5 * 60 * 1000);
+  console.log('[Office Key Expiry] Started — checking every 5 minutes');
 });
 
 client.on('interactionCreate', async interaction => {
@@ -790,6 +798,12 @@ client.on('interactionCreate', async interaction => {
       catch(e) { console.error('[inbox error]', e.message, 'customId:', interaction.customId); throw e; }
     }
 
+    // Office button handlers
+    if (interaction.customId?.startsWith('office_')) {
+      try { return officeButton(interaction, client); }
+      catch(e) { console.error('[office btn error]', e.message, 'customId:', interaction.customId); throw e; }
+    }
+
   }
 
   // String select menu handlers
@@ -869,6 +883,11 @@ client.on('interactionCreate', async interaction => {
       try { return inbox.handleInboxInteraction(interaction); }
       catch(e) { console.error('[inbox error]', e.message, 'customId:', interaction.customId); throw e; }
     }
+    // Office select handlers
+    if (interaction.customId?.startsWith('office_')) {
+      try { return officeSelect(interaction, client); }
+      catch(e) { console.error('[office select error]', e.message, 'customId:', interaction.customId); throw e; }
+    }
   }
 
   // Verify/Unverify modal handlers
@@ -896,6 +915,12 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId?.startsWith('assign_')) {
       try { return assignModal(interaction); }
       catch(e) { console.error('[assign modal error]', e.message); throw e; }
+    }
+
+    // Office modal handlers
+    if (interaction.customId?.startsWith('office_')) {
+      try { return officeModal(interaction, client); }
+      catch(e) { console.error('[office modal error]', e.message, 'customId:', interaction.customId); throw e; }
     }
 
     // Onboard modal handlers
@@ -1288,6 +1313,49 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
   }
   // AutoMod permission guard
   try { await automod.checkMemberUpdate(oldMember, newMember); } catch (e) { console.error('[AutoMod guildMemberUpdate]', e.message); }
+});
+
+// ============ VOICE OFFICE RESTRICTIONS ============
+client.on('voiceStateUpdate', async (oldState, newState) => {
+  try {
+    // Only care about channel joins (not leaves or same-channel updates)
+    if (!newState.channelId || newState.channelId === oldState.channelId) return;
+    if (newState.member?.user?.bot) return;
+
+    const guildId = newState.guild.id;
+
+    // Check if they joined a waiting room
+    const waitingRoomOffice = getWaitingRoomOffice(guildId, newState.channelId);
+    if (waitingRoomOffice) {
+      await handleWaitingRoomJoin(client, newState);
+      return;
+    }
+
+    // Check if they joined a restricted office
+    const office = getOfficeByChannel(guildId, newState.channelId);
+    if (office && (office.is_restricted || office.is_owner_only)) {
+      await enforceOfficeRestrictions(client, newState, office);
+    }
+
+    // Refresh panels when someone joins/leaves any registered office
+    if (office) {
+      await refreshOfficePanels(client, guildId);
+    }
+  } catch (e) {
+    console.error('[voiceStateUpdate office error]', e.message);
+  }
+
+  // Also refresh panels on leave
+  try {
+    if (oldState.channelId && oldState.channelId !== newState.channelId) {
+      const oldOffice = getOfficeByChannel(oldState.guild.id, oldState.channelId);
+      if (oldOffice) {
+        await refreshOfficePanels(client, oldState.guild.id);
+      }
+    }
+  } catch (e) {
+    console.error('[voiceStateUpdate leave refresh error]', e.message);
+  }
 });
 
 // ============ BOT WEBHOOK SERVER ============

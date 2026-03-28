@@ -899,4 +899,62 @@ export function activateActingAssignment(id) {
   db.prepare("UPDATE acting_assignments SET status = 'active', started_at = datetime('now') WHERE id = ?").run(id);
 }
 
+// ── Office Restrictions ─────────────────────────────────────────────────────
+
+db.exec(`CREATE TABLE IF NOT EXISTS offices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  channel_name TEXT NOT NULL,
+  owner_discord_id TEXT,
+  is_restricted INTEGER DEFAULT 0,
+  is_owner_only INTEGER DEFAULT 0,
+  waiting_room_enabled INTEGER DEFAULT 0,
+  waiting_room_channel_id TEXT,
+  panel_message_id TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(guild_id, channel_id)
+)`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS office_allowlist (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  office_id INTEGER NOT NULL REFERENCES offices(id) ON DELETE CASCADE,
+  discord_id TEXT NOT NULL,
+  added_by TEXT NOT NULL,
+  added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(office_id, discord_id)
+)`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS office_keys (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  office_id INTEGER NOT NULL REFERENCES offices(id) ON DELETE CASCADE,
+  role_id TEXT NOT NULL,
+  guild_id TEXT NOT NULL,
+  granted_by TEXT NOT NULL,
+  expires_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(office_id, role_id)
+)`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS office_access_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  office_id INTEGER NOT NULL REFERENCES offices(id) ON DELETE CASCADE,
+  requester_discord_id TEXT NOT NULL,
+  requester_username TEXT,
+  status TEXT DEFAULT 'pending' CHECK(status IN ('pending','approved','denied','expired','cancelled')),
+  approved_by TEXT,
+  request_message_id TEXT,
+  dm_message_id TEXT,
+  requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  resolved_at DATETIME
+)`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS office_master_panel (
+  guild_id TEXT PRIMARY KEY,
+  channel_id TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
 export { db };
