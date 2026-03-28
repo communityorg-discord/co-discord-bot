@@ -205,10 +205,6 @@ export async function postDirectiveEmbed(client, data) {
   const pdf = await getDirectivePdf(data);
   const image = pdf ? await pdfFirstPageToImage(pdf.buffer, pdf.filename) : null;
 
-  const attachments = [];
-  if (pdf) attachments.push(new AttachmentBuilder(pdf.buffer, { name: pdf.filename }));
-  if (image) attachments.push(new AttachmentBuilder(image.buffer, { name: image.filename }));
-
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
     .setTitle(`📋 Secretariat Directive — ${data.directive_number}`)
@@ -224,8 +220,6 @@ export async function postDirectiveEmbed(client, data) {
     .setFooter({ text: `Directive ${data.directive_number} | Immediately binding on all staff` })
     .setTimestamp(new Date(data.issued_at));
 
-  if (image) embed.setThumbnail(`attachment://${image.filename}`);
-
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`directive_ack_${data.directive_id}`)
@@ -234,10 +228,17 @@ export async function postDirectiveEmbed(client, data) {
       .setEmoji('✅'),
   );
 
+  // Send image as a separate message before the embed so the preview appears above
+  if (image) {
+    await channel.send({ files: [new AttachmentBuilder(image.buffer, { name: image.filename })] });
+  }
+
+  // Send embed + PDF attachment separately (no image inside embed)
+  const embedAttachments = pdf ? [new AttachmentBuilder(pdf.buffer, { name: pdf.filename })] : [];
   const msg = await channel.send({
     content: '@everyone',
     embeds: [embed],
-    files: attachments,
+    files: embedAttachments,
     components: [row]
   });
 
@@ -257,11 +258,13 @@ export async function postMemoEmbed(client, data) {
   const image = pdf ? await pdfFirstPageToImage(pdf.buffer, pdf.filename) : null;
 
   const attachments = [];
-  if (pdf) attachments.push(new AttachmentBuilder(pdf.buffer, { name: pdf.filename }));
-  if (image) attachments.push(new AttachmentBuilder(image.buffer, { name: image.filename }));
-
   let pingContent = '';
   if (data.affected_user_discord_id) pingContent = `<@${data.affected_user_discord_id}>`;
+
+  // Send image as separate message
+  if (image) {
+    await channel.send({ files: [new AttachmentBuilder(image.buffer, { name: image.filename })] });
+  }
 
   const embed = new EmbedBuilder()
     .setColor(URGENCY_COLORS[data.urgency] || URGENCY_COLORS.Medium)
@@ -277,12 +280,12 @@ export async function postMemoEmbed(client, data) {
     .setTimestamp(new Date(data.created_at));
 
   if (data.action_required) embed.addFields({ name: '⚠️ Action Required', value: data.action_required, inline: false });
-  if (image) embed.setThumbnail(`attachment://${image.filename}`);
 
+  const embedAttachments = pdf ? [new AttachmentBuilder(pdf.buffer, { name: pdf.filename })] : [];
   const msg = await channel.send({
     content: pingContent || undefined,
     embeds: [embed],
-    files: attachments,
+    files: embedAttachments,
   });
 
   db.prepare('INSERT OR REPLACE INTO memo_messages (memo_id, message_id, channel_id) VALUES (?, ?, ?)')
