@@ -138,7 +138,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS log_config (id INTEGER PRIMARY KEY, guild_id TEXT, channel_id TEXT, event_type TEXT);
   CREATE TABLE IF NOT EXISTS bot_config (id INTEGER PRIMARY KEY, key TEXT UNIQUE, value TEXT);
-  CREATE TABLE IF NOT EXISTS verified_members (id INTEGER PRIMARY KEY, discord_id TEXT UNIQUE, portal_id INTEGER, position TEXT, auth_level INTEGER, verified_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS verified_members (discord_id TEXT PRIMARY KEY, portal_user_id INTEGER, position TEXT NOT NULL, employee_number TEXT, nickname TEXT, auth_level INTEGER, verified_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
   CREATE TABLE IF NOT EXISTS verification_queue (id INTEGER PRIMARY KEY, discord_id TEXT, portal_id INTEGER, requested_at DATETIME DEFAULT CURRENT_TIMESTAMP, status TEXT DEFAULT 'pending');
   CREATE TABLE IF NOT EXISTS banned_users (id INTEGER PRIMARY KEY, discord_id TEXT, reason TEXT, banned_by TEXT, banned_at DATETIME DEFAULT CURRENT_TIMESTAMP, unban_at DATETIME, active INTEGER DEFAULT 1);
   CREATE TABLE IF NOT EXISTS guild_settings (id INTEGER PRIMARY KEY, guild_id TEXT UNIQUE, key TEXT, value TEXT);
@@ -420,6 +420,12 @@ db.exec(`CREATE TABLE IF NOT EXISTS join_rate_log (
   discord_id TEXT NOT NULL,
   joined_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )`);
+
+// Migration: add missing columns to verified_members
+try { db.exec('ALTER TABLE verified_members ADD COLUMN portal_user_id INTEGER'); } catch {}
+try { db.exec('ALTER TABLE verified_members ADD COLUMN employee_number TEXT'); } catch {}
+try { db.exec('ALTER TABLE verified_members ADD COLUMN nickname TEXT'); } catch {}
+try { db.exec('ALTER TABLE verified_members ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'); } catch {}
 
 // Migration: add ticket_count column if missing (existing DBs)
 try {

@@ -51,14 +51,16 @@ export async function applyVerification(client, discordId, position, nickname, {
         continue;
       }
 
-      // Set nickname
+      // Set nickname globally
       if (nickname) {
         try {
-          await member.setNickname(nickname);
+          const truncated = nickname.slice(0, 32);
+          await member.setNickname(truncated);
           guildResult.nicknameSet = true;
         } catch (e) {
+          console.warn(`[Verify] Nickname failed in ${guild.name}: ${e.message}`);
           guildResult.nicknameError = e.message;
-          guildResult.success = false;
+          // Don't mark as failed — nickname failure shouldn't block role assignment
         }
       }
 

@@ -994,20 +994,23 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// Auto-apply roles when a verified member joins any server
+// Auto-apply roles + nickname when a verified member joins any server
 client.on('guildMemberAdd', async (member) => {
   try {
     const { default: botDb } = await import('./utils/botDb.js');
     const verified = botDb.prepare("SELECT * FROM verified_members WHERE discord_id = ?").get(member.user.id);
     if (!verified) return;
 
-    const { applyVerification } = await import('./utils/verifyHelper.js');
-    const { POSITIONS } = await import('./utils/positions.js');
-    const roleNames = POSITIONS[verified.position] || [];
+    const { POSITIONS, ALL_MANAGED_ROLES } = await import('./utils/positions.js');
+    const roleNames = [...(POSITIONS[verified.position] || []), 'Verified', 'CO Staff'];
     const toAssign = member.guild.roles.cache.filter(r => roleNames.includes(r.name));
-    if (toAssign.size > 0) await member.roles.add(toAssign).catch(() => {});
-    await member.setNickname(verified.nickname || null).catch(() => {});
-    console.log('[Verify] Auto-applied roles for', member.user.tag, 'on join to', member.guild.name);
+    if (toAssign.size > 0) await member.roles.add(toAssign).catch(e => console.warn('[Verify Auto] Roles failed:', e.message));
+
+    // Set nickname globally
+    if (verified.nickname) {
+      await member.setNickname(verified.nickname.slice(0, 32)).catch(e => console.warn(`[Verify Auto] Nickname failed in ${member.guild.name}:`, e.message));
+    }
+    console.log('[Verify] Auto-applied roles + nickname for', member.user.tag, 'on join to', member.guild.name);
   } catch (e) {
     console.error('[guildMemberAdd verify error]', e.message);
   }
