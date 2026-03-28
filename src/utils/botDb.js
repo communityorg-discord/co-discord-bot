@@ -196,6 +196,35 @@ db.exec(`
     replied_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );`);
 
+db.exec(`CREATE TABLE IF NOT EXISTS assignments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  description TEXT,
+  assigned_to TEXT NOT NULL,
+  assigned_by TEXT NOT NULL,
+  team TEXT,
+  due_date DATETIME NOT NULL,
+  status TEXT DEFAULT 'pending',
+  message_id TEXT,
+  channel_id TEXT,
+  portal_assignment_id INTEGER,
+  delegate_of INTEGER,
+  delegated_by TEXT,
+  extension_count INTEGER DEFAULT 0,
+  completion_notes TEXT,
+  confirmed_by TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  completed_at DATETIME,
+  confirmed_at DATETIME,
+  overdue_notified INTEGER DEFAULT 0,
+  case_raised INTEGER DEFAULT 0
+)`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS assignment_counter (
+  year INTEGER PRIMARY KEY,
+  counter INTEGER NOT NULL DEFAULT 0
+)`);
+
 // Migration: add ticket_count column if missing (existing DBs)
 try {
   db.prepare('SELECT ticket_count FROM ticket_panels LIMIT 1').get();
@@ -535,4 +564,72 @@ export function markPersonalEmailSeen(discordId, uid, subject, fromAddress) {
 export function removePersonalEmailSetup(discordId) {
   db.prepare('UPDATE personal_email_setup SET enabled = 0 WHERE discord_id = ?').run(discordId);
 }
+// ── Assignments ──────────────────────────────────────────────────────────────
+
+export function generateAssignmentNumber() {
+  const year = new Date().getFullYear();
+  db.prepare('INSERT INTO assignment_counter (year, counter) VALUES (?, 1) ON CONFLICT(year) DO UPDATE SET counter = counter + 1').run(year);
+  const row = db.prepare('SELECT counter FROM assignment_counter WHERE year = ?').get(year);
+  return `ASN-${year}-${String(row.counter).padStart(3, '0')}`;
+}
+
+export function createAssignment({ title, description, assignedTo, assignedBy, team, dueDate, messageId, channelId, portalAssignmentId, delegateOf, delegatedBy }) {
+  const result = db.prepare(`INSERT INTO assignments (title, description, assigned_to, assigned_by, team, due_date, message_id, channel_id, portal_assignment_id, delegate_of, delegated_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    title, description || null, assignedTo, assignedBy, team || null, dueDate, messageId || null, channelId || null, portalAssignmentId || null, delegateOf || null, delegatedBy || null
+  );
+  return result;
+}
+
+export function getAssignment(id) {
+  return db.prepare('SELECT * FROM assignments WHERE id = ?').get(id);
+}
+
+export function getAssignmentByPortalId(portalId) {
+  return db.prepare('SELECT * FROM assignments WHERE portal_assignment_id = ?').get(portalId);
+}
+
+export function getAssignmentByMessageId(messageId) {
+  return db.prepare('SELECT * FROM assignments WHERE message_id = ?').get(messageId);
+}
+
+export function updateAssignment(id, fields) {
+  const sets = [];
+  const vals = [];
+  for (const [k, v] of Object.entries(fields)) {
+    sets.push(`${k} = ?`);
+    vals.push(v);
+  }
+  if (sets.length === 0) return;
+  vals.push(id);
+  db.prepare(`UPDATE assignments SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+}
+
+export function getPendingOverdueAssignments() {
+  return db.prepare("SELECT * FROM assignments WHERE status = 'pending' AND due_date <= datetime('now')").all();
+}
+
+export function getAssignmentsByDiscordId(discordId) {
+  return db.prepare("SELECT * FROM assignments WHERE assigned_to = ? AND status NOT IN ('cancelled') ORDER BY created_at DESC").all(discordId);
+}
+
+export function getAssignmentStats() {
+  const weekStart = getWeekKeyForBot();
+  return {
+    total_this_week: db.prepare("SELECT COUNT(*) as c FROM assignments WHERE created_at >= ?").get(weekStart).c,
+    completed_this_week: db.prepare("SELECT COUNT(*) as c FROM assignments WHERE status = 'complete' AND completed_at >= ?").get(weekStart).c,
+    overdue: db.prepare("SELECT COUNT(*) as c FROM assignments WHERE status = 'pending' AND due_date <= datetime('now')").get().c,
+    pending: db.prepare("SELECT COUNT(*) as c FROM assignments WHERE status = 'pending' AND due_date > datetime('now')").get().c,
+  };
+}
+
+function getWeekKeyForBot() {
+  const d = new Date();
+  const day = d.getDay();
+  const diff = (day === 0 ? -6 : 1) - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString().slice(0, 10);
+}
+
 export { db };

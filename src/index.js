@@ -48,6 +48,8 @@ import * as timeout from './commands/timeout.js';
 import * as untimeout from './commands/untimeout.js';
 import * as kick from './commands/kick.js';
 import * as serverban from './commands/serverban.js';
+import * as assign from './commands/assign.js';
+import { handleButton as assignButton, handleModal as assignModal } from './commands/assign.js';
 
 config();
 import { logRoleAction } from './utils/logger.js';
@@ -63,7 +65,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -247,6 +249,136 @@ client.once('ready', async () => {
     } catch (e) { console.error('[Personal Email Poller]', e.message); }
   }, 60_000);
   console.log('[Personal Email Poller] Started');
+
+  // Assignment overdue checker — every 30 minutes
+  setInterval(async () => {
+    try {
+      const { getPendingOverdueAssignments, updateAssignment: updateAssign, getAssignment: getAssign } = await import('./utils/botDb.js');
+      const { getUserByDiscordId: getUser } = await import('./db.js');
+      const { logAction: overdueLog } = await import('./utils/logger.js');
+      const { buildAssignmentEmbed } = await import('./commands/assign.js');
+
+      const overdue = getPendingOverdueAssignments();
+      for (const a of overdue) {
+        const now = new Date();
+        const dueDate = new Date(a.due_date);
+        const hoursOverdue = (now - dueDate) / 3600000;
+
+        // First notification (just went overdue, not yet notified)
+        if (!a.overdue_notified) {
+          updateAssign(a.id, { overdue_notified: 1, status: 'overdue' });
+
+          // Update portal status
+          if (a.portal_assignment_id) {
+            try {
+              const { default: fetch } = await import('node-fetch');
+              await fetch(`http://localhost:3016/api/assignments/${a.portal_assignment_id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET },
+                body: JSON.stringify({ status: 'overdue' })
+              });
+            } catch {}
+          }
+
+          // Update embed to red/overdue
+          try {
+            if (a.channel_id && a.message_id) {
+              const channel = await client.channels.fetch(a.channel_id);
+              const msg = await channel.messages.fetch(a.message_id);
+              const updated = getAssign(a.id);
+              const embed = buildAssignmentEmbed(updated, null, null, { assignmentNumber: `ASN-${a.id}` });
+              await msg.edit({ embeds: [embed] });
+            }
+          } catch {}
+
+          // DM assigned person
+          try {
+            const assignee = await client.users.fetch(a.assigned_to);
+            await assignee.send({ embeds: [new EmbedBuilder()
+              .setTitle('⚠️ OVERDUE TASK')
+              .setColor(0xEF4444)
+              .setDescription(`Your assignment **"${a.title}"** was due ${Math.round(hoursOverdue)} hour(s) ago and has not been marked complete.\n\nPlease complete it immediately or request an extension via the portal.`)
+              .setFooter({ text: `ASN-${a.id} | Community Organisation` })
+              .setTimestamp()
+            ]});
+          } catch {}
+
+          // DM assigner
+          try {
+            const assigner = await client.users.fetch(a.assigned_by);
+            const assigneeName = getUser(a.assigned_to)?.display_name || a.assigned_to;
+            await assigner.send({ content: `⚠️ **OVERDUE TASK** — "${a.title}" assigned to **${assigneeName}** is now overdue. They have been notified.` });
+          } catch {}
+        }
+
+        // 24+ hours overdue — raise case
+        if (hoursOverdue >= 24 && !a.case_raised) {
+          updateAssign(a.id, { case_raised: 1 });
+
+          const assigneePortal = getUser(a.assigned_to);
+          const assignerPortal = getUser(a.assigned_by);
+          const assigneeName = assigneePortal?.display_name || a.assigned_to;
+
+          // Raise case via portal API
+          try {
+            const { default: fetch } = await import('node-fetch');
+            const resp = await fetch('http://localhost:3016/api/assignments/auto-case', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET },
+              body: JSON.stringify({
+                assignment_id: a.portal_assignment_id || a.id,
+                bot_assignment_id: a.id,
+                assigned_to_name: assigneeName,
+                assigned_to_portal_id: assigneePortal?.id,
+                assigned_by_portal_id: assignerPortal?.id,
+                title: a.title,
+                due_date: a.due_date,
+                hours_overdue: Math.round(hoursOverdue),
+              })
+            });
+            const data = await resp.json();
+
+            if (data.case_number) {
+              // Update embed with case number
+              try {
+                if (a.channel_id && a.message_id) {
+                  const channel = await client.channels.fetch(a.channel_id);
+                  const msg = await channel.messages.fetch(a.message_id);
+                  const updated = getAssign(a.id);
+                  const embed = buildAssignmentEmbed(updated, null, null, { assignmentNumber: `ASN-${a.id}`, caseNumber: data.case_number });
+                  await msg.edit({ embeds: [embed] });
+                }
+              } catch {}
+
+              // DM both parties
+              try {
+                const assignee = await client.users.fetch(a.assigned_to);
+                await assignee.send({ content: `📋 **Case raised:** ${data.case_number} — Your assignment "${a.title}" is 24+ hours overdue. A case has been raised with DMSPC.` });
+              } catch {}
+              try {
+                const assigner = await client.users.fetch(a.assigned_by);
+                await assigner.send({ content: `📋 **Case raised:** ${data.case_number} — Assignment "${a.title}" assigned to ${assigneeName} is 24+ hours overdue.` });
+              } catch {}
+            }
+          } catch (e) { console.error('[assign overdue] case raise error:', e.message); }
+
+          // Second escalation DM
+          try {
+            const assignee = await client.users.fetch(a.assigned_to);
+            await assignee.send({ embeds: [new EmbedBuilder()
+              .setTitle('🔴 ESCALATION — 24+ Hours Overdue')
+              .setColor(0xEF4444)
+              .setDescription(`Your assignment **"${a.title}"** is now **${Math.round(hoursOverdue)} hours overdue**. A case has been raised and this may affect your BRAG tasks grade.`)
+              .setFooter({ text: `ASN-${a.id} | Community Organisation` })
+              .setTimestamp()
+            ]});
+          } catch {}
+        }
+      }
+      if (overdue.length > 0) console.log(`[Assignments] Checked ${overdue.length} overdue assignments`);
+    } catch (e) { console.error('[Assignment Overdue Check]', e.message); }
+  }, 1800000); // 30 minutes
+  console.log('[Assignment Overdue Check] Started — checking every 30 minutes');
 });
 
 client.on('interactionCreate', async interaction => {
@@ -467,6 +599,12 @@ client.on('interactionCreate', async interaction => {
       });
       return;
     }
+    // Assignment button handlers
+    if (interaction.customId?.startsWith('assign_')) {
+      try { return assignButton(interaction); }
+      catch(e) { console.error('[assign btn error]', e.message); throw e; }
+    }
+
     // Inbox button handlers
     if (interaction.customId?.startsWith('inbox_')) {
       try { return inbox.handleInboxInteraction(interaction); }
@@ -560,6 +698,12 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId?.startsWith('inbox_')) {
       try { return inbox.handleInboxModal(interaction); }
       catch(e) { console.error('[inbox modal error]', e.message, 'customId:', interaction.customId); throw e; }
+    }
+
+    // Assignment modal handlers
+    if (interaction.customId?.startsWith('assign_')) {
+      try { return assignModal(interaction); }
+      catch(e) { console.error('[assign modal error]', e.message); throw e; }
     }
 
     if (interaction.customId.startsWith('ticketopts_renamemodal_')) {
@@ -1082,6 +1226,69 @@ webhookApp.post('/bot/unsuspend', async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error('[BOT WEBHOOK /unsuspend]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// POST /bot/assignment-extension — handle deadline extension from portal
+webhookApp.post('/bot/assignment-extension', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { bot_assignment_id, new_due_date, approved_by } = req.body;
+  if (!bot_assignment_id || !new_due_date) return res.status(400).json({ ok: false, error: 'bot_assignment_id and new_due_date required' });
+  try {
+    const { getAssignment: getAssign, updateAssignment: updateAssign } = await import('./utils/botDb.js');
+    const { buildAssignmentEmbed } = await import('./commands/assign.js');
+
+    const assignment = getAssign(bot_assignment_id);
+    if (!assignment) return res.status(404).json({ ok: false, error: 'Assignment not found' });
+
+    updateAssign(bot_assignment_id, {
+      due_date: new_due_date,
+      extension_count: (assignment.extension_count || 0) + 1,
+      status: assignment.status === 'overdue' ? 'pending' : assignment.status,
+      overdue_notified: 0,
+      case_raised: 0,
+    });
+
+    // Update embed
+    try {
+      if (assignment.channel_id && assignment.message_id) {
+        const channel = await client.channels.fetch(assignment.channel_id);
+        const msg = await channel.messages.fetch(assignment.message_id);
+        const updated = getAssign(bot_assignment_id);
+        const { buildAssignmentEmbed: buildEmbed, buildAssignmentButtons } = await import('./commands/assign.js');
+        const embed = buildEmbed(updated, null, null, {
+          assignmentNumber: `ASN-${bot_assignment_id}`,
+          extensionNote: `Extended — Performance Adjustment approved by ${approved_by || 'admin'}. New due date: ${new Date(new_due_date).toLocaleDateString('en-GB')}`,
+        });
+        const buttons = buildAssignmentButtons ? buildAssignmentButtons(bot_assignment_id, updated.status) : [];
+        await msg.edit({ embeds: [embed], components: buttons });
+      }
+    } catch (e) { console.error('[assignment-extension] embed update error:', e.message); }
+
+    // DM assigned person
+    try {
+      const user = await client.users.fetch(assignment.assigned_to);
+      await user.send({ embeds: [new EmbedBuilder()
+        .setTitle('📅 Task Deadline Extended')
+        .setColor(0x22C55E)
+        .setDescription(`Your task deadline for **"${assignment.title}"** has been extended to **${new Date(new_due_date).toLocaleDateString('en-GB')}** following an approved performance adjustment.`)
+        .setFooter({ text: 'Community Organisation | Staff Assistant' })
+        .setTimestamp()
+      ]});
+    } catch {}
+
+    // DM assigner
+    try {
+      const { getUserByDiscordId: getUser } = await import('./db.js');
+      const assigneeName = getUser(assignment.assigned_to)?.display_name || assignment.assigned_to;
+      const assigner = await client.users.fetch(assignment.assigned_by);
+      await assigner.send({ content: `📅 **${assigneeName}**'s task deadline for "${assignment.title}" has been extended to **${new Date(new_due_date).toLocaleDateString('en-GB')}** — performance adjustment approved by ${approved_by || 'admin'}.` });
+    } catch {}
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[BOT WEBHOOK /assignment-extension]', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });

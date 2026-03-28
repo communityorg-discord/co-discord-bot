@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, TextInputBuilder, ModalBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { logAction } from '../utils/logger.js';
-import { getLogConfig, setLogChannel, getGlobalLogChannel, setGlobalLogChannel, getLogChannel, getAllLogConfig } from '../utils/botDb.js';
+import { getLogConfig, setLogChannel, getGlobalLogChannel, setGlobalLogChannel, getLogChannel, getAllLogConfig, getAssignmentStats } from '../utils/botDb.js';
 
 // Per-guild log categories and their types
 const CATEGORIES = {
@@ -98,6 +98,12 @@ function buildInfoEmbed(guildId) {
   }
 
   const fields = [];
+  // Assignment stats
+  try {
+    const stats = getAssignmentStats();
+    fields.push({ name: '📋 Assignments This Week', value: `Total: **${stats.total_this_week}** | Completed: **${stats.completed_this_week}** | Overdue: **${stats.overdue}** | Pending: **${stats.pending}**`, inline: false });
+  } catch {}
+
   fields.push({ name: '📌 Instructions', value: '1. Select a category below\n2. Choose a log type\n3. Pick a channel when prompted\n\nGlobal and Orgwide bindings appear after selecting their categories.', inline: false });
 
   return new EmbedBuilder()
