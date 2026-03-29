@@ -67,7 +67,37 @@ async function getDirectivePdf(data) {
 }
 
 async function getMemoPdf(data) {
-  // Memos may not have a document_id — use pdfkit directly
+  // Try 1: Export Google Doc via Drive API (same as directives)
+  if (data.document_id) {
+    try {
+      const buffer = await downloadGoogleDocAsPdf(data.document_id);
+      if (buffer && buffer.length > 100) {
+        console.log(`[Memo PDF] Got PDF from Drive export (${buffer.length} bytes)`);
+        return { buffer, filename: `${data.memo_number}.pdf` };
+      }
+    } catch (e) {
+      console.error('[Memo PDF] Drive export failed:', e.message);
+    }
+  }
+
+  // Try 2: Extract doc ID from URL
+  if (data.document_url && !data.document_id) {
+    const docId = data.document_url.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1];
+    if (docId) {
+      try {
+        const buffer = await downloadGoogleDocAsPdf(docId);
+        if (buffer && buffer.length > 100) {
+          console.log(`[Memo PDF] Got PDF from URL-derived ID (${buffer.length} bytes)`);
+          return { buffer, filename: `${data.memo_number}.pdf` };
+        }
+      } catch (e) {
+        console.error('[Memo PDF] URL export failed:', e.message);
+      }
+    }
+  }
+
+  // Fallback: pdfkit
+  console.warn('[Memo PDF] Falling back to pdfkit generation');
   return generateMemoPdfFallback(data);
 }
 
@@ -251,8 +281,29 @@ export async function postDirectiveEmbed(client, data) {
 // ── Post memo embed ──────────────────────────────────────────────────────────
 
 export async function postMemoEmbed(client, data) {
-  const channel = await client.channels.fetch(DIRECTIVES_CHANNEL).catch(() => null);
-  if (!channel) return console.error('[Memo] Channel not found:', DIRECTIVES_CHANNEL);
+  const channel = await client.channels.fetch(data.channel_id || DIRECTIVES_CHANNEL).catch(() => null);
+  if (!channel) return console.error('[Memo] Channel not found:', data.channel_id || DIRECTIVES_CHANNEL);
+
+  // Wait for doc generation if document_id not yet available
+  if (!data.document_id) {
+    console.log('[Memo] No document_id — waiting 12s for doc generation...');
+    await new Promise(r => setTimeout(r, 12000));
+    try {
+      const freshRes = await fetch(`http://localhost:3016/api/iac/memos/${data.memo_id}`, {
+        headers: { 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET }
+      });
+      if (freshRes.ok) {
+        const fresh = await freshRes.json();
+        if (fresh?.memo?.document_id) {
+          data.document_id = fresh.memo.document_id;
+          data.document_url = fresh.memo.document_url;
+          console.log('[Memo] Got document_id from retry:', data.document_id);
+        }
+      }
+    } catch (e) {
+      console.error('[Memo] Retry fetch failed:', e.message);
+    }
+  }
 
   const pdf = await getMemoPdf(data);
   const image = pdf ? await pdfFirstPageToImage(pdf.buffer, pdf.filename) : null;
