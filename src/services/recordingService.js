@@ -1,10 +1,11 @@
-import { EndBehaviorType, VoiceConnectionStatus, entersState, joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, StreamType } from '@discordjs/voice';
-import { createWriteStream, mkdirSync, existsSync, unlinkSync } from 'fs';
+import { EndBehaviorType, VoiceConnectionStatus, entersState, joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, StreamType, NoSubscriberBehavior } from '@discordjs/voice';
+import { createWriteStream, mkdirSync, existsSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { spawn } from 'child_process';
 import { db } from '../utils/botDb.js';
 import OpusScript from 'opusscript';
-import gtts from 'gtts';
+import googleTTS from 'google-tts-api';
 
 const RECORDINGS_DIR = '/home/vpcommunityorganisation/clawd/recordings';
 
@@ -22,40 +23,51 @@ async function speakRecordingNotice(connection, voiceChannel) {
     .map(m => m.displayName || m.user.username);
   const presentList = presentMembers.length > 0 ? presentMembers.join(', ') : 'no members detected';
 
-  const script = [
-    'This voice channel is now being recorded, in line with the Community Organisation Internal Staff Policy.',
-    `The date is ${dateStr}.`,
-    `The time is ${timeStr}.`,
-    `The following members are present: ${presentList}.`,
-    'For the records, could the Chair please state the Case Number before beginning the meeting.',
-  ].join(' ');
+  const script = `This voice channel is now being recorded, in line with the Community Organisation Internal Staff Policy. The date is ${dateStr}. The time is ${timeStr}. The following members are present: ${presentList}. For the records, could the Chair please state the Case Number before beginning the meeting.`;
 
-  const tmpFile = join(tmpdir(), `co_recording_notice_${Date.now()}.mp3`);
+  // Download TTS audio parts from Google Translate
+  const audioParts = googleTTS.getAllAudioUrls(script, { lang: 'en-GB', slow: false });
+  const buffers = [];
+  for (const part of audioParts) {
+    const res = await fetch(part.url);
+    buffers.push(Buffer.from(await res.arrayBuffer()));
+  }
+  const mp3Buffer = Buffer.concat(buffers);
 
-  await new Promise((resolve, reject) => {
-    const tts = new gtts(script, 'en-gb');
-    tts.save(tmpFile, (err) => err ? reject(err) : resolve());
-  });
+  const tmpMp3 = join(tmpdir(), `co_notice_${Date.now()}.mp3`);
+  writeFileSync(tmpMp3, mp3Buffer);
+  console.log('[TTS] MP3 generated:', mp3Buffer.length, 'bytes');
 
-  const player = createAudioPlayer();
-  const resource = createAudioResource(tmpFile, { inputType: StreamType.Arbitrary });
+  // Pipe MP3 through ffmpeg → raw PCM so @discordjs/voice can play it
+  const ffmpegPath = (await import('ffmpeg-static')).default;
+  const ffmpeg = spawn(ffmpegPath, ['-i', tmpMp3, '-f', 's16le', '-ar', '48000', '-ac', '2', 'pipe:1'], { stdio: ['ignore', 'pipe', 'ignore'] });
+
+  const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
+  const resource = createAudioResource(ffmpeg.stdout, { inputType: StreamType.Raw });
+
   connection.subscribe(player);
   player.play(resource);
+  console.log('[TTS] Playing notice...');
 
   await new Promise((resolve) => {
     player.on(AudioPlayerStatus.Idle, () => {
-      try { if (existsSync(tmpFile)) unlinkSync(tmpFile); } catch {}
+      console.log('[TTS] Notice finished');
+      try { unlinkSync(tmpMp3); } catch {}
       resolve();
     });
     player.on('error', (e) => {
-      console.error('[Recording Notice] TTS error:', e.message);
-      try { if (existsSync(tmpFile)) unlinkSync(tmpFile); } catch {}
+      console.error('[TTS] Player error:', e.message);
+      try { unlinkSync(tmpMp3); } catch {}
+      resolve();
+    });
+    ffmpeg.on('error', (e) => {
+      console.error('[TTS] ffmpeg error:', e.message);
       resolve();
     });
     setTimeout(() => {
-      try { if (existsSync(tmpFile)) unlinkSync(tmpFile); } catch {}
+      try { unlinkSync(tmpMp3); } catch {}
       resolve();
-    }, 60000);
+    }, 90000);
   });
 
   console.log('[Recording] Notice spoken');
