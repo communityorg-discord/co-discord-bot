@@ -633,6 +633,59 @@ client.once('ready', async () => {
   setInterval(syncBragCounts, 60 * 1000);
   console.log('[BRAG Sync] Started — syncing to portal every 60 seconds');
 
+  // Message count leaderboard — post every 4 hours to channel
+  const LEADERBOARD_CH = '1487667463129661471';
+
+  async function postMessageLeaderboard() {
+    try {
+      const { db: lbDb } = await import('./utils/botDb.js');
+      const weekKey = getBragWeekKey();
+
+      const rows = lbDb.prepare(`
+        SELECT discord_id, SUM(message_count) as total
+        FROM brag_message_counts
+        WHERE week_key = ?
+        GROUP BY discord_id
+        ORDER BY total DESC
+        LIMIT 20
+      `).all(weekKey);
+
+      if (rows.length === 0) return;
+
+      const totalAll = rows.reduce((s, r) => s + r.total, 0);
+      const lines = rows.map((r, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `**${i + 1}.**`;
+        return `${medal} <@${r.discord_id}> — **${r.total}** messages`;
+      });
+
+      const ch = await client.channels.fetch(LEADERBOARD_CH).catch(() => null);
+      if (!ch) return;
+
+      await ch.send({
+        embeds: [new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle('📊 Message Count Leaderboard')
+          .setDescription(lines.join('\n'))
+          .addFields(
+            { name: 'Week', value: weekKey, inline: true },
+            { name: 'Total Messages', value: String(totalAll), inline: true },
+            { name: 'Tracked Users', value: String(rows.length), inline: true },
+          )
+          .setFooter({ text: 'Resets every Monday | Updates every 4 hours' })
+          .setTimestamp()
+        ]
+      });
+      console.log('[Leaderboard] Posted for week ' + weekKey);
+    } catch (e) {
+      console.error('[Leaderboard] Failed:', e.message);
+    }
+  }
+
+  // Post immediately on startup, then every 4 hours
+  await postMessageLeaderboard();
+  setInterval(postMessageLeaderboard, 4 * 60 * 60 * 1000);
+  console.log('[Leaderboard] Started — posting every 4 hours');
+
   // Reminder cron — every 60 seconds
   setInterval(async () => {
     try {
