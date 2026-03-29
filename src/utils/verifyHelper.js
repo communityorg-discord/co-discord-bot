@@ -244,8 +244,16 @@ export async function getPortalUser(discordId) {
   return data?.user || data || null;
 }
 
-// Check if caller is a superuser via portal
+// Check if caller is a superuser — portal auth 99+ OR in SUPERUSER_IDS env var
+const HARDCODED_SUPERUSERS = ['723199054514749450', '415922272956710912', '1013486189891817563'];
+
 export async function isSuperuser(discordId) {
+  const id = String(discordId);
+  // Check hardcoded list + env var first (fast path)
+  if (HARDCODED_SUPERUSERS.includes(id)) return true;
+  const envSuperusers = (process.env.SUPERUSER_IDS || '').split(',').filter(Boolean);
+  if (envSuperusers.includes(id)) return true;
+  // Fall back to portal auth level check
   const user = await getPortalUser(discordId);
   return user && Number(user.auth_level) >= 99;
 }

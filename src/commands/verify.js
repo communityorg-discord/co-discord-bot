@@ -393,7 +393,7 @@ export async function handleButton(interaction) {
             .setRequired(true)
             .setMaxLength(32)
             .setPlaceholder('Firstname L. | Position')
-            .setValue(entry.position ? `| ${entry.position}` : '')
+            .setValue(entry.position ? `| ${entry.position}`.slice(0, 32) : '')
         )
       );
 
@@ -470,6 +470,12 @@ export async function handleModal(interaction) {
     const partialCount = results.filter(r => r.success && (r.rolesAddFailed.length || r.rolesRemoveFailed.length)).length;
     const failedCount = results.filter(r => !r.success).length;
 
+    // Check if nickname failed in any guild due to hierarchy
+    const nicknameFailed = results.filter(r => r.nicknameError);
+    const nicknameWarning = nicknameFailed.length > 0
+      ? `\n⚠️ Nickname could not be set automatically in ${nicknameFailed.length} server(s) — please set manually: \`${nickname}\``
+      : '';
+
     const fields = [
       { name: 'User', value: `<@${entry.discord_id}> (${entry.discord_id})`, inline: false },
       { name: 'Position', value: entry.position, inline: true },
@@ -480,10 +486,25 @@ export async function handleModal(interaction) {
     if (isOfficial) fields.push({ name: 'Account Type', value: 'Official Account (Bypass)', inline: false });
 
     const updatedEmbed = new EmbedBuilder()
-      .setColor(0x22C55E)
+      .setColor(nicknameFailed.length > 0 ? 0xF59E0B : 0x22C55E)
       .setTitle(`✅ Verification #${queueId} — Approved${overrideLevel > 0 ? ` [Lvl ${overrideLevel} Override]` : ''}${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
+      .setDescription(nicknameWarning || null)
       .addFields(...fields)
       .setTimestamp();
+
+    // DM the approver if nickname failed
+    if (nicknameFailed.length > 0) {
+      try {
+        await interaction.user.send({
+          embeds: [new EmbedBuilder()
+            .setColor(0xF59E0B)
+            .setTitle('⚠️ Nickname Could Not Be Set')
+            .setDescription(`I was unable to set <@${entry.discord_id}>'s nickname to **${nickname}** in ${nicknameFailed.length} server(s) due to Discord role hierarchy.\n\nPlease set it manually.`)
+            .setTimestamp()
+          ]
+        });
+      } catch (e) { /* approver DMs may be closed */ }
+    }
 
     if (originalMsg) {
       await originalMsg.edit({ embeds: [updatedEmbed], components: [] }).catch(() => {});
