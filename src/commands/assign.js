@@ -44,15 +44,17 @@ function parseDuration(input) {
     return d;
   }
 
-  // "3 days", "1 week", "24 hours", "2 weeks"
-  const durationMatch = lower.match(/^(\d+)\s*(hour|hours|day|days|week|weeks|h|d|w)$/);
+  // "3d", "1w", "24h", "30m", "3 days", "1 week", "24 hours", "30 minutes"
+  const durationMatch = lower.match(/^(\d+)\s*(minute|minutes|min|hour|hours|day|days|week|weeks|month|months|m|h|d|w|mo)$/);
   if (durationMatch) {
     const num = parseInt(durationMatch[1]);
-    const unit = durationMatch[2].charAt(0);
+    const unit = durationMatch[2];
     const d = new Date(now);
-    if (unit === 'h') d.setHours(d.getHours() + num);
-    else if (unit === 'd') d.setDate(d.getDate() + num);
-    else if (unit === 'w') d.setDate(d.getDate() + num * 7);
+    if (unit === 'm' || unit === 'min' || unit.startsWith('minute')) d.setMinutes(d.getMinutes() + num);
+    else if (unit === 'h' || unit.startsWith('hour')) d.setHours(d.getHours() + num);
+    else if (unit === 'd' || unit.startsWith('day')) d.setDate(d.getDate() + num);
+    else if (unit === 'w' || unit.startsWith('week')) d.setDate(d.getDate() + num * 7);
+    else if (unit === 'mo' || unit.startsWith('month')) d.setMonth(d.getMonth() + num);
     return d;
   }
 
