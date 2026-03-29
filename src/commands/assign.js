@@ -110,7 +110,7 @@ export function buildAssignmentEmbed(assignment, assignerName, assigneeName, opt
     .setColor(STATUS_COLOURS[status] || 0x5865F2)
     .setDescription(assignment.title + (assignment.description ? `\n\n${assignment.description}` : ''))
     .addFields(
-      { name: 'Assigned To', value: `<@${assignment.assigned_to}>`, inline: true },
+      { name: 'Assigned To', value: assignment.assigned_to ? `<@${assignment.assigned_to}>` : `Team: ${assignment.team || 'Unassigned'}`, inline: true },
       { name: 'Assigned By', value: `<@${assignment.assigned_by}>`, inline: true },
       { name: 'Team', value: assignment.team || '—', inline: true },
       { name: 'Due Date', value: formatDate(assignment.due_date), inline: true },
@@ -166,10 +166,10 @@ export function buildAssignmentButtons(assignmentId, status) {
 export const data = new SlashCommandBuilder()
   .setName('assign')
   .setDescription('Create a task assignment for a staff member')
-  .addUserOption(opt => opt.setName('assigned_to').setDescription('Staff member to assign the task to').setRequired(true))
+  .addUserOption(opt => opt.setName('assigned_to').setDescription('Staff member to assign the task to (optional if team is set)').setRequired(false))
   .addStringOption(opt => opt.setName('task').setDescription('Task description').setRequired(true))
-  .addStringOption(opt => opt.setName('duration').setDescription('Duration e.g. "3 days", "1 week", "until Sunday"').setRequired(true))
-  .addStringOption(opt => opt.setName('team').setDescription('Team name for context').setRequired(false))
+  .addStringOption(opt => opt.setName('duration').setDescription('Duration e.g. "3d", "1w", "24h", "30m", "until Sunday"').setRequired(true))
+  .addStringOption(opt => opt.setName('team').setDescription('Team name — assigns to the whole team').setRequired(false))
   .addStringOption(opt => opt.setName('notes').setDescription('Additional notes').setRequired(false));
 
 export async function execute(interaction) {
@@ -186,9 +186,16 @@ export async function execute(interaction) {
   const team = interaction.options.getString('team');
   const notes = interaction.options.getString('notes');
 
-  const assigneePortal = getUserByDiscordId(targetUser.id);
-  if (!assigneePortal) {
-    return interaction.editReply({ content: '❌ The assigned user is not linked to the CO Staff Portal.' });
+  if (!targetUser && !team) {
+    return interaction.editReply({ content: '❌ You must provide either an `assigned_to` user or a `team`.' });
+  }
+
+  let assigneePortal = null;
+  if (targetUser) {
+    assigneePortal = getUserByDiscordId(targetUser.id);
+    if (!assigneePortal) {
+      return interaction.editReply({ content: '❌ The assigned user is not linked to the CO Staff Portal.' });
+    }
   }
 
   const dueDate = parseDuration(durationStr);
@@ -206,7 +213,7 @@ export async function execute(interaction) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET },
       body: JSON.stringify({
-        assigned_to: assigneePortal.id,
+        assigned_to: assigneePortal?.id || null,
         assigned_by: assignerPortal.id,
         title: taskDesc,
         description: notes || null,
@@ -225,7 +232,7 @@ export async function execute(interaction) {
   const result = createAssignment({
     title: taskDesc,
     description: notes || null,
-    assignedTo: targetUser.id,
+    assignedTo: targetUser?.id || null,
     assignedBy: interaction.user.id,
     team: team || null,
     dueDate: dueDate.toISOString(),
@@ -248,7 +255,7 @@ export async function execute(interaction) {
   const assignmentData = {
     title: taskDesc,
     description: notes || null,
-    assigned_to: targetUser.id,
+    assigned_to: targetUser?.id || null,
     assigned_by: interaction.user.id,
     team: team || null,
     due_date: dueDate.toISOString(),
@@ -256,7 +263,8 @@ export async function execute(interaction) {
     created_at: new Date().toISOString(),
   };
 
-  const embed = buildAssignmentEmbed(assignmentData, assignerPortal.display_name, assigneePortal.display_name, { assignmentNumber, notes });
+  const assigneeName = assigneePortal?.display_name || (team ? `Team: ${team}` : 'Unassigned');
+  const embed = buildAssignmentEmbed(assignmentData, assignerPortal.display_name, assigneeName, { assignmentNumber, notes });
   const buttons = buildAssignmentButtons(botAssignmentId, 'pending');
 
   try {
@@ -267,21 +275,23 @@ export async function execute(interaction) {
     console.error('[assign] Channel send error:', e.message);
   }
 
-  // DM the assigned person
-  try {
-    await targetUser.send({ embeds: [new EmbedBuilder()
-      .setTitle('📋 New Assignment')
-      .setColor(0x5865F2)
-      .setDescription(`You have been assigned a new task by **${assignerPortal.display_name}**.\n\n**Task:** ${taskDesc}\n**Due:** ${formatDate(dueDate)}\n\nCheck <#${ASSIGNMENTS_CHANNEL_ID}> for details.`)
-      .setFooter({ text: `Assignment: ${assignmentNumber} | Community Organisation` })
-      .setTimestamp()
-    ]});
-  } catch {}
+  // DM the assigned person (skip if team-only)
+  if (targetUser) {
+    try {
+      await targetUser.send({ embeds: [new EmbedBuilder()
+        .setTitle('📋 New Assignment')
+        .setColor(0x5865F2)
+        .setDescription(`You have been assigned a new task by **${assignerPortal.display_name}**.\n\n**Task:** ${taskDesc}\n**Due:** ${formatDate(dueDate)}\n\nCheck <#${ASSIGNMENTS_CHANNEL_ID}> for details.`)
+        .setFooter({ text: `Assignment: ${assignmentNumber} | Community Organisation` })
+        .setTimestamp()
+      ]});
+    } catch {}
+  }
 
   await logAction(interaction.client, {
     action: '📋 Assignment Created',
     moderator: { discordId: interaction.user.id, name: assignerPortal.display_name },
-    target: { discordId: targetUser.id, name: assigneePortal.display_name },
+    target: { discordId: targetUser?.id || 'TEAM', name: assigneeName },
     reason: taskDesc,
     color: 0x5865F2,
     fields: [
@@ -293,7 +303,7 @@ export async function execute(interaction) {
     guildId: interaction.guildId
   });
 
-  return interaction.editReply({ content: `✅ Assignment **${assignmentNumber}** created successfully. ${assigneePortal.display_name} has been notified.` });
+  return interaction.editReply({ content: `✅ Assignment **${assignmentNumber}** created${targetUser ? `. ${assigneePortal.display_name} has been notified.` : ` for **${team}**.`}` });
 }
 
 // ── Button Handlers ──────────────────────────────────────────────────────────
