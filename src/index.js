@@ -2059,6 +2059,24 @@ webhookApp.post('/webhook', async (req, res) => {
       case 'transfer_approved':
         await handleTransferApproved(client, req.body);
         break;
+      case 'unverify': {
+        const { discord_id, reason } = req.body;
+        if (discord_id) {
+          const { stripVerification } = await import('./utils/verifyHelper.js');
+          await stripVerification(client, discord_id, null);
+          console.log(`[Webhook] Unverified ${discord_id}: ${reason || 'No reason'}`);
+        }
+        break;
+      }
+      case 'reverify': {
+        const { discord_id: rvId, position: rvPos, nickname: rvNick } = req.body;
+        if (rvId && rvPos) {
+          const { applyVerification } = await import('./utils/verifyHelper.js');
+          await applyVerification(client, rvId, rvPos, rvNick || null, { isProbation: false });
+          console.log(`[Webhook] Re-verified ${rvId} as ${rvPos}`);
+        }
+        break;
+      }
       default:
         console.log(`[Webhook] Unknown type: ${type}`);
     }
