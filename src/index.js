@@ -1171,9 +1171,18 @@ client.on('messageCreate', async (message) => {
         }
 
         if (message.author.id === countChannel.last_user_id) {
-          await message.delete().catch(() => {});
-          const warn = await message.channel.send(`<@${message.author.id}> ❌ You cannot count twice in a row!`);
-          setTimeout(() => warn.delete().catch(() => {}), 5000);
+          await message.react('❌').catch(() => {});
+          const newHighScore = Math.max(countChannel.high_score, countChannel.current_count);
+          countDb.prepare(`
+            UPDATE counting_channels
+            SET current_count = 0, last_user_id = NULL, last_message_id = NULL,
+                high_score = ?, failed_at = ?
+            WHERE guild_id = ? AND channel_id = ?
+          `).run(newHighScore, countChannel.current_count, message.guild.id, message.channel.id);
+          await message.channel.send(
+            `❌ <@${message.author.id}> counted twice in a row and ruined the count at **${countChannel.current_count}**! The next number is **1**.\n` +
+            (newHighScore > 0 ? `🏆 High score: **${newHighScore}**` : '')
+          );
           return;
         }
 
