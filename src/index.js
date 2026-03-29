@@ -2071,9 +2071,39 @@ webhookApp.post('/webhook', async (req, res) => {
       case 'reverify': {
         const { discord_id: rvId, position: rvPos, nickname: rvNick } = req.body;
         if (rvId && rvPos) {
-          const { applyVerification } = await import('./utils/verifyHelper.js');
-          await applyVerification(client, rvId, rvPos, rvNick || null, { isProbation: false });
-          console.log(`[Webhook] Re-verified ${rvId} as ${rvPos}`);
+          // Submit a verification request instead of auto-verifying
+          const { getOrCreateVerificationChannel } = await import('./utils/verifyHelper.js');
+          const { db: botDatabase } = await import('./utils/botDb.js');
+          const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import('discord.js');
+
+          const verifyChannel = await getOrCreateVerificationChannel(client);
+          const result = botDatabase.prepare(`
+            INSERT INTO verification_queue (discord_id, guild_id, requested_nickname, position, channel_id, verified_official, is_probation)
+            VALUES (?, ?, ?, ?, ?, 0, 0)
+          `).run(rvId, '', rvNick || '(pending approver input)', rvPos, verifyChannel.id);
+
+          const queueId = result.lastInsertRowid;
+          const embed = new EmbedBuilder()
+            .setTitle(`Verification Request #${queueId} [Force Transfer]`)
+            .setColor(0xF59E0B)
+            .addFields(
+              { name: 'User', value: `<@${rvId}> (${rvId})`, inline: false },
+              { name: 'New Position', value: rvPos, inline: false },
+              { name: 'Nickname', value: rvNick || '(pending approver input)', inline: false },
+              { name: 'Reason', value: 'IAC Force Transfer — requires re-verification with new position roles', inline: false },
+            )
+            .setTimestamp();
+
+          const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`verify_approve_${queueId}_0`).setLabel('Confirm').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(`verify_auth_override_${queueId}`).setLabel('Authorisation Level').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(`verify_deny_${queueId}`).setLabel('Deny').setStyle(ButtonStyle.Danger),
+          );
+
+          const msg = await verifyChannel.send({ embeds: [embed], components: [row] });
+          botDatabase.prepare('UPDATE verification_queue SET message_id = ? WHERE id = ?').run(msg.id, queueId);
+
+          console.log(`[Webhook] Verification request #${queueId} created for ${rvId} as ${rvPos} (force transfer)`);
         }
         break;
       }
