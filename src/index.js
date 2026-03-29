@@ -638,15 +638,15 @@ client.once('ready', async () => {
 
   async function postMessageLeaderboard() {
     try {
-      const { db: lbDb } = await import('./utils/botDb.js');
+      const portalDb = (await import('./db.js')).default;
       const weekKey = getBragWeekKey();
 
-      const rows = lbDb.prepare(`
-        SELECT discord_id, SUM(message_count) as total
-        FROM brag_message_counts
-        WHERE week_key = ?
-        GROUP BY discord_id
-        ORDER BY total DESC
+      const rows = portalDb.prepare(`
+        SELECT br.discord_id, br.message_count as total, u.display_name, u.full_name
+        FROM brag_records br
+        LEFT JOIN users u ON u.discord_id = br.discord_id
+        WHERE br.week_key = ? AND br.message_count > 0
+        ORDER BY br.message_count DESC
         LIMIT 20
       `).all(weekKey);
 
