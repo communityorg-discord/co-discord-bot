@@ -475,6 +475,9 @@ try {
   db.exec('ALTER TABLE infractions ADD COLUMN appeal_at DATETIME');
 }
 
+// Migration: add log_scope column to log_config
+try { db.exec("ALTER TABLE log_config ADD COLUMN log_scope TEXT DEFAULT 'server'"); } catch (e) { /* already exists */ }
+
 export default db;
 
 export function addDmExemption(discordId, displayName, exemptedBy) {
@@ -516,12 +519,12 @@ export function getLogChannel(guildId, category, type) {
   return row?.channel_id || null;
 }
 
-export function setLogChannel(guildId, category, type, channelId) {
+export function setLogChannel(guildId, category, type, channelId, scope = 'server') {
   db.prepare(`
-    INSERT INTO log_config (guild_id, category, type, channel_id, updated_at)
-    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(guild_id, category, type) DO UPDATE SET channel_id = excluded.channel_id, updated_at = CURRENT_TIMESTAMP
-  `).run(guildId, category, type, channelId);
+    INSERT INTO log_config (guild_id, category, type, channel_id, log_scope, updated_at)
+    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(guild_id, category, type) DO UPDATE SET channel_id = excluded.channel_id, log_scope = excluded.log_scope, updated_at = CURRENT_TIMESTAMP
+  `).run(guildId, category, type, channelId, scope);
 }
 
 export function getAllLogConfig(guildId) {
@@ -529,8 +532,35 @@ export function getAllLogConfig(guildId) {
   const config = {};
   for (const row of rows) {
     config[`${row.category}:${row.type}`] = row.channel_id;
+    config[`${row.category}:${row.type}:scope`] = row.log_scope || 'server';
   }
   return config;
+}
+
+export function getLogChannelsForEvent(sourceGuildId, category, type) {
+  // Returns all channel IDs that should receive this log event
+  const channels = [];
+
+  // Server-scope: channels configured for this specific guild
+  const serverRow = db.prepare("SELECT channel_id FROM log_config WHERE guild_id = ? AND category = ? AND type = ? AND (log_scope = 'server' OR log_scope IS NULL)").get(sourceGuildId, category, type);
+  if (serverRow?.channel_id) channels.push(serverRow.channel_id);
+
+  // Organisation-scope: channels configured in ANY guild with scope='organisation'
+  const orgRows = db.prepare("SELECT channel_id FROM log_config WHERE category = ? AND type = ? AND log_scope = 'organisation'").all(category, type);
+  for (const row of orgRows) {
+    if (row.channel_id && !channels.includes(row.channel_id)) channels.push(row.channel_id);
+  }
+
+  // Also check orgwide entries (backward compat)
+  const orgwideRow = db.prepare("SELECT channel_id FROM log_config WHERE guild_id = 'orgwide' AND category = 'orgwide' AND type = ?").get(type);
+  if (orgwideRow?.channel_id && !channels.includes(orgwideRow.channel_id)) channels.push(orgwideRow.channel_id);
+
+  // Global log config (backward compat)
+  const globalCategory = 'global_' + category;
+  const globalRow = db.prepare("SELECT channel_id FROM global_log_config WHERE category = ?").get(globalCategory);
+  if (globalRow?.channel_id && !channels.includes(globalRow.channel_id)) channels.push(globalRow.channel_id);
+
+  return channels;
 }
 
 // Guild settings (role IDs etc.)

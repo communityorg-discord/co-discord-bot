@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, TextInputBuilder, ModalBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { logAction } from '../utils/logger.js';
-import { getLogConfig, setLogChannel, getGlobalLogChannel, setGlobalLogChannel, getLogChannel, getAllLogConfig, getAssignmentStats } from '../utils/botDb.js';
+import { getLogConfig, setLogChannel, getGlobalLogChannel, setGlobalLogChannel, getLogChannel, getAllLogConfig, getAssignmentStats, getLogChannelsForEvent } from '../utils/botDb.js';
 
 // Per-guild log categories and their types
 const CATEGORIES = {
@@ -335,7 +335,9 @@ export async function handleSelect(interaction) {
     const typeRows = [];
     for (const [typeKey, type] of Object.entries(cat.types)) {
       const channelId = config[`${categoryKey}:${typeKey}`];
-      const status = channelId ? `✅ <#${channelId}>` : '❌ Not set';
+      const scope = config[`${categoryKey}:${typeKey}:scope`] || 'server';
+      const scopeIcon = scope === 'organisation' ? '🏢 All servers' : '🌐 This server';
+      const status = channelId ? `✅ <#${channelId}> (${scopeIcon})` : '❌ Not set';
       typeRows.push(`**${cat.emoji} ${cat.label} > ${type.label}:** ${status}`);
     }
 
@@ -435,6 +437,15 @@ export async function handleSelect(interaction) {
           .setLabel('Channel ID')
           .setStyle(1)
           .setPlaceholder('Paste the channel ID here, or leave blank to disable')
+          .setRequired(false)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('scope')
+          .setLabel('Scope: "server" (this server) or "organisation" (all)')
+          .setStyle(1)
+          .setPlaceholder('server')
+          .setValue('server')
           .setRequired(false)
       )
     );
@@ -550,6 +561,9 @@ export async function handleModal(interaction) {
   if (!cat || !type) return;
 
   const channelIdInput = interaction.fields.getTextInputValue('channel_id').trim();
+  let scopeInput = 'server';
+  try { scopeInput = interaction.fields.getTextInputValue('scope').trim().toLowerCase(); } catch {}
+  const scope = scopeInput === 'organisation' ? 'organisation' : 'server';
   let targetChannel = null;
 
   if (channelIdInput) {
@@ -560,17 +574,18 @@ export async function handleModal(interaction) {
         components: []
       });
     }
-    setLogChannel(interaction.guildId, categoryKey, typeKey, targetChannel.id);
+    setLogChannel(interaction.guildId, categoryKey, typeKey, targetChannel.id, scope);
   } else {
-    setLogChannel(interaction.guildId, categoryKey, typeKey, null);
+    setLogChannel(interaction.guildId, categoryKey, typeKey, null, scope);
   }
 
+  const scopeLabel = scope === 'organisation' ? '🏢 All servers' : '🌐 This server';
   const embed = buildInfoEmbed(interaction.guildId);
   const categoryRow = buildCategorySelect();
 
   await interaction.update({
     content: targetChannel
-      ? `✅ ${type.label} set to ${targetChannel}`
+      ? `✅ ${type.label} set to ${targetChannel} (${scopeLabel})`
       : `✅ ${type.label} has been cleared (logs disabled)`,
     embeds: [embed],
     components: [categoryRow]
@@ -581,7 +596,7 @@ export async function handleModal(interaction) {
     target: null,
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     color: 0x5865F2,
-    description: `${type.label} ${targetChannel ? `set to ${targetChannel}` : 'cleared'} by <@${interaction.user.id}>`,
+    description: `${type.label} ${targetChannel ? `set to ${targetChannel} [scope: ${scope}]` : 'cleared'} by <@${interaction.user.id}>`,
     guildId: interaction.guildId
   });
 }

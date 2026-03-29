@@ -8,7 +8,7 @@ import { LOG_CHANNEL_ID, MOD_LOG_CHANNEL_ID,
   MEMBER_ROLE_REMOVE_LOG_CHANNEL_ID,
   ROLE_ALL_LOG_CHANNEL_ID
 } from '../config.js';
-import { getLogChannel, getGlobalLogChannel } from './botDb.js';
+import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent } from './botDb.js';
 
 // Map log categories to their global channel keys
 // User IDs that receive ALL logs as DMs
@@ -109,17 +109,12 @@ export async function logAction(client, {
   // 2. Also log to hardcoded specific channel (from channels.js)
   await sendToChannel(specificChannelId);
 
-  // 3. Also log to per-guild panel-configured channel (from log_config DB)
-  if (guildId && logType) {
+  // 3. Use unified log channel resolution (server-scope, organisation-scope, orgwide, global)
+  if (logType) {
     const [category, type] = logType.split('.');
-    const perGuildChannelId = getLogChannel(guildId, category, type);
-    await sendToChannel(perGuildChannelId);
-
-    // 4. Also log to global category channel — ALL logs of this category go to one channel
-    const globalChannelKey = GLOBAL_CHANNEL_MAP[category];
-    if (globalChannelKey) {
-      const globalChannelId = getGlobalLogChannel(globalChannelKey);
-      await sendToChannel(globalChannelId);
+    const channelIds = getLogChannelsForEvent(guildId || '', category, type);
+    for (const chId of channelIds) {
+      await sendToChannel(chId);
     }
   }
 
@@ -174,17 +169,11 @@ export async function logRoleAction(client, {
   // 2. Also log to the specific hardcoded channel
   await sendToChannel(ROLE_CHANNEL_MAP[roleLogType]);
 
-  // 3. Also log to per-guild panel-configured channel
-  if (guildId && roleLogType) {
-    const [category, type] = `role_management.${roleLogType}`.split('.');
-    const perGuildChannelId = getLogChannel(guildId, category, type);
-    await sendToChannel(perGuildChannelId);
-
-    // 4. Also log to global role management channel
-    const globalChannelKey = GLOBAL_CHANNEL_MAP[category];
-    if (globalChannelKey) {
-      const globalChannelId = getGlobalLogChannel(globalChannelKey);
-      await sendToChannel(globalChannelId);
+  // 3. Use unified log channel resolution (server-scope, organisation-scope, orgwide, global)
+  if (roleLogType) {
+    const channelIds = getLogChannelsForEvent(guildId || '', 'role_management', roleLogType);
+    for (const chId of channelIds) {
+      await sendToChannel(chId);
     }
   }
 
