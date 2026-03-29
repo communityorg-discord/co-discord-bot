@@ -166,9 +166,9 @@ export function buildAssignmentButtons(assignmentId, status) {
 export const data = new SlashCommandBuilder()
   .setName('assign')
   .setDescription('Create a task assignment for a staff member')
-  .addUserOption(opt => opt.setName('assigned_to').setDescription('Staff member to assign the task to (optional if team is set)').setRequired(false))
   .addStringOption(opt => opt.setName('task').setDescription('Task description').setRequired(true))
   .addStringOption(opt => opt.setName('duration').setDescription('Duration e.g. "3d", "1w", "24h", "30m", "until Sunday"').setRequired(true))
+  .addUserOption(opt => opt.setName('assigned_to').setDescription('Staff member to assign to (optional if team is set)').setRequired(false))
   .addStringOption(opt => opt.setName('team').setDescription('Team name — assigns to the whole team').setRequired(false))
   .addStringOption(opt => opt.setName('notes').setDescription('Additional notes').setRequired(false));
 
