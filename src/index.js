@@ -63,6 +63,7 @@ import { handleInteraction as automodPanelHandler } from './services/automodPane
 import * as officeSetup from './commands/officeSetup.js';
 import * as counting from './commands/counting.js';
 import * as forceVerify from './commands/forceVerify.js';
+import * as gnick from './commands/gnick.js';
 import { handleButton as officeButton, handleSelect as officeSelect, handleModal as officeModal, handleWaitingRoomJoin, enforceOfficeRestrictions, getOfficeByChannel, getWaitingRoomOffice, processExpiredKeys, refreshOfficePanels } from './services/officeManager.js';
 
 config();
@@ -89,7 +90,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -633,11 +634,12 @@ client.once('ready', async () => {
   setInterval(syncBragCounts, 60 * 1000);
   console.log('[BRAG Sync] Started — syncing to portal every 60 seconds');
 
-  // Message count leaderboard — post every 4 hours to channel
+  // Message count leaderboard — edits same embed, new one each Monday
   const LEADERBOARD_CH = '1487667463129661471';
 
   async function postMessageLeaderboard() {
     try {
+      const { db: cfgDb } = await import('./utils/botDb.js');
       const portalDb = (await import('./db.js')).default;
       const weekKey = getBragWeekKey();
 
@@ -660,24 +662,40 @@ client.once('ready', async () => {
         return `${medal} ${name} — **${r.total}** messages`;
       });
 
+      const embed = new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle('📊 Staff Message Leaderboard')
+        .setDescription(lines.join('\n'))
+        .addFields(
+          { name: 'Week', value: weekKey, inline: true },
+          { name: 'Total Staff Messages', value: String(totalAll), inline: true },
+          { name: 'Active Staff', value: `${rows.length}/${totalStaff?.c || '?'} tracked`, inline: true },
+        )
+        .setFooter({ text: 'Staff only | Resets every Monday | Updates every 4 hours' })
+        .setTimestamp();
+
       const ch = await client.channels.fetch(LEADERBOARD_CH).catch(() => null);
       if (!ch) return;
 
-      await ch.send({
-        embeds: [new EmbedBuilder()
-          .setColor(0x5865F2)
-          .setTitle('📊 Staff Message Leaderboard')
-          .setDescription(lines.join('\n'))
-          .addFields(
-            { name: 'Week', value: weekKey, inline: true },
-            { name: 'Total Staff Messages', value: String(totalAll), inline: true },
-            { name: 'Active Staff', value: `${rows.length}/${totalStaff?.c || '?'} tracked`, inline: true },
-          )
-          .setFooter({ text: 'Staff only | Resets every Monday | Updates every 4 hours' })
-          .setTimestamp()
-        ]
-      });
-      console.log('[Leaderboard] Posted for week ' + weekKey);
+      // Check if we already have a message for this week
+      const stored = cfgDb.prepare("SELECT value FROM bot_config WHERE key = ?").get('leaderboard_msg_' + weekKey);
+
+      if (stored) {
+        // Edit existing message
+        try {
+          const msg = await ch.messages.fetch(stored.value);
+          await msg.edit({ embeds: [embed] });
+          console.log('[Leaderboard] Updated for week ' + weekKey);
+          return;
+        } catch (e) {
+          // Message deleted or not found — create new one
+        }
+      }
+
+      // Create new message for this week
+      const msg = await ch.send({ embeds: [embed] });
+      cfgDb.prepare("INSERT OR REPLACE INTO bot_config (key, value) VALUES (?, ?)").run('leaderboard_msg_' + weekKey, msg.id);
+      console.log('[Leaderboard] Created new for week ' + weekKey);
     } catch (e) {
       console.error('[Leaderboard] Failed:', e.message);
     }
@@ -686,7 +704,7 @@ client.once('ready', async () => {
   // Post immediately on startup, then every 4 hours
   await postMessageLeaderboard();
   setInterval(postMessageLeaderboard, 4 * 60 * 60 * 1000);
-  console.log('[Leaderboard] Started — posting every 4 hours');
+  console.log('[Leaderboard] Started — updating every 4 hours');
 
   // Reminder cron — every 60 seconds
   setInterval(async () => {
