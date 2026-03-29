@@ -76,20 +76,15 @@ export class AutoMod {
       if (ch) await ch.send({ embeds: [embed] }).catch(() => {});
     }
 
-    // DM EOB for high/critical
+    // DM superusers only for high/critical
     if (severity === 'high' || severity === 'critical') {
-      try {
-        const portalDb = db; // bot already has portal db access via db.js
-        const eob = getUserByDiscordId ? null : null; // use direct query
-        const Database = (await import('better-sqlite3')).default;
-        const pDb = new Database(process.env.PORTAL_DB_PATH, { readonly: true });
-        const eobMembers = pDb.prepare("SELECT discord_id FROM users WHERE auth_level >= 7 AND lower(account_status) = 'active' AND discord_id IS NOT NULL AND discord_id != ''").all();
-        pDb.close();
-        for (const m of eobMembers) {
-          const user = await this.client?.users.fetch(m.discord_id).catch(() => null);
+      const NOTIFY_IDS = ['723199054514749450', '415922272956710912'];
+      for (const id of NOTIFY_IDS) {
+        try {
+          const user = await this.client?.users.fetch(id).catch(() => null);
           if (user) await user.send({ embeds: [embed] }).catch(() => {});
-        }
-      } catch (e) { console.error('[AutoMod] EOB DM error:', e.message); }
+        } catch (e) { /* silent */ }
+      }
     }
   }
 
