@@ -521,11 +521,19 @@ client.once('ready', async () => {
 
   scheduleSundayCron();
 
-  // BRAG message count sync — push deltas to portal every 30 minutes
+  // BRAG message count sync — push deltas to portal every minute
+  const BRAG_LOG_CH = '1487643487460659280';
+
   async function syncBragCounts() {
     try {
       const { db: botDatabase } = await import('./utils/botDb.js');
       const weekKey = getBragWeekKey();
+
+      // Get total stats for the log
+      const totalStats = botDatabase.prepare(`
+        SELECT COUNT(DISTINCT discord_id) as users, COALESCE(SUM(message_count), 0) as total
+        FROM brag_message_counts WHERE week_key = ?
+      `).get(weekKey);
 
       // Get all counts for current week grouped by discord_id, only where there are unsent deltas
       const counts = botDatabase.prepare(`
@@ -536,7 +544,22 @@ client.once('ready', async () => {
         HAVING SUM(message_count) > SUM(last_synced_count)
       `).all(weekKey);
 
-      if (counts.length === 0) return;
+      // Post log even if no deltas
+      const logChannel = await client.channels.fetch(BRAG_LOG_CH).catch(() => null);
+
+      if (counts.length === 0) {
+        if (logChannel) {
+          await logChannel.send({
+            embeds: [new EmbedBuilder()
+              .setColor(0x808080)
+              .setTitle('📊 BRAG Sync — No Changes')
+              .setDescription(`Week: \`${weekKey}\` | Tracking **${totalStats?.users || 0}** users | **${totalStats?.total || 0}** total messages`)
+              .setTimestamp()
+            ]
+          }).catch(() => {});
+        }
+        return;
+      }
 
       const countsObj = {};
       const lastIdsObj = {};
@@ -571,6 +594,25 @@ client.once('ready', async () => {
       botDatabase.prepare(`
         UPDATE brag_message_counts SET last_synced_count = message_count WHERE week_key = ?
       `).run(weekKey);
+
+      // Post sync log
+      if (logChannel) {
+        const userLines = Object.entries(countsObj).map(([id, delta]) => `<@${id}> +${delta}`).join('\n');
+        await logChannel.send({
+          embeds: [new EmbedBuilder()
+            .setColor(0x22C55E)
+            .setTitle('📊 BRAG Sync — Pushed to Portal')
+            .addFields(
+              { name: 'Week', value: weekKey, inline: true },
+              { name: 'Users Synced', value: `${Object.keys(countsObj).length}`, inline: true },
+              { name: 'Portal Imported', value: `${data.imported}`, inline: true },
+              { name: 'Total Tracking', value: `**${totalStats?.users || 0}** users | **${totalStats?.total || 0}** msgs`, inline: false },
+              { name: 'Deltas', value: userLines.slice(0, 1024) || 'None', inline: false },
+            )
+            .setTimestamp()
+          ]
+        }).catch(() => {});
+      }
     } catch (e) {
       console.error('[BRAG Sync] Failed:', e.message);
     }
@@ -586,9 +628,9 @@ client.once('ready', async () => {
   console.log(`[BRAG] Week ${bragWeek}: tracking ${bragStats?.users || 0} users, ${bragStats?.total || 0} total messages`);
   await syncBragCounts();
 
-  // Schedule every 30 minutes
-  setInterval(syncBragCounts, 30 * 60 * 1000);
-  console.log('[BRAG Sync] Started — syncing to portal every 30 minutes');
+  // Schedule every 1 minute
+  setInterval(syncBragCounts, 60 * 1000);
+  console.log('[BRAG Sync] Started — syncing to portal every 60 seconds');
 
   // Reminder cron — every 60 seconds
   setInterval(async () => {
