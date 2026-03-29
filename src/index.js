@@ -86,7 +86,7 @@ function getBragWeekKey(ts = Date.now()) {
 
 const client = new Client({
   partials: [Partials.Channel, Partials.Message],
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildVoiceStates]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildPresences]
 });
 
 client.commands = new Collection();
@@ -2092,6 +2092,34 @@ webhookApp.post('/api/send-channel', async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error('[Channel API]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// POST /api/discord-presence — bulk fetch presence for multiple users
+webhookApp.post('/api/discord-presence', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { discordIds } = req.body;
+    if (!Array.isArray(discordIds)) return res.status(400).json({ ok: false, error: 'discordIds array required' });
+
+    const presences = {};
+    const STAFF_HQ = '1357119461957570570';
+    const guild = client.guilds.cache.get(STAFF_HQ);
+    if (guild) {
+      for (const id of discordIds) {
+        try {
+          const member = guild.members.cache.get(id);
+          if (member?.presence) {
+            presences[id] = member.presence.status; // online, idle, dnd, offline
+          } else {
+            presences[id] = 'offline';
+          }
+        } catch { presences[id] = 'offline'; }
+      }
+    }
+    res.json({ ok: true, presences });
+  } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
