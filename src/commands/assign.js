@@ -5,7 +5,7 @@ import { getUserByDiscordId } from '../db.js';
 import { logAction } from '../utils/logger.js';
 import fetch from 'node-fetch';
 
-const ASSIGNMENTS_CHANNEL_ID = '1487304333258264699';
+const ASSIGNMENTS_CHANNEL_ID = '1487630065008115824';
 const SUPERUSER_IDS = ['723199054514749450', '415922272956710912'];
 
 const MANAGER_POSITIONS = [

@@ -52,7 +52,7 @@ export async function execute(interaction) {
     const reqId = db.prepare('SELECT last_insert_rowid() as id').get().id;
 
     // Post to approval channel
-    const APPROVAL_CHANNEL_ID = '1487556103364673616';
+    const APPROVAL_CHANNEL_ID = '1487630044678324425';
     try {
       const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import('discord.js');
       const approvalCh = await interaction.client.channels.fetch(APPROVAL_CHANNEL_ID).catch(() => null);

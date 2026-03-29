@@ -6,7 +6,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import fetch from 'node-fetch';
 
-const DIRECTIVES_CHANNEL = '1487321447461556354';
+const DIRECTIVES_CHANNEL = '1487630072855789649';
 
 const PURPOSE_LABELS = {
   implementing_modifying_overriding: 'Implementing, Modifying or Overriding',
