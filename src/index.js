@@ -2121,7 +2121,7 @@ webhookApp.post('/webhook', async (req, res) => {
 // POST /api/send-dm — unified DM endpoint for portal
 webhookApp.post('/api/send-dm', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
-  const { discord_id, message, embed } = req.body;
+  const { discord_id, message, embed, pdf_buffer, pdf_filename } = req.body;
   if (!discord_id) return res.status(400).json({ error: 'discord_id required' });
   try {
     const user = await client.users.fetch(String(discord_id));
@@ -2130,6 +2130,15 @@ webhookApp.post('/api/send-dm', async (req, res) => {
     } else {
       await user.send(message || 'No message provided');
     }
+
+    // Send PDF attachment if provided
+    if (pdf_buffer) {
+      const { AttachmentBuilder } = await import('discord.js');
+      const buf = Buffer.from(pdf_buffer, 'base64');
+      const attachment = new AttachmentBuilder(buf, { name: pdf_filename || 'document.pdf' });
+      await user.send({ files: [attachment] });
+    }
+
     res.json({ ok: true });
   } catch (e) {
     console.error('[DM API]', e.message);
