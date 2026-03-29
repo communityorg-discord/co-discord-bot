@@ -957,6 +957,19 @@ db.exec(`CREATE TABLE IF NOT EXISTS office_master_panel (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )`);
 
+// Counting channels
+db.exec(`CREATE TABLE IF NOT EXISTS counting_channels (
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  current_count INTEGER DEFAULT 0,
+  last_user_id TEXT,
+  last_message_id TEXT,
+  high_score INTEGER DEFAULT 0,
+  failed_at INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (guild_id, channel_id)
+)`);
+
 // BRAG message tracking — counts messages per user per guild per week
 db.exec(`CREATE TABLE IF NOT EXISTS brag_message_counts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

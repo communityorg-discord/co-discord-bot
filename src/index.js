@@ -61,6 +61,7 @@ import * as automodCmd from './commands/automod.js';
 import { automod } from './services/automod.js';
 import { handleInteraction as automodPanelHandler } from './services/automodPanels.js';
 import * as officeSetup from './commands/officeSetup.js';
+import * as counting from './commands/counting.js';
 import { handleButton as officeButton, handleSelect as officeSelect, handleModal as officeModal, handleWaitingRoomJoin, enforceOfficeRestrictions, getOfficeByChannel, getWaitingRoomOffice, processExpiredKeys, refreshOfficePanels } from './services/officeManager.js';
 
 config();
@@ -87,7 +88,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -1140,8 +1141,81 @@ client.on('guildMemberRemove', async (member) => {
   try { await automod.checkMemberLeave(member); } catch (e) { console.error('[AutoMod guildMemberRemove]', e.message); }
 });
 
-// AutoMod message handler + BRAG message tracking
+// AutoMod message handler + counting + BRAG message tracking
 client.on('messageCreate', async (message) => {
+  // Counting channel handler — runs first so counting messages aren't interfered with
+  if (!message.author.bot && message.guild && !message.system) {
+    try {
+      const { db: countDb } = await import('./utils/botDb.js');
+      const countChannel = countDb.prepare('SELECT * FROM counting_channels WHERE guild_id = ? AND channel_id = ?')
+        .get(message.guild.id, message.channel.id);
+
+      if (countChannel) {
+        const content = message.content.trim();
+        let value = null;
+
+        if (/^[\d\s\+\-\*\/\(\)\.]+$/.test(content) && content.length > 0) {
+          try {
+            const result = Function('"use strict"; return (' + content + ')')();
+            if (typeof result === 'number' && isFinite(result) && result === Math.floor(result)) {
+              value = result;
+            }
+          } catch (e) { /* not valid math */ }
+        }
+
+        const expected = countChannel.current_count + 1;
+
+        if (value === null) {
+          await message.delete().catch(() => {});
+          return;
+        }
+
+        if (message.author.id === countChannel.last_user_id) {
+          await message.delete().catch(() => {});
+          const warn = await message.channel.send(`<@${message.author.id}> ❌ You cannot count twice in a row!`);
+          setTimeout(() => warn.delete().catch(() => {}), 5000);
+          return;
+        }
+
+        if (value !== expected) {
+          await message.react('❌').catch(() => {});
+          const newHighScore = Math.max(countChannel.high_score, countChannel.current_count);
+          countDb.prepare(`
+            UPDATE counting_channels
+            SET current_count = 0, last_user_id = NULL, last_message_id = NULL,
+                high_score = ?, failed_at = ?
+            WHERE guild_id = ? AND channel_id = ?
+          `).run(newHighScore, countChannel.current_count, message.guild.id, message.channel.id);
+          await message.channel.send(
+            `❌ <@${message.author.id}> ruined the count at **${countChannel.current_count}**! The next number was **${expected}**.\n` +
+            (newHighScore > 0 ? `🏆 High score: **${newHighScore}**` : '')
+          );
+          return;
+        }
+
+        // Correct number
+        countDb.prepare(`
+          UPDATE counting_channels
+          SET current_count = ?, last_user_id = ?, last_message_id = ?,
+              high_score = CASE WHEN ? > high_score THEN ? ELSE high_score END
+          WHERE guild_id = ? AND channel_id = ?
+        `).run(value, message.author.id, message.id, value, value, message.guild.id, message.channel.id);
+
+        if (value % 1000 === 0) {
+          await message.react('🎉').catch(() => {});
+          await message.channel.send(`🎉 **${value}!** Amazing!`);
+        } else if (value % 100 === 0) {
+          await message.react('🔥').catch(() => {});
+        } else {
+          await message.react('✅').catch(() => {});
+        }
+        return; // Don't process counting messages through automod/BRAG
+      }
+    } catch (e) {
+      console.error('[Counting]', e.message);
+    }
+  }
+
   try { await automod.checkMessage(message); } catch (e) { console.error('[AutoMod messageCreate]', e.message); }
 
   // BRAG message counting — track per user per guild per week
