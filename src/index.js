@@ -71,6 +71,16 @@ if (!process.env.BOT_WEBHOOK_SECRET) {
   process.exit(1);
 }
 
+// Monday-based ISO week key — matches portal getWeekKey() exactly
+function getBragWeekKey(ts = Date.now()) {
+  const d = new Date(ts);
+  const day = d.getDay();
+  const diff = (day === 0 ? -6 : 1) - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString().slice(0, 10);
+}
+
 const client = new Client({
   partials: [Partials.Channel, Partials.Message],
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildVoiceStates]
@@ -509,6 +519,75 @@ client.once('ready', async () => {
   }
 
   scheduleSundayCron();
+
+  // BRAG message count sync — push deltas to portal every 30 minutes
+  async function syncBragCounts() {
+    try {
+      const { db: botDatabase } = await import('./utils/botDb.js');
+      const weekKey = getBragWeekKey();
+
+      // Get all counts for current week grouped by discord_id, only where there are unsent deltas
+      const counts = botDatabase.prepare(`
+        SELECT discord_id, SUM(message_count) as total_count, SUM(last_synced_count) as total_synced, MAX(last_message_id) as last_message_id
+        FROM brag_message_counts
+        WHERE week_key = ?
+        GROUP BY discord_id
+        HAVING SUM(message_count) > SUM(last_synced_count)
+      `).all(weekKey);
+
+      if (counts.length === 0) return;
+
+      const countsObj = {};
+      const lastIdsObj = {};
+      for (const row of counts) {
+        const delta = row.total_count - row.total_synced;
+        if (delta > 0) {
+          countsObj[row.discord_id] = delta;
+          lastIdsObj[row.discord_id] = row.last_message_id;
+        }
+      }
+
+      if (Object.keys(countsObj).length === 0) return;
+
+      const res = await fetch('http://localhost:3016/api/brag/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-bot-secret': process.env.BOT_WEBHOOK_SECRET
+        },
+        body: JSON.stringify({
+          counts: countsObj,
+          lastIds: lastIdsObj,
+          weekKey,
+          syncType: 'scheduled_sync'
+        })
+      });
+
+      const data = await res.json();
+      console.log(`[BRAG Sync] Synced ${Object.keys(countsObj).length} users for week ${weekKey} — ${data.imported} imported`);
+
+      // Update last_synced_count to match current message_count so we don't re-send
+      botDatabase.prepare(`
+        UPDATE brag_message_counts SET last_synced_count = message_count WHERE week_key = ?
+      `).run(weekKey);
+    } catch (e) {
+      console.error('[BRAG Sync] Failed:', e.message);
+    }
+  }
+
+  // Sync on startup
+  const bragDb = (await import('./utils/botDb.js')).db;
+  const bragWeek = getBragWeekKey();
+  const bragStats = bragDb.prepare(`
+    SELECT COUNT(DISTINCT discord_id) as users, COALESCE(SUM(message_count), 0) as total
+    FROM brag_message_counts WHERE week_key = ?
+  `).get(bragWeek);
+  console.log(`[BRAG] Week ${bragWeek}: tracking ${bragStats?.users || 0} users, ${bragStats?.total || 0} total messages`);
+  await syncBragCounts();
+
+  // Schedule every 30 minutes
+  setInterval(syncBragCounts, 30 * 60 * 1000);
+  console.log('[BRAG Sync] Started — syncing to portal every 30 minutes');
 
   // Reminder cron — every 60 seconds
   setInterval(async () => {
@@ -1061,9 +1140,28 @@ client.on('guildMemberRemove', async (member) => {
   try { await automod.checkMemberLeave(member); } catch (e) { console.error('[AutoMod guildMemberRemove]', e.message); }
 });
 
-// AutoMod message handler
+// AutoMod message handler + BRAG message tracking
 client.on('messageCreate', async (message) => {
   try { await automod.checkMessage(message); } catch (e) { console.error('[AutoMod messageCreate]', e.message); }
+
+  // BRAG message counting — track per user per guild per week
+  if (!message.author.bot && message.guild && !message.system) {
+    try {
+      const { db: botDatabase } = await import('./utils/botDb.js');
+      const weekKey = getBragWeekKey();
+      botDatabase.prepare(`
+        INSERT INTO brag_message_counts (discord_id, guild_id, guild_name, week_key, message_count, last_message_id, last_updated)
+        VALUES (?, ?, ?, ?, 1, ?, datetime('now'))
+        ON CONFLICT(discord_id, guild_id, week_key) DO UPDATE SET
+          message_count = message_count + 1,
+          guild_name = excluded.guild_name,
+          last_message_id = excluded.last_message_id,
+          last_updated = datetime('now')
+      `).run(message.author.id, message.guild.id, message.guild.name, weekKey, message.id);
+    } catch (e) {
+      // Silent fail — don't break message flow for counting
+    }
+  }
 });
 
 // Message delete log — tracked globally across all servers
@@ -1801,6 +1899,29 @@ webhookApp.get('/api/discord-user/:id', async (req, res) => {
     });
   } catch (e) {
     res.status(404).json({ ok: false, error: 'User not found' });
+  }
+});
+
+// GET /api/brag/breakdown/:discordId — per-guild message breakdown for portal
+webhookApp.get('/api/brag/breakdown/:discordId', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { db: botDatabase } = await import('./utils/botDb.js');
+    const { discordId } = req.params;
+    const weekKey = req.query.week || getBragWeekKey();
+
+    const breakdown = botDatabase.prepare(`
+      SELECT guild_id, guild_name, message_count, last_updated
+      FROM brag_message_counts
+      WHERE discord_id = ? AND week_key = ?
+      ORDER BY message_count DESC
+    `).all(discordId, weekKey);
+
+    const total = breakdown.reduce((sum, r) => sum + r.message_count, 0);
+    res.json({ ok: true, breakdown, total, weekKey });
+  } catch (e) {
+    console.error('[BRAG Breakdown API]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 

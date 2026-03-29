@@ -957,4 +957,21 @@ db.exec(`CREATE TABLE IF NOT EXISTS office_master_panel (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )`);
 
+// BRAG message tracking — counts messages per user per guild per week
+db.exec(`CREATE TABLE IF NOT EXISTS brag_message_counts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  discord_id TEXT NOT NULL,
+  guild_id TEXT NOT NULL,
+  guild_name TEXT,
+  week_key TEXT NOT NULL,
+  message_count INTEGER DEFAULT 0,
+  last_synced_count INTEGER DEFAULT 0,
+  last_message_id TEXT,
+  last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(discord_id, guild_id, week_key)
+)`);
+
+db.exec(`CREATE INDEX IF NOT EXISTS idx_brag_counts_week ON brag_message_counts(week_key, discord_id)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_brag_counts_discord ON brag_message_counts(discord_id, week_key)`);
+
 export { db };
