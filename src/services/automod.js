@@ -78,7 +78,7 @@ export class AutoMod {
 
     // DM superusers only for high/critical
     if (severity === 'high' || severity === 'critical') {
-      const NOTIFY_IDS = ['723199054514749450', '415922272956710912'];
+      const NOTIFY_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563'];
       for (const id of NOTIFY_IDS) {
         try {
           const user = await this.client?.users.fetch(id).catch(() => null);
