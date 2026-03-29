@@ -202,7 +202,7 @@ export function buildOfficeEmbed(office, guild) {
   const keyInfo = keys.length > 0
     ? keys.map(k => {
         const role = guild?.roles?.cache?.get(k.role_id);
-        const exp = k.expires_at ? `Expires ${new Date(k.expires_at).toLocaleString('en-GB', { timeZone: 'Europe/London' })}` : 'Permanent';
+        const exp = k.expires_at ? `Expires <t:${Math.floor(new Date(k.expires_at).getTime() / 1000)}:R>` : 'Permanent';
         return `@${role?.name || k.role_id} (${exp})`;
       }).join(', ')
     : 'None';
@@ -435,7 +435,7 @@ export async function notifyOfficeOccupants(client, office, requestId, requester
     .addFields(
       { name: 'Office', value: office.channel_name, inline: true },
       { name: 'Requester', value: `<@${requester.id}>`, inline: true },
-      { name: 'Requested At', value: new Date().toLocaleString('en-GB', { timeZone: 'Europe/London' }), inline: true }
+      { name: 'Requested At', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
     )
     .setFooter({ text: 'This request will expire in 10 minutes if no action is taken.' })
     .setTimestamp();
@@ -992,7 +992,7 @@ async function showKeysPanel(interaction, officeId, isFollowUp = false) {
     ? keys.map(k => {
         const role = guild.roles.cache.get(k.role_id);
         const exp = k.expires_at
-          ? (new Date(k.expires_at) <= new Date() ? '**EXPIRED**' : `Expires ${new Date(k.expires_at).toLocaleString('en-GB', { timeZone: 'Europe/London' })}`)
+          ? (new Date(k.expires_at) <= new Date() ? '**EXPIRED**' : `Expires <t:${Math.floor(new Date(k.expires_at).getTime() / 1000)}:R>`)
           : 'Permanent';
         return `\u2022 @${role?.name || k.role_id} \u2014 ${exp}`;
       }).join('\n')
@@ -1136,7 +1136,7 @@ async function showRequestsPanel(interaction, officeId) {
   const lines = requests.length > 0
     ? requests.map(r => {
         const status = { pending: '\u23F3', approved: '\u2705', denied: '\u274C', expired: '\u23F0', cancelled: '\u{1F6AB}' }[r.status] || '\u2753';
-        return `${status} **${r.requester_username || r.requester_discord_id}** \u2014 ${r.status} \u2014 ${new Date(r.requested_at).toLocaleString('en-GB', { timeZone: 'Europe/London' })}`;
+        return `${status} **${r.requester_username || r.requester_discord_id}** \u2014 ${r.status} \u2014 <t:${Math.floor(new Date(r.requested_at).getTime() / 1000)}:R>`;
       }).join('\n')
     : 'No access requests.';
 

@@ -38,7 +38,7 @@ export async function execute(interaction) {
         .setDescription('Your employment with Community Organisation has been terminated.')
         .addFields(
           { name: 'Reason', value: reason },
-          { name: 'Effective', value: new Date().toLocaleDateString('en-GB') }
+          { name: 'Effective', value: `<t:${Math.floor(Date.now() / 1000)}:F>` }
         )
         .setFooter({ text: 'Community Organisation' })
         .setTimestamp()

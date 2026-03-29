@@ -9,7 +9,7 @@ function generateReplyCode() {
 function buildEmailNotifEmbed(inbox, email, replies = []) {
   const from = email.headers?.from?.[0] || 'Unknown';
   const subject = email.headers?.subject?.[0] || '(no subject)';
-  const date = email.headers?.date?.[0] ? new Date(email.headers.date[0]).toLocaleString('en-GB') : '';
+  const date = email.headers?.date?.[0] ? `<t:${Math.floor(new Date(email.headers.date[0]).getTime() / 1000)}:R>` : '';
   const to = email.headers?.to?.[0] || '';
 
   const embed = new EmbedBuilder()
@@ -199,7 +199,7 @@ export async function pollPersonalInboxes(client) {
 
           const subject = email.headers?.subject?.[0] || '(no subject)';
           const from = email.headers?.from?.[0] || 'Unknown';
-          const date = email.headers?.date?.[0] ? new Date(email.headers.date[0]).toLocaleString('en-GB') : '';
+          const date = email.headers?.date?.[0] ? `<t:${Math.floor(new Date(email.headers.date[0]).getTime() / 1000)}:R>` : '';
           const to = email.headers?.to?.[0] || setup.co_email;
 
           // Fetch email body for content preview

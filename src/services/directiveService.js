@@ -213,7 +213,7 @@ export async function postDirectiveEmbed(client, data) {
       { name: 'Directive', value: (data.directive_text || '').slice(0, 1000), inline: false },
       { name: 'Purpose', value: PURPOSE_LABELS[data.purpose] || data.purpose || 'Not specified', inline: true },
       { name: 'Issued By', value: `${data.issued_by_sg} (SG) & ${data.issued_by_dsg} (DSG)`, inline: true },
-      { name: 'Issued At', value: new Date(data.issued_at).toLocaleString('en-GB'), inline: true },
+      { name: 'Issued At', value: `<t:${Math.floor(new Date(data.issued_at).getTime() / 1000)}:F>`, inline: true },
       { name: 'Status', value: '🟢 **ACTIVE**', inline: true },
       { name: 'Dispute Window', value: 'IAC have 2 hours to dispute from time of issue', inline: false },
     )

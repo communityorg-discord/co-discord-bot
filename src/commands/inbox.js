@@ -51,9 +51,8 @@ function buildEmailListEmbed(inbox, result, page) {
   const rows = emails.map((email) => {
     const from = email.headers.from?.[0] || 'Unknown';
     const subject = email.headers.subject?.[0] || '(no subject)';
-    const date = email.headers.date?.[0]
-      ? new Date(email.headers.date[0]).toLocaleDateString()
-      : '';
+    const dateRaw = email.headers.date?.[0] ? new Date(email.headers.date[0]) : null;
+    const date = dateRaw ? `<t:${Math.floor(dateRaw.getTime() / 1000)}:R>` : '';
     const uid = email.uid;
     return {
       label: subject.slice(0, 60),
@@ -171,7 +170,7 @@ async function showEmail(interaction, inbox, uid, discordUserId, discordRoleIds,
     const fromAddr = email.from?.address || '';
     const subject = email.subject || '';
     const fromName = email.from?.name || fromAddr;
-    const dateStr = email.date ? new Date(email.date).toLocaleString() : '';
+    const dateStr = email.date ? `<t:${Math.floor(new Date(email.date).getTime() / 1000)}:F>` : '';
     const body = email.textAsHtml || markdownToDiscord(email.text);
     const chunks = paginateText(body, 2000);
     const embed = new EmbedBuilder()

@@ -82,7 +82,7 @@ export async function handleSelect(interaction) {
         { name: 'Type', value: caseData.case_type, inline: true },
         { name: 'Status', value: caseData.status, inline: true },
         { name: 'Investigated', value: `<@${caseData.discord_id}> (${displayName})`, inline: false },
-        { name: 'Opened', value: new Date(caseData.created_at).toLocaleString(), inline: false }
+        { name: 'Opened', value: `<t:${Math.floor(new Date(caseData.created_at).getTime() / 1000)}:F>`, inline: false }
       )
       .setTimestamp();
 

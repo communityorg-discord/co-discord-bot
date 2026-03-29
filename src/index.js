@@ -1030,7 +1030,7 @@ client.on('interactionCreate', async interaction => {
 
       const exempts = getDmExemptions();
       const rows = exempts.map(e =>
-        `**${e.display_name || 'Unknown'}** — <@${e.discord_id}>\n   Added by: ${e.exempted_by} · ${new Date(e.created_at).toLocaleDateString('en-GB')}`
+        `**${e.display_name || 'Unknown'}** — <@${e.discord_id}>\n   Added by: ${e.exempted_by} · <t:${Math.floor(new Date(e.created_at).getTime()/1000)}:R>`
       );
 
       await interaction.update({
@@ -1056,7 +1056,7 @@ client.on('interactionCreate', async interaction => {
       const { getDmExemptions } = await import('./utils/botDb.js');
       const exempts = getDmExemptions();
       const rows = exempts.map(e =>
-        `**${e.display_name || 'Unknown'}** — <@${e.discord_id}>\n   Added by: ${e.exempted_by} · ${new Date(e.created_at).toLocaleDateString('en-GB')}`
+        `**${e.display_name || 'Unknown'}** — <@${e.discord_id}>\n   Added by: ${e.exempted_by} · <t:${Math.floor(new Date(e.created_at).getTime()/1000)}:R>`
       );
 
       await interaction.update({
@@ -1163,7 +1163,7 @@ client.on('interactionCreate', async interaction => {
 
       const exempts = getDmExemptions();
       const rows = exempts.map(e =>
-        `**${e.display_name || 'Unknown'}** — <@${e.discord_id}>\n   Added by: ${e.exempted_by} · ${new Date(e.created_at).toLocaleDateString('en-GB')}`
+        `**${e.display_name || 'Unknown'}** — <@${e.discord_id}>\n   Added by: ${e.exempted_by} · <t:${Math.floor(new Date(e.created_at).getTime()/1000)}:R>`
       );
 
       await interaction.update({
@@ -1203,7 +1203,7 @@ client.on('interactionCreate', async interaction => {
 
       const exempts = getDmExemptions();
       const rows = exempts.map(e =>
-        `**${e.display_name || 'Unknown'}** — <@${e.discord_id}>\n   Added by: ${e.exempted_by} · ${new Date(e.created_at).toLocaleDateString('en-GB')}`
+        `**${e.display_name || 'Unknown'}** — <@${e.discord_id}>\n   Added by: ${e.exempted_by} · <t:${Math.floor(new Date(e.created_at).getTime()/1000)}:R>`
       );
 
       await interaction.update({
@@ -1858,7 +1858,7 @@ webhookApp.post('/bot/assignment-extension', async (req, res) => {
         const { buildAssignmentEmbed: buildEmbed, buildAssignmentButtons } = await import('./commands/assign.js');
         const embed = buildEmbed(updated, null, null, {
           assignmentNumber: `ASN-${bot_assignment_id}`,
-          extensionNote: `Extended — Performance Adjustment approved by ${approved_by || 'admin'}. New due date: ${new Date(new_due_date).toLocaleDateString('en-GB')}`,
+          extensionNote: `Extended — Performance Adjustment approved by ${approved_by || 'admin'}. New due date: <t:${Math.floor(new Date(new_due_date).getTime()/1000)}:D>`,
         });
         const buttons = buildAssignmentButtons ? buildAssignmentButtons(bot_assignment_id, updated.status) : [];
         await msg.edit({ embeds: [embed], components: buttons });
@@ -1871,7 +1871,7 @@ webhookApp.post('/bot/assignment-extension', async (req, res) => {
       await user.send({ embeds: [new EmbedBuilder()
         .setTitle('📅 Task Deadline Extended')
         .setColor(0x22C55E)
-        .setDescription(`Your task deadline for **"${assignment.title}"** has been extended to **${new Date(new_due_date).toLocaleDateString('en-GB')}** following an approved performance adjustment.`)
+        .setDescription(`Your task deadline for **"${assignment.title}"** has been extended to **<t:${Math.floor(new Date(new_due_date).getTime()/1000)}:F>** following an approved performance adjustment.`)
         .setFooter({ text: 'Community Organisation | Staff Assistant' })
         .setTimestamp()
       ]});
@@ -1882,7 +1882,7 @@ webhookApp.post('/bot/assignment-extension', async (req, res) => {
       const { getUserByDiscordId: getUser } = await import('./db.js');
       const assigneeName = getUser(assignment.assigned_to)?.display_name || assignment.assigned_to;
       const assigner = await client.users.fetch(assignment.assigned_by);
-      await assigner.send({ content: `📅 **${assigneeName}**'s task deadline for "${assignment.title}" has been extended to **${new Date(new_due_date).toLocaleDateString('en-GB')}** — performance adjustment approved by ${approved_by || 'admin'}.` });
+      await assigner.send({ content: `📅 **${assigneeName}**'s task deadline for "${assignment.title}" has been extended to **<t:${Math.floor(new Date(new_due_date).getTime()/1000)}:F>** — performance adjustment approved by ${approved_by || 'admin'}.` });
     } catch {}
 
     res.json({ ok: true });

@@ -24,7 +24,7 @@ function buildInfractionsPage(infractions, page, total, target, includeDeleted, 
     const descLines = pageItems.map(i => {
       const exp = i.expires_at ? ` ⏱ <t:${Math.floor(new Date(i.expires_at).getTime()/1000)}:R>` : '';
       const active = i.active === 0 ? ' ~~(deleted)~~' : '';
-      return `**#${i.id}** \`${i.type}\`${exp}${active} — ${i.reason}\n*By ${i.moderator_name || 'Unknown'} on ${new Date(i.created_at).toLocaleDateString('en-GB')}*`;
+      return `**#${i.id}** \`${i.type}\`${exp}${active} — ${i.reason}\n*By ${i.moderator_name || 'Unknown'} <t:${Math.floor(new Date(i.created_at).getTime()/1000)}:R>*`;
     });
     let description = descLines.join('\n\n');
     if (description.length > 4096) description = description.substring(0, 4090) + '...';

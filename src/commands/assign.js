@@ -78,13 +78,13 @@ function getWeekKey(ts = Date.now()) {
 }
 
 function formatDate(d) {
-  const date = new Date(d);
-  return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
-    ' at ' + date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const ts = Math.floor(new Date(d).getTime() / 1000);
+  return `<t:${ts}:F>`;
 }
 
 function formatDateShort(d) {
-  return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const ts = Math.floor(new Date(d).getTime() / 1000);
+  return `<t:${ts}:d>`;
 }
 
 const STATUS_COLOURS = {

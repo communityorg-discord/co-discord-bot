@@ -103,7 +103,7 @@ export async function execute(interaction) {
         { name: '📈 Projected', value: projected !== null ? String(projected) : 'N/A', inline: true },
         { name: '🏆 Last Week', value: lastWeekCount > 0 ? `${lastWeekCount} — ${gradeEmoji(lastWeekGrade)} ${lastWeekGrade?.toUpperCase()}` : 'No data', inline: true },
         { name: 'Overall Grade', value: `${gradeEmoji(lastWeekGrade)} ${(lastWeekGrade || 'N/A').toUpperCase()}`, inline: true },
-        { name: 'Last Submitted', value: brag?.submitted_at ? new Date(brag.submitted_at).toLocaleDateString('en-GB') : 'No reports', inline: true },
+        { name: 'Last Submitted', value: brag?.submitted_at ? `<t:${Math.floor(new Date(brag.submitted_at).getTime() / 1000)}:R>` : 'No reports', inline: true },
         { name: 'Tasks Rating', value: brag?.tasks_self_rating || 'N/A', inline: true },
         { name: 'Notes', value: brag?.additional_comments || brag?.tasks_notes || 'No notes', inline: false }
       )

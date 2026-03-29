@@ -36,7 +36,11 @@ export async function execute(interaction) {
   if (pending.length > 0) {
     embed.addFields({
       name: 'Pending Leave Requests',
-      value: pending.map(r => `• ${r.leave_type || r.type} — ${r.start_date} to ${r.end_date}`).join('\n'),
+      value: pending.map(r => {
+        const startTs = Math.floor(new Date(r.start_date).getTime() / 1000);
+        const endTs = Math.floor(new Date(r.end_date).getTime() / 1000);
+        return `• ${r.leave_type || r.type} — <t:${startTs}:D> to <t:${endTs}:D>`;
+      }).join('\n'),
       inline: false
     });
   }

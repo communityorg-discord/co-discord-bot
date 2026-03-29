@@ -27,7 +27,7 @@ export async function execute(interaction) {
 
       const rows = exempts.map(e =>
         `**${e.display_name || 'Unknown'}** — <@${e.discord_id}>\n` +
-        `   Added by: ${e.exempted_by} · ${new Date(e.created_at).toLocaleDateString('en-GB')}`
+        `   Added by: ${e.exempted_by} · <t:${Math.floor(new Date(e.created_at).getTime() / 1000)}:R>`
       );
 
       return new EmbedBuilder()
