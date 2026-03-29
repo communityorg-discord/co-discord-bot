@@ -38,7 +38,7 @@ export const POSITIONS = {
   "Bot Developer": ["Bot Developer","Authorisation Level 7"],
 };
 
-export const ALL_MANAGED_ROLES = [...new Set(Object.values(POSITIONS).flat())];
+export const ALL_MANAGED_ROLES = [...new Set([...Object.values(POSITIONS).flat(), 'Verified', 'CO | Staff', 'CO Staff'])];
 
 export function getAuthLevelRole(level) {
   return `Authorisation Level ${level}`;

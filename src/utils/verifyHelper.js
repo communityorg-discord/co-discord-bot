@@ -93,16 +93,14 @@ export async function applyVerification(client, discordId, position, nickname, {
         }
       }
 
-      // In Staff HQ, also remove Unverified role if it exists (user just got verified)
-      if (guildId === STAFF_HQ_ID) {
-        const unverifiedRole = guild.roles.cache.find(r => r.name === 'Unverified');
-        if (unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
-          try {
-            await member.roles.remove(unverifiedRole);
-            guildResult.rolesRemoved.push('Unverified');
-          } catch (e) {
-            guildResult.rolesRemoveFailed.push('Unverified');
-          }
+      // Remove Unverified role in all guilds (user just got verified)
+      const unverifiedRole = guild.roles.cache.find(r => r.name === 'Unverified');
+      if (unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
+        try {
+          await member.roles.remove(unverifiedRole);
+          guildResult.rolesRemoved.push('Unverified');
+        } catch (e) {
+          guildResult.rolesRemoveFailed.push('Unverified');
         }
       }
 
@@ -171,21 +169,14 @@ export async function stripVerification(client, discordId, username) {
         }
       }
 
-      // In Staff HQ, also add Unverified role (they've been unverified)
-      if (guildId === STAFF_HQ_ID) {
-        let unverifiedRole = guild.roles.cache.find(r => r.name === 'Unverified');
-        if (!unverifiedRole) {
-          unverifiedRole = await guild.roles.create({
-            name: 'Unverified',
-            color: 0x808080,
-            reason: 'Auto-created: unverified role'
-          });
-        }
+      // Add Unverified role in all guilds (they've been unverified)
+      let unverifiedRole = guild.roles.cache.find(r => r.name === 'Unverified');
+      if (unverifiedRole) {
         try {
           await member.roles.add(unverifiedRole);
-          guildResult.rolesAdded.push('Unverified');
+          guildResult.rolesRemoved.push('Unverified (added)');
         } catch (e) {
-          guildResult.rolesAddFailed.push('Unverified');
+          guildResult.rolesRemoveFailed.push('Unverified');
         }
       }
 
