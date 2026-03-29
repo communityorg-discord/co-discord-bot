@@ -62,6 +62,7 @@ import { automod } from './services/automod.js';
 import { handleInteraction as automodPanelHandler } from './services/automodPanels.js';
 import * as officeSetup from './commands/officeSetup.js';
 import * as counting from './commands/counting.js';
+import * as forceVerify from './commands/forceVerify.js';
 import { handleButton as officeButton, handleSelect as officeSelect, handleModal as officeModal, handleWaitingRoomJoin, enforceOfficeRestrictions, getOfficeByChannel, getWaitingRoomOffice, processExpiredKeys, refreshOfficePanels } from './services/officeManager.js';
 
 config();
@@ -88,7 +89,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }

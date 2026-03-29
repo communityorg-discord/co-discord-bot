@@ -6,7 +6,7 @@ import { logAction } from '../utils/logger.js';
 import fetch from 'node-fetch';
 
 const ASSIGNMENTS_CHANNEL_ID = '1487630065008115824';
-const SUPERUSER_IDS = ['723199054514749450', '415922272956710912'];
+const SUPERUSER_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563'];
 
 const MANAGER_POSITIONS = [
   'Line Manager', 'Supervisor', 'Director', 'Secretary-General',
