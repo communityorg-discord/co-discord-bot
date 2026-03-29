@@ -223,8 +223,17 @@ export class AutoMod {
     const newHasAdmin = ADMIN_PERMS.some(p => newMember.permissions.has(p));
 
     if (!oldHasAdmin && newHasAdmin) {
+      // Check if change was made by the bot itself (e.g. verification role assignment)
+      try {
+        const audit = await newMember.guild.fetchAuditLogs({ type: AuditLogEvent.MemberRoleUpdate, limit: 1 }).catch(() => null);
+        const entry = audit?.entries.first();
+        if (entry?.executor?.id === this.client?.user?.id) return; // Bot made the change — skip
+        if (entry?.executor?.bot) return; // Another bot made the change — skip
+      } catch {}
+
+      // Exempt portal staff with auth 7+ (they're supposed to have admin via Auth Level 7 role)
       const portalUser = getUserByDiscordId(newMember.id);
-      if (portalUser && (portalUser.auth_level || 0) >= 99) return;
+      if (portalUser && (portalUser.auth_level || 0) >= 7) return;
 
       await this.quarantineUser(newMember.guild, newMember, 'Unauthorised admin permissions detected');
       this.logIncident(newMember.guild.id, 'unauthorised_permissions', newMember.id, newMember.user.tag, 'critical', 'quarantine', 'Admin permissions granted without authorisation');

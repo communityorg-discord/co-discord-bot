@@ -166,6 +166,7 @@ export async function execute(interaction) {
           let msgs = [...fetched.values()];
           if (targetUser) msgs = msgs.filter(m => m.author.id === targetUser.id);
           if (botsOnly) msgs = msgs.filter(m => m.author.bot);
+          msgs = msgs.filter(m => !m.pinned); // Never delete pinned messages
           const deletable = msgs.filter(m => Date.now() - m.createdTimestamp < 14 * 24 * 60 * 60 * 1000);
           if (deletable.length > 1) {
             const result = await ch.bulkDelete(deletable, true).catch(() => null);
@@ -210,6 +211,7 @@ export async function execute(interaction) {
 
     if (targetUser) messages = messages.filter(m => m.author.id === targetUser.id);
     if (botsOnly) messages = messages.filter(m => m.author.bot);
+    messages = messages.filter(m => !m.pinned); // Never delete pinned messages
     messages = messages.slice(0, amount);
 
     if (messages.length === 0) {
