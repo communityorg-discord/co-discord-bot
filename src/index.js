@@ -64,6 +64,7 @@ import * as officeSetup from './commands/officeSetup.js';
 import * as counting from './commands/counting.js';
 import * as forceVerify from './commands/forceVerify.js';
 import * as gnick from './commands/gnick.js';
+import * as record from './commands/record.js';
 import { handleButton as officeButton, handleSelect as officeSelect, handleModal as officeModal, handleWaitingRoomJoin, enforceOfficeRestrictions, getOfficeByChannel, getWaitingRoomOffice, processExpiredKeys, refreshOfficePanels } from './services/officeManager.js';
 
 config();
@@ -90,7 +91,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -120,7 +121,6 @@ async function setupEmailNotificationChannels(client) {
       { inboxId: 'ic', name: 'ic-inbox' },
       { inboxId: 'dgacm', name: 'dgacm-inbox' },
       { inboxId: 'dcos', name: 'dcos-inbox' },
-      { inboxId: 'audit_vault', name: 'audit-vault-inbox' },
     ];
 
     const { default: db } = await import('./utils/botDb.js');
@@ -748,6 +748,17 @@ client.once('ready', async () => {
     try { await processExpiredKeys(client); } catch (e) { console.error('[Office Key Expiry]', e.message); }
   }, 5 * 60 * 1000);
   console.log('[Office Key Expiry] Started — checking every 5 minutes');
+
+  // Recording cleanup — delete expired recordings daily at 3am
+  setInterval(async () => {
+    try {
+      const { cleanupExpiredRecordings } = await import('./services/recordingService.js');
+      await cleanupExpiredRecordings();
+    } catch (e) { console.error('[Recording Cleanup]', e.message); }
+  }, 24 * 60 * 60 * 1000);
+  // Also run once on startup
+  import('./services/recordingService.js').then(m => m.cleanupExpiredRecordings()).catch(() => {});
+  console.log('[Recording Cleanup] Started — checking daily');
 });
 
 const COMMAND_CHANNEL_ID = '1487636502593798255';

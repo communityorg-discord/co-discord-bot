@@ -991,4 +991,34 @@ db.exec(`CREATE TABLE IF NOT EXISTS brag_message_counts (
 db.exec(`CREATE INDEX IF NOT EXISTS idx_brag_counts_week ON brag_message_counts(week_key, discord_id)`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_brag_counts_discord ON brag_message_counts(discord_id, week_key)`);
 
+// Voice recordings
+db.exec(`CREATE TABLE IF NOT EXISTS recordings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  recording_key TEXT UNIQUE NOT NULL,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  channel_name TEXT,
+  started_by TEXT NOT NULL,
+  started_by_username TEXT,
+  started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  ended_at DATETIME,
+  duration_seconds INTEGER,
+  status TEXT DEFAULT 'recording' CHECK(status IN ('recording','processing','ready','deleted')),
+  file_path TEXT,
+  participant_count INTEGER DEFAULT 0,
+  expires_at DATETIME,
+  download_notified INTEGER DEFAULT 0
+)`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS recording_participants (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  recording_id INTEGER NOT NULL REFERENCES recordings(id),
+  discord_id TEXT NOT NULL,
+  username TEXT,
+  file_path TEXT,
+  joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  left_at DATETIME,
+  UNIQUE(recording_id, discord_id)
+)`);
+
 export { db };
