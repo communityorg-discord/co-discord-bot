@@ -642,9 +642,9 @@ client.once('ready', async () => {
       const weekKey = getBragWeekKey();
 
       const rows = portalDb.prepare(`
-        SELECT br.discord_id, br.message_count as total, u.display_name, u.full_name
+        SELECT br.discord_id, br.message_count as total, u.display_name, u.full_name, u.position
         FROM brag_records br
-        LEFT JOIN users u ON u.discord_id = br.discord_id
+        INNER JOIN users u ON u.discord_id = br.discord_id AND lower(u.account_status) = 'active'
         WHERE br.week_key = ? AND br.message_count > 0
         ORDER BY br.message_count DESC
         LIMIT 20
@@ -652,10 +652,12 @@ client.once('ready', async () => {
 
       if (rows.length === 0) return;
 
+      const totalStaff = portalDb.prepare("SELECT COUNT(*) as c FROM users WHERE lower(account_status) = 'active' AND discord_id IS NOT NULL AND discord_id != ''").get();
       const totalAll = rows.reduce((s, r) => s + r.total, 0);
       const lines = rows.map((r, i) => {
         const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `**${i + 1}.**`;
-        return `${medal} <@${r.discord_id}> — **${r.total}** messages`;
+        const name = r.display_name || r.full_name || `<@${r.discord_id}>`;
+        return `${medal} ${name} — **${r.total}** messages`;
       });
 
       const ch = await client.channels.fetch(LEADERBOARD_CH).catch(() => null);
@@ -664,14 +666,14 @@ client.once('ready', async () => {
       await ch.send({
         embeds: [new EmbedBuilder()
           .setColor(0x5865F2)
-          .setTitle('📊 Message Count Leaderboard')
+          .setTitle('📊 Staff Message Leaderboard')
           .setDescription(lines.join('\n'))
           .addFields(
             { name: 'Week', value: weekKey, inline: true },
-            { name: 'Total Messages', value: String(totalAll), inline: true },
-            { name: 'Tracked Users', value: String(rows.length), inline: true },
+            { name: 'Total Staff Messages', value: String(totalAll), inline: true },
+            { name: 'Active Staff', value: `${rows.length}/${totalStaff?.c || '?'} tracked`, inline: true },
           )
-          .setFooter({ text: 'Resets every Monday | Updates every 4 hours' })
+          .setFooter({ text: 'Staff only | Resets every Monday | Updates every 4 hours' })
           .setTimestamp()
         ]
       });
@@ -1323,9 +1325,13 @@ client.on('messageCreate', async (message) => {
 
   try { await automod.checkMessage(message); } catch (e) { console.error('[AutoMod messageCreate]', e.message); }
 
-  // BRAG message counting — track per user per guild per week
+  // BRAG message counting — only track staff members (users in the portal)
   if (!message.author.bot && message.guild && !message.system) {
     try {
+      const { getUserByDiscordId: getUser } = await import('./db.js');
+      const staffUser = getUser(message.author.id);
+      if (!staffUser) return; // Not a staff member — don't track
+
       const { db: botDatabase } = await import('./utils/botDb.js');
       const weekKey = getBragWeekKey();
       botDatabase.prepare(`
