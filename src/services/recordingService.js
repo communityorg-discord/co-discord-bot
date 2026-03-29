@@ -1,13 +1,65 @@
-import { EndBehaviorType, VoiceConnectionStatus, entersState, joinVoiceChannel } from '@discordjs/voice';
-import { createWriteStream, mkdirSync, existsSync } from 'fs';
+import { EndBehaviorType, VoiceConnectionStatus, entersState, joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, StreamType } from '@discordjs/voice';
+import { createWriteStream, mkdirSync, existsSync, unlinkSync } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
 import { db } from '../utils/botDb.js';
 import OpusScript from 'opusscript';
+import gtts from 'gtts';
 
 const RECORDINGS_DIR = '/home/vpcommunityorganisation/clawd/recordings';
 
 // Active recordings: guildId → { connection, receiver, activeStreams, recordingId, ... }
 const activeRecordings = new Map();
+
+async function speakRecordingNotice(connection, voiceChannel) {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Europe/London' });
+  const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
+
+  await voiceChannel.guild.members.fetch();
+  const presentMembers = voiceChannel.members
+    .filter(m => !m.user.bot)
+    .map(m => m.displayName || m.user.username);
+  const presentList = presentMembers.length > 0 ? presentMembers.join(', ') : 'no members detected';
+
+  const script = [
+    'This voice channel is now being recorded, in line with the Community Organisation Internal Staff Policy.',
+    `The date is ${dateStr}.`,
+    `The time is ${timeStr}.`,
+    `The following members are present: ${presentList}.`,
+    'For the records, could the Chair please state the Case Number before beginning the meeting.',
+  ].join(' ');
+
+  const tmpFile = join(tmpdir(), `co_recording_notice_${Date.now()}.mp3`);
+
+  await new Promise((resolve, reject) => {
+    const tts = new gtts(script, 'en-gb');
+    tts.save(tmpFile, (err) => err ? reject(err) : resolve());
+  });
+
+  const player = createAudioPlayer();
+  const resource = createAudioResource(tmpFile, { inputType: StreamType.Arbitrary });
+  connection.subscribe(player);
+  player.play(resource);
+
+  await new Promise((resolve) => {
+    player.on(AudioPlayerStatus.Idle, () => {
+      try { if (existsSync(tmpFile)) unlinkSync(tmpFile); } catch {}
+      resolve();
+    });
+    player.on('error', (e) => {
+      console.error('[Recording Notice] TTS error:', e.message);
+      try { if (existsSync(tmpFile)) unlinkSync(tmpFile); } catch {}
+      resolve();
+    });
+    setTimeout(() => {
+      try { if (existsSync(tmpFile)) unlinkSync(tmpFile); } catch {}
+      resolve();
+    }, 60000);
+  });
+
+  console.log('[Recording] Notice spoken');
+}
 
 export async function startRecording(channel, startedBy) {
   if (activeRecordings.has(channel.guild.id)) {
@@ -27,10 +79,17 @@ export async function startRecording(channel, startedBy) {
     guildId: channel.guild.id,
     adapterCreator: channel.guild.voiceAdapterCreator,
     selfDeaf: false,
-    selfMute: true,
+    selfMute: false,
   });
 
   await entersState(connection, VoiceConnectionStatus.Ready, 20000);
+
+  // Speak the formal recording notice before capturing begins
+  try {
+    await speakRecordingNotice(connection, channel);
+  } catch (e) {
+    console.error('[Recording] Could not speak notice:', e.message);
+  }
 
   const result = db.prepare(`
     INSERT INTO recordings (recording_key, guild_id, channel_id, channel_name, started_by, started_by_username, expires_at, access_code)
