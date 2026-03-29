@@ -58,16 +58,30 @@ export function getAllowlist(officeId) {
   return db.prepare('SELECT * FROM office_allowlist WHERE office_id = ? ORDER BY added_at').all(officeId);
 }
 
-export function addToAllowlist(officeId, discordId, addedBy) {
-  return db.prepare('INSERT OR IGNORE INTO office_allowlist (office_id, discord_id, added_by) VALUES (?, ?, ?)').run(officeId, discordId, addedBy);
+export function addToAllowlist(officeId, discordId, addedBy, entryType = 'user') {
+  return db.prepare('INSERT OR IGNORE INTO office_allowlist (office_id, discord_id, added_by, entry_type) VALUES (?, ?, ?, ?)').run(officeId, discordId, addedBy, entryType);
 }
 
 export function removeFromAllowlist(officeId, discordId) {
   return db.prepare('DELETE FROM office_allowlist WHERE office_id = ? AND discord_id = ?').run(officeId, discordId);
 }
 
-export function isOnAllowlist(officeId, discordId) {
-  return !!db.prepare('SELECT id FROM office_allowlist WHERE office_id = ? AND discord_id = ?').get(officeId, discordId);
+const SUPERUSER_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563'];
+
+export function isOnAllowlist(officeId, member) {
+  // Superusers always have access
+  if (SUPERUSER_IDS.includes(member.id || member)) return true;
+  const discordId = member.id || member;
+  // Direct user allowlist
+  if (db.prepare("SELECT id FROM office_allowlist WHERE office_id = ? AND discord_id = ? AND entry_type = 'user'").get(officeId, discordId)) return true;
+  // Role-based allowlist
+  if (member.roles?.cache) {
+    const roleEntries = db.prepare("SELECT discord_id FROM office_allowlist WHERE office_id = ? AND entry_type = 'role'").all(officeId);
+    for (const entry of roleEntries) {
+      if (member.roles.cache.has(entry.discord_id)) return true;
+    }
+  }
+  return false;
 }
 
 // Keys
@@ -289,10 +303,15 @@ export async function applyRestriction(guild, office) {
       }
     }
 
-    // Re-apply allowlist overwrites
+    // Re-apply allowlist overwrites (users and roles)
     const allowlist = getAllowlist(office.id);
     for (const entry of allowlist) {
       await vc.permissionOverwrites.edit(entry.discord_id, { Connect: true }).catch(() => {});
+    }
+
+    // Superusers always get access
+    for (const suId of SUPERUSER_IDS) {
+      await vc.permissionOverwrites.edit(suId, { Connect: true }).catch(() => {});
     }
 
     // Owner always gets access
@@ -450,6 +469,9 @@ export async function enforceOfficeRestrictions(client, voiceState, office) {
   const member = voiceState.member;
   const guild = voiceState.guild;
 
+  // Superusers always have access to any office
+  if (SUPERUSER_IDS.includes(member.id)) return;
+
   // Owner always has access
   if (member.id === office.owner_discord_id) return;
 
@@ -461,8 +483,8 @@ export async function enforceOfficeRestrictions(client, voiceState, office) {
     if (hasKey) return;
   }
 
-  // Check allowlist
-  const onAllowlist = isOnAllowlist(office.id, member.id);
+  // Check allowlist (supports both user and role entries)
+  const onAllowlist = isOnAllowlist(office.id, member);
 
   if (office.is_owner_only) {
     if (!onAllowlist) {
@@ -621,10 +643,10 @@ export async function handleButton(interaction, client) {
     const officeId = parseInt(id.replace('office_addallow_', ''));
     const modal = new ModalBuilder()
       .setCustomId(`office_addallow_modal_${officeId}`)
-      .setTitle('Add User to Allowlist')
+      .setTitle('Add User or Role to Allowlist')
       .addComponents(
         new ActionRowBuilder().addComponents(
-          new TextInputBuilder().setCustomId('user_input').setLabel('User ID or Mention').setStyle(TextInputStyle.Short).setPlaceholder('@user or 123456789').setRequired(true)
+          new TextInputBuilder().setCustomId('user_input').setLabel('User ID, Role ID, or Mention').setStyle(TextInputStyle.Short).setPlaceholder('@user, @role, or ID').setRequired(true)
         )
       );
     return interaction.showModal(modal);
@@ -826,43 +848,56 @@ export async function handleModal(interaction, client) {
     return showKeysPanel(interaction, officeId, true);
   }
 
-  // Add allowlist modal
+  // Add allowlist modal — supports users and roles
   if (id.startsWith('office_addallow_modal_')) {
     const officeId = parseInt(id.replace('office_addallow_modal_', ''));
     await interaction.deferUpdate();
-    const userInput = interaction.fields.getTextInputValue('user_input').trim();
+    const rawInput = interaction.fields.getTextInputValue('user_input').trim();
     const guild = interaction.guild;
 
-    const userId = userInput.replace(/<@!?/g, '').replace(/>/g, '').trim();
+    // Strip mention formatting
+    const cleanId = rawInput.replace(/<@[!&]?/g, '').replace(/>/g, '').trim();
 
-    const member = await guild.members.fetch(userId).catch(() => null);
-    if (!member) {
-      return interaction.followUp({ content: '\u274C User not found in this server.', ephemeral: true });
+    // Try as role first
+    const role = guild.roles.cache.get(cleanId);
+    if (role) {
+      addToAllowlist(officeId, role.id, interaction.user.id, 'role');
+      const office = getOffice(officeId);
+      if (office) {
+        const vc = guild.channels.cache.get(office.channel_id);
+        if (vc) await vc.permissionOverwrites.edit(role.id, { Connect: true }).catch(() => {});
+      }
+      await refreshOfficePanels(client, guild.id);
+      await logAction(client, {
+        action: '\u{1F465} Office Allowlist Updated',
+        moderator: { discordId: interaction.user.id, name: interaction.user.tag },
+        target: { discordId: role.id, name: `@${role.name}` },
+        reason: `Role added to allowlist for ${office.channel_name}`,
+        color: 0x22C55E, logType: 'moderation.office', guildId: guild.id
+      });
+      return showAllowlistPanel(interaction, officeId, true);
     }
 
-    addToAllowlist(officeId, member.id, interaction.user.id);
+    // Try as user
+    const member = await guild.members.fetch(cleanId).catch(() => null);
+    if (!member) {
+      return interaction.followUp({ content: '\u274C User or role not found in this server.', ephemeral: true });
+    }
 
-    // Apply channel permission
+    addToAllowlist(officeId, member.id, interaction.user.id, 'user');
     const office = getOffice(officeId);
     if (office) {
       const vc = guild.channels.cache.get(office.channel_id);
-      if (vc) {
-        await vc.permissionOverwrites.edit(member.id, { Connect: true }).catch(() => {});
-      }
+      if (vc) await vc.permissionOverwrites.edit(member.id, { Connect: true }).catch(() => {});
     }
-
     await refreshOfficePanels(client, guild.id);
-
     await logAction(client, {
       action: '\u{1F465} Office Allowlist Updated',
       moderator: { discordId: interaction.user.id, name: interaction.user.tag },
       target: { discordId: member.id, name: member.user.tag },
       reason: `Added to allowlist for ${office.channel_name}`,
-      color: 0x22C55E,
-      logType: 'moderation.office',
-      guildId: guild.id
+      color: 0x22C55E, logType: 'moderation.office', guildId: guild.id
     });
-
     return showAllowlistPanel(interaction, officeId, true);
   }
 }
@@ -1031,8 +1066,11 @@ async function showAllowlistPanel(interaction, officeId, isFollowUp = false) {
   const allowlist = getAllowlist(officeId);
 
   const lines = allowlist.length > 0
-    ? allowlist.map(a => `\u2022 <@${a.discord_id}> \u2014 Added by <@${a.added_by}>`).join('\n')
-    : 'No users on the allowlist.';
+    ? allowlist.map(a => {
+        const prefix = a.entry_type === 'role' ? `<@&${a.discord_id}>` : `<@${a.discord_id}>`;
+        return `\u2022 ${prefix} \u2014 Added by <@${a.added_by}>`;
+      }).join('\n')
+    : 'No users or roles on the allowlist.';
 
   const embed = new EmbedBuilder()
     .setTitle(`\u{1F465} Allowlist \u2014 ${office.channel_name}`)
@@ -1040,7 +1078,7 @@ async function showAllowlistPanel(interaction, officeId, isFollowUp = false) {
     .setDescription(lines);
 
   const buttons = [
-    new ButtonBuilder().setCustomId(`office_addallow_${officeId}`).setLabel('\u2795 Add User').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`office_addallow_${officeId}`).setLabel('\u2795 Add User/Role').setStyle(ButtonStyle.Success),
   ];
 
   for (const a of allowlist.slice(0, 4)) {

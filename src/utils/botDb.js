@@ -922,9 +922,13 @@ db.exec(`CREATE TABLE IF NOT EXISTS office_allowlist (
   office_id INTEGER NOT NULL REFERENCES offices(id) ON DELETE CASCADE,
   discord_id TEXT NOT NULL,
   added_by TEXT NOT NULL,
+  entry_type TEXT DEFAULT 'user',
   added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(office_id, discord_id)
 )`);
+
+// Migration: add entry_type column if missing
+try { db.exec("ALTER TABLE office_allowlist ADD COLUMN entry_type TEXT DEFAULT 'user'"); } catch (e) { /* already exists */ }
 
 db.exec(`CREATE TABLE IF NOT EXISTS office_keys (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
