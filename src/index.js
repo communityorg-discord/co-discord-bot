@@ -94,7 +94,7 @@ for (const cmd of commands) {
 
 async function setupEmailNotificationChannels(client) {
   try {
-    const guild = await client.guilds.fetch('1485422910972760176').catch(() => null);
+    const guild = await client.guilds.fetch('1357119461957570570').catch(() => null);
     if (!guild) { console.error('[Email Channels] Guild not found'); return; }
 
     let category = guild.channels.cache.find(c => c.name === '📧 Team Inboxes' && c.type === 4);
