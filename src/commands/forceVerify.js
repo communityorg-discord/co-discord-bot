@@ -1,8 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { applyVerification } from '../utils/verifyHelper.js';
+import { applyVerification, getPortalUser } from '../utils/verifyHelper.js';
 import { POSITIONS } from '../utils/positions.js';
 import { db } from '../utils/botDb.js';
-import { getUserByDiscordId } from '../db.js';
 import { logAction } from '../utils/logger.js';
 import { VERIFY_UNVERIFY_LOG_CHANNEL_ID } from '../config.js';
 
@@ -10,15 +9,10 @@ const SUPERUSER_IDS = ['723199054514749450', '415922272956710912', '101348618989
 
 export const data = new SlashCommandBuilder()
   .setName('force-verify')
-  .setDescription('Force verify a user as a specific position (superuser only)')
+  .setDescription('Force verify a user using their portal record (superuser only)')
   .addUserOption(opt =>
     opt.setName('user')
       .setDescription('The user to force verify')
-      .setRequired(true)
-  )
-  .addStringOption(opt =>
-    opt.setName('position')
-      .setDescription('Their position e.g. Secretary-General')
       .setRequired(true)
   )
   .addStringOption(opt =>
@@ -35,11 +29,18 @@ export async function execute(interaction) {
   }
 
   const targetUser = interaction.options.getUser('user');
-  const position = interaction.options.getString('position');
   const nickname = interaction.options.getString('nickname');
 
   // Look up portal record
-  const portalUser = getUserByDiscordId(targetUser.id);
+  const portalUser = await getPortalUser(targetUser.id);
+  if (!portalUser) {
+    return interaction.editReply({ content: `❌ <@${targetUser.id}> is not found in the CO Staff Portal. They must be an active staff member to verify.` });
+  }
+
+  const position = portalUser.position;
+  if (!position || !POSITIONS[position]) {
+    return interaction.editReply({ content: `❌ Position **${position || 'Unknown'}** is not recognised in the roles system. Please check their portal record.` });
+  }
 
   // Apply verification across all guilds
   const results = await applyVerification(
@@ -56,9 +57,9 @@ export async function execute(interaction) {
     VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `).run(
     targetUser.id,
-    portalUser?.id || null,
+    portalUser.id || null,
     position,
-    portalUser?.employee_number || 'N/A',
+    portalUser.employee_number || 'N/A',
     nickname
   );
 
