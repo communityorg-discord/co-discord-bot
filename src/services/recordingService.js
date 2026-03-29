@@ -20,6 +20,8 @@ export async function startRecording(channel, startedBy) {
   const recordingDir = join(RECORDINGS_DIR, recordingKey);
   mkdirSync(recordingDir, { recursive: true });
 
+  const accessCode = Math.floor(100000 + Math.random() * 900000).toString();
+
   const connection = joinVoiceChannel({
     channelId: channel.id,
     guildId: channel.guild.id,
@@ -31,9 +33,9 @@ export async function startRecording(channel, startedBy) {
   await entersState(connection, VoiceConnectionStatus.Ready, 20000);
 
   const result = db.prepare(`
-    INSERT INTO recordings (recording_key, guild_id, channel_id, channel_name, started_by, started_by_username, expires_at)
-    VALUES (?, ?, ?, ?, ?, ?, datetime('now', '+7 days'))
-  `).run(recordingKey, channel.guild.id, channel.id, channel.name, startedBy.id, startedBy.tag);
+    INSERT INTO recordings (recording_key, guild_id, channel_id, channel_name, started_by, started_by_username, expires_at, access_code)
+    VALUES (?, ?, ?, ?, ?, ?, datetime('now', '+7 days'), ?)
+  `).run(recordingKey, channel.guild.id, channel.id, channel.name, startedBy.id, startedBy.tag, accessCode);
 
   const recordingId = result.lastInsertRowid;
   const receiver = connection.receiver;
@@ -78,7 +80,7 @@ export async function startRecording(channel, startedBy) {
     connection, receiver, activeStreams, recordingId, recordingKey, recordingDir, startedBy, channelName: channel.name, channel
   });
 
-  return { recordingId, recordingKey };
+  return { recordingId, recordingKey, accessCode };
 }
 
 export async function stopRecording(guildId) {

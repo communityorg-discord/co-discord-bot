@@ -45,7 +45,7 @@ export async function execute(interaction) {
     }
 
     try {
-      const { recordingId, recordingKey } = await startRecording(voiceChannel, interaction.user);
+      const { recordingId, recordingKey, accessCode } = await startRecording(voiceChannel, interaction.user);
 
       const startTs = Math.floor(Date.now() / 1000);
 
@@ -56,11 +56,13 @@ export async function execute(interaction) {
           .setTitle('🔴 Recording Started')
           .setDescription(`Recording is now active in **${voiceChannel.name}**.`)
           .addFields(
+            { name: '🔑 Access Code', value: `**${accessCode}**`, inline: true },
             { name: 'Recording ID', value: `\`${recordingKey}\``, inline: true },
             { name: 'Started', value: `<t:${startTs}:F>`, inline: true },
             { name: 'Retention', value: '7 days', inline: true },
+            { name: 'Download', value: '[portal.communityorg.co.uk/recordings](https://portal.communityorg.co.uk/recordings)', inline: true },
           )
-          .setFooter({ text: 'Use /record stop to end. Each speaker gets a separate track.' })
+          .setFooter({ text: 'Enter your code at the portal to download individual tracks or a merged mix' })
           .setTimestamp()
         ]
       }).catch(() => {});
@@ -72,7 +74,7 @@ export async function execute(interaction) {
         embeds: [new EmbedBuilder()
           .setColor(0xef4444)
           .setTitle('🔴 Recording in Progress')
-          .setDescription(`**${interaction.user.tag}** has started a recording in **${voiceChannel.name}**.\n\nAll participants will be recorded on separate tracks. Use \`/record stop\` to end.`)
+          .setDescription(`**${interaction.user.tag}** has started a recording in **${voiceChannel.name}**.\n\nAll participants will be recorded on separate tracks. Use \`/record stop\` to end.\n\nAn access code has been sent via DM — files can be downloaded at [portal.communityorg.co.uk/recordings](https://portal.communityorg.co.uk/recordings).`)
           .setFooter({ text: 'CO Recording System' })
           .setTimestamp()
         ]

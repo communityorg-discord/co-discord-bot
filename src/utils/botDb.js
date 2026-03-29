@@ -1010,6 +1010,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS recordings (
   download_notified INTEGER DEFAULT 0
 )`);
 
+try { db.exec("ALTER TABLE recordings ADD COLUMN access_code TEXT"); } catch (e) { /* already exists */ }
+
 db.exec(`CREATE TABLE IF NOT EXISTS recording_participants (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   recording_id INTEGER NOT NULL REFERENCES recordings(id),
