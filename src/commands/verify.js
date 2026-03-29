@@ -283,7 +283,7 @@ export async function handleButton(interaction) {
     try {
       const user = await interaction.client.users.fetch(entry.discord_id);
       const inviteLines = [];
-      const EXCLUDED_GUILDS = ['1485423163817988186'];
+      const EXCLUDED_GUILDS = ['1272007308704088074', '1485422910972760176', '1485423163817988186', '1485423682980675729', '1485423935569920135', '1485424535405723729'];
       for (const [, guild] of interaction.client.guilds.cache) {
         if (EXCLUDED_GUILDS.includes(guild.id)) continue;
         try {
@@ -531,7 +531,7 @@ export async function handleModal(interaction) {
     try {
       const user = await interaction.client.users.fetch(entry.discord_id);
       const inviteLines = [];
-      const EXCLUDED_GUILDS = ['1485423163817988186'];
+      const EXCLUDED_GUILDS = ['1272007308704088074', '1485422910972760176', '1485423163817988186', '1485423682980675729', '1485423935569920135', '1485424535405723729'];
       for (const [, guild] of interaction.client.guilds.cache) {
         if (EXCLUDED_GUILDS.includes(guild.id)) continue;
         try {
