@@ -84,19 +84,15 @@ export async function startRecording(channel, startedBy) {
 
   await entersState(connection, VoiceConnectionStatus.Ready, 20000);
 
-  // Speak the formal recording notice before capturing begins
-  try {
-    await speakRecordingNotice(connection, channel);
-  } catch (e) {
-    console.error('[Recording] Could not speak notice:', e.message);
-  }
-
+  // DB insert
   const result = db.prepare(`
     INSERT INTO recordings (recording_key, guild_id, channel_id, channel_name, started_by, started_by_username, expires_at, access_code)
     VALUES (?, ?, ?, ?, ?, ?, datetime('now', '+7 days'), ?)
   `).run(recordingKey, channel.guild.id, channel.id, channel.name, startedBy.id, startedBy.tag, accessCode);
 
   const recordingId = result.lastInsertRowid;
+
+  // Start receiver immediately so TTS notice is captured
   const receiver = connection.receiver;
   const activeStreams = new Map();
 
@@ -135,9 +131,17 @@ export async function startRecording(channel, startedBy) {
     console.log(`[Recording] Started track for ${username}`);
   });
 
+  // Store in active map
   activeRecordings.set(channel.guild.id, {
     connection, receiver, activeStreams, recordingId, recordingKey, recordingDir, startedBy, channelName: channel.name, channel
   });
+
+  // NOW speak the notice — receiver is already capturing
+  try {
+    await speakRecordingNotice(connection, channel);
+  } catch (e) {
+    console.error('[Recording] Could not speak notice:', e.message);
+  }
 
   return { recordingId, recordingKey, accessCode };
 }
