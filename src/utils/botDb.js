@@ -222,6 +222,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS assignments (
 
 try { db.exec("ALTER TABLE assignments ADD COLUMN team_members TEXT DEFAULT '[]'"); } catch (e) { /* exists */ }
 try { db.exec("ALTER TABLE assignments ADD COLUMN team_acknowledgements TEXT DEFAULT '[]'"); } catch (e) { /* exists */ }
+try { db.exec("ALTER TABLE assignments ADD COLUMN team_confirmations TEXT DEFAULT '[]'"); } catch (e) { /* exists */ }
 
 db.exec(`CREATE TABLE IF NOT EXISTS assignment_counter (
   year INTEGER PRIMARY KEY,
