@@ -31,11 +31,10 @@ function expandForSpeech(text) {
     .replace(/\bSG\b/g, 'S. G.');
 }
 
-async function speakRecordingNotice(connection, voiceChannel) {
+async function speakRecordingNotice(connection, voiceChannel, recordingDir, recordingId) {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Europe/London' });
 
-  // Natural spoken time — "1 o'clock", "2 thirty", "3 oh 5"
   const h = parseInt(now.toLocaleString('en-GB', { hour: 'numeric', hour12: true, timeZone: 'Europe/London' }));
   const m = now.getMinutes();
   const ampm = now.getHours() < 12 ? 'AM' : 'PM';
@@ -60,21 +59,36 @@ async function speakRecordingNotice(connection, voiceChannel) {
   const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
   connection.subscribe(player);
 
+  // Open a PCM file to capture the notice audio directly
+  const noticeTrackPath = join(recordingDir, 'BOT_Notice.pcm');
+  const noticeFileStream = createWriteStream(noticeTrackPath);
+
   for (const sentence of sentences) {
-    // Download TTS for this sentence
     const parts = googleTTS.getAllAudioUrls(sentence, { lang: 'en-GB', slow: false });
-    const buffers = [];
+    const mp3Buffers = [];
     for (const part of parts) {
       const res = await fetch(part.url);
-      buffers.push(Buffer.from(await res.arrayBuffer()));
+      mp3Buffers.push(Buffer.from(await res.arrayBuffer()));
     }
 
     const tmpMp3 = join(tmpdir(), `co_notice_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.mp3`);
-    writeFileSync(tmpMp3, Buffer.concat(buffers));
+    writeFileSync(tmpMp3, Buffer.concat(mp3Buffers));
 
-    // Pipe through ffmpeg to PCM
+    // Convert MP3 → PCM, capture chunks for both file write and Discord playback
     const ff = spawn(ffmpegPath, ['-i', tmpMp3, '-f', 's16le', '-ar', '48000', '-ac', '2', 'pipe:1'], { stdio: ['ignore', 'pipe', 'ignore'] });
-    const resource = createAudioResource(ff.stdout, { inputType: StreamType.Raw });
+
+    const pcmChunks = [];
+    ff.stdout.on('data', (chunk) => {
+      pcmChunks.push(chunk);
+      noticeFileStream.write(chunk); // Write to recording file
+    });
+
+    await new Promise(resolve => ff.stdout.on('end', resolve));
+
+    // Play the collected PCM to Discord
+    const { Readable } = await import('stream');
+    const pcmBuffer = Buffer.concat(pcmChunks);
+    const resource = createAudioResource(Readable.from(pcmBuffer), { inputType: StreamType.Raw });
 
     player.play(resource);
     console.log(`[TTS] Playing: "${sentence.slice(0, 60)}..."`);
@@ -89,7 +103,15 @@ async function speakRecordingNotice(connection, voiceChannel) {
     await new Promise(r => setTimeout(r, 400));
   }
 
-  console.log('[Recording] Notice spoken');
+  noticeFileStream.end();
+
+  // Register the bot notice as a recording participant
+  db.prepare(`
+    INSERT OR IGNORE INTO recording_participants (recording_id, discord_id, username, file_path)
+    VALUES (?, ?, ?, ?)
+  `).run(recordingId, 'BOT', 'CO Bot (Recording Notice)', noticeTrackPath);
+
+  console.log('[Recording] Notice spoken and captured to file');
 }
 
 export async function startRecording(channel, startedBy) {
@@ -196,9 +218,9 @@ export async function startRecording(channel, startedBy) {
     connection, receiver, activeStreams, recordingId, recordingKey, recordingDir, startedBy, channelName: channel.name, channel
   });
 
-  // NOW speak the notice — receiver is already capturing
+  // NOW speak the notice — also writes PCM directly to recording file
   try {
-    await speakRecordingNotice(connection, channel);
+    await speakRecordingNotice(connection, channel, recordingDir, recordingId);
   } catch (e) {
     console.error('[Recording] Could not speak notice:', e.message);
   }
