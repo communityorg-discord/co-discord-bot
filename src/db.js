@@ -47,6 +47,16 @@ export function getRecentCases(userId) {
   `).all(userId, userId);
 }
 
+export function getTeamMembers(department) {
+  return db.prepare(`
+    SELECT id, display_name, username, position, discord_id
+    FROM users
+    WHERE lower(account_status) = 'active'
+    AND department = ?
+    ORDER BY display_name ASC
+  `).all(department);
+}
+
 export function getPendingLeaveRequests(userId) {
   return db.prepare(`
     SELECT * FROM leave_requests 

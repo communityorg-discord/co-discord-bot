@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { isSuperuser, getPortalUser } from '../utils/permissions.js';
 import { createAssignment, generateAssignmentNumber, getAssignment, updateAssignment, getAssignmentStats } from '../utils/botDb.js';
-import { getUserByDiscordId } from '../db.js';
+import { getUserByDiscordId, getTeamMembers } from '../db.js';
 import { logAction } from '../utils/logger.js';
 import fetch from 'node-fetch';
 
@@ -116,20 +116,47 @@ export function buildAssignmentEmbed(assignment, assignerName, assigneeName, opt
     cancelled: '⬛ CANCELLED',
   };
 
+  const isTeamAssignment = assignment.assigned_to === 'TEAM' && assignment.team;
+
   const embed = new EmbedBuilder()
-    .setTitle(`🗂️ ${opts.delegated ? 'DELEGATED ASSIGNMENT' : 'NEW ASSIGNMENT'}`)
+    .setTitle(`🗂️ ${opts.delegated ? 'DELEGATED ASSIGNMENT' : isTeamAssignment ? 'TEAM ASSIGNMENT' : 'NEW ASSIGNMENT'}`)
     .setColor(STATUS_COLOURS[status] || 0x5865F2)
     .setDescription(assignment.title + (assignment.description ? `\n\n${assignment.description}` : ''))
     .addFields(
-      { name: 'Assigned To', value: assignment.assigned_to ? `<@${assignment.assigned_to}>` : `Team: ${assignment.team || 'Unassigned'}`, inline: true },
+      { name: 'Assigned To', value: isTeamAssignment ? `🏢 **${assignment.team}**` : (assignment.assigned_to && assignment.assigned_to !== 'TEAM' ? `<@${assignment.assigned_to}>` : 'Unassigned'), inline: true },
       { name: 'Assigned By', value: `<@${assignment.assigned_by}>`, inline: true },
-      { name: 'Team', value: assignment.team || '—', inline: true },
       { name: 'Due Date', value: formatDate(assignment.due_date), inline: true },
       { name: 'Created', value: formatDateShort(assignment.created_at || new Date().toISOString()), inline: true },
       { name: 'Status', value: statusLabels[status] || status, inline: true },
     )
     .setFooter({ text: `Assignment ID: ${opts.assignmentNumber || 'ASN-????-???'} | Community Organisation` })
     .setTimestamp();
+
+  // Team member acknowledgement tracker
+  if (isTeamAssignment) {
+    let members = [];
+    let acks = [];
+    try { members = JSON.parse(assignment.team_members || '[]'); } catch {}
+    try { acks = JSON.parse(assignment.team_acknowledgements || '[]'); } catch {}
+
+    if (members.length > 0) {
+      const ackCount = acks.length;
+      const total = members.length;
+      const progressBar = buildProgressBar(ackCount, total);
+
+      const memberLines = members.map(m => {
+        const acked = acks.find(a => a.discordId === m.discordId);
+        if (acked) {
+          return `✅ <@${m.discordId}> — acknowledged`;
+        }
+        return `⬜ <@${m.discordId}> — pending`;
+      }).join('\n');
+
+      embed.addFields(
+        { name: `Team Progress (${ackCount}/${total})`, value: `${progressBar}\n\n${memberLines}`, inline: false }
+      );
+    }
+  }
 
   if (assignment.completion_notes && status === 'awaiting_confirmation') {
     embed.addFields({ name: '📝 Completion Notes', value: assignment.completion_notes, inline: false });
@@ -158,11 +185,24 @@ export function buildAssignmentEmbed(assignment, assignerName, assigneeName, opt
   return embed;
 }
 
-export function buildAssignmentButtons(assignmentId, status) {
+function buildProgressBar(current, total) {
+  const pct = total > 0 ? current / total : 0;
+  const filled = Math.round(pct * 10);
+  const empty = 10 - filled;
+  return `${'🟩'.repeat(filled)}${'⬜'.repeat(empty)} ${Math.round(pct * 100)}%`;
+}
+
+export function buildAssignmentButtons(assignmentId, status, isTeam = false) {
   if (status === 'complete' || status === 'cancelled') return [];
   if (status === 'awaiting_confirmation') {
     return [new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`assign_disabled`).setLabel('Awaiting assigner confirmation...').setStyle(ButtonStyle.Secondary).setDisabled(true)
+    )];
+  }
+  if (isTeam) {
+    return [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`assign_ack_${assignmentId}`).setLabel('Acknowledge').setStyle(ButtonStyle.Success).setEmoji('✅'),
+      new ButtonBuilder().setCustomId(`assign_cancel_${assignmentId}`).setLabel('Cancel').setStyle(ButtonStyle.Danger).setEmoji('❌'),
     )];
   }
   return [new ActionRowBuilder().addComponents(
@@ -204,10 +244,19 @@ export async function execute(interaction) {
   }
 
   let assigneePortal = null;
+  let teamMembers = [];
   if (targetUser) {
     assigneePortal = getUserByDiscordId(targetUser.id);
     if (!assigneePortal) {
       return interaction.editReply({ content: '❌ The assigned user is not linked to the CO Staff Portal.' });
+    }
+  }
+
+  // Look up team members for team-only assignments
+  if (team && !targetUser) {
+    teamMembers = getTeamMembers(team).filter(m => m.discord_id);
+    if (teamMembers.length === 0) {
+      return interaction.editReply({ content: `❌ No active staff found in **${team}** with linked Discord accounts.` });
     }
   }
 
@@ -253,6 +302,16 @@ export async function execute(interaction) {
   });
   const botAssignmentId = result.lastInsertRowid;
 
+  // Store team members for team assignments
+  const isTeamAssignment = !targetUser && team && teamMembers.length > 0;
+  if (isTeamAssignment) {
+    const memberList = teamMembers.map(m => ({ discordId: m.discord_id, name: m.display_name || m.username }));
+    updateAssignment(botAssignmentId, {
+      team_members: JSON.stringify(memberList),
+      team_acknowledgements: '[]',
+    });
+  }
+
   // Update portal with bot assignment ID
   if (portalAssignmentId) {
     try {
@@ -268,17 +327,19 @@ export async function execute(interaction) {
   const assignmentData = {
     title: taskDesc,
     description: notes || null,
-    assigned_to: targetUser?.id || null,
+    assigned_to: targetUser?.id || 'TEAM',
     assigned_by: interaction.user.id,
     team: team || null,
     due_date: dueDate.toISOString(),
     status: 'pending',
     created_at: new Date().toISOString(),
+    team_members: isTeamAssignment ? JSON.stringify(teamMembers.map(m => ({ discordId: m.discord_id, name: m.display_name || m.username }))) : '[]',
+    team_acknowledgements: '[]',
   };
 
   const assigneeName = assigneePortal?.display_name || (team ? `Team: ${team}` : 'Unassigned');
   const embed = buildAssignmentEmbed(assignmentData, assignerPortal.display_name, assigneeName, { assignmentNumber, notes });
-  const buttons = buildAssignmentButtons(botAssignmentId, 'pending');
+  const buttons = buildAssignmentButtons(botAssignmentId, 'pending', isTeamAssignment);
 
   try {
     const channel = await interaction.client.channels.fetch(ASSIGNMENTS_CHANNEL_ID);
@@ -288,7 +349,7 @@ export async function execute(interaction) {
     console.error('[assign] Channel send error:', e.message);
   }
 
-  // DM the assigned person (skip if team-only)
+  // DM assigned person(s)
   if (targetUser) {
     try {
       await targetUser.send({ embeds: [new EmbedBuilder()
@@ -299,6 +360,22 @@ export async function execute(interaction) {
         .setTimestamp()
       ]});
     } catch {}
+  } else if (isTeamAssignment) {
+    // DM all team members
+    for (const member of teamMembers) {
+      try {
+        const user = await interaction.client.users.fetch(member.discord_id).catch(() => null);
+        if (user) {
+          await user.send({ embeds: [new EmbedBuilder()
+            .setTitle('📋 New Team Assignment')
+            .setColor(0x5865F2)
+            .setDescription(`A task has been assigned to **${team}** by **${assignerPortal.display_name}**.\n\n**Task:** ${taskDesc}\n**Due:** ${formatDate(dueDate)}\n\nPlease acknowledge this assignment in <#${ASSIGNMENTS_CHANNEL_ID}>.`)
+            .setFooter({ text: `Assignment: ${assignmentNumber} | Community Organisation` })
+            .setTimestamp()
+          ]}).catch(() => {});
+        }
+      } catch {}
+    }
   }
 
   await logAction(interaction.client, {
@@ -323,6 +400,90 @@ export async function execute(interaction) {
 
 export async function handleButton(interaction) {
   const customId = interaction.customId;
+
+  // ── Team Acknowledge ──
+  if (customId.startsWith('assign_ack_')) {
+    const assignmentId = parseInt(customId.split('_')[2]);
+    const assignment = getAssignment(assignmentId);
+    if (!assignment) return interaction.reply({ content: '❌ Assignment not found.', ephemeral: true });
+    if (assignment.status !== 'pending') return interaction.reply({ content: '❌ This assignment is no longer pending.', ephemeral: true });
+
+    let members = [];
+    let acks = [];
+    try { members = JSON.parse(assignment.team_members || '[]'); } catch {}
+    try { acks = JSON.parse(assignment.team_acknowledgements || '[]'); } catch {}
+
+    // Check if this user is a team member
+    const isMember = members.some(m => m.discordId === interaction.user.id);
+    const isSU = SUPERUSER_IDS.includes(interaction.user.id);
+    if (!isMember && !isSU) {
+      return interaction.reply({ content: '❌ You are not a member of this team.', ephemeral: true });
+    }
+
+    // Check if already acknowledged
+    if (acks.some(a => a.discordId === interaction.user.id)) {
+      return interaction.reply({ content: '✅ You have already acknowledged this assignment.', ephemeral: true });
+    }
+
+    // Add acknowledgement
+    acks.push({ discordId: interaction.user.id, at: new Date().toISOString() });
+    updateAssignment(assignmentId, { team_acknowledgements: JSON.stringify(acks) });
+
+    // Check if all members have acknowledged
+    const allAcked = members.every(m => acks.some(a => a.discordId === m.discordId));
+
+    if (allAcked) {
+      // Auto-complete: all team members acknowledged
+      updateAssignment(assignmentId, {
+        status: 'awaiting_confirmation',
+        team_acknowledgements: JSON.stringify(acks),
+        completed_at: new Date().toISOString(),
+        completion_notes: 'All team members acknowledged.',
+      });
+
+      // Update portal
+      if (assignment.portal_assignment_id) {
+        try {
+          await fetch(`http://localhost:3016/api/assignments/${assignment.portal_assignment_id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET },
+            body: JSON.stringify({ status: 'awaiting_confirmation', completed_at: new Date().toISOString() })
+          });
+        } catch {}
+      }
+
+      // DM assigner for confirmation
+      try {
+        const assigner = await interaction.client.users.fetch(assignment.assigned_by);
+        await assigner.send({
+          embeds: [new EmbedBuilder()
+            .setTitle('✅ Team Assignment — All Acknowledged')
+            .setColor(0x22C55E)
+            .setDescription(`All members of **${assignment.team}** have acknowledged the assignment:\n\n> "${assignment.title}"\n\n**Assignment:** ASN-${assignmentId}\n\nDo you confirm this task is complete?`)
+            .setFooter({ text: 'Community Organisation | Staff Assistant' })
+            .setTimestamp()
+          ],
+          components: [new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`assign_confirm_${assignmentId}`).setLabel('Confirm Complete').setStyle(ButtonStyle.Success).setEmoji('✅'),
+            new ButtonBuilder().setCustomId(`assign_reject_${assignmentId}`).setLabel('Not Satisfied').setStyle(ButtonStyle.Danger).setEmoji('❌'),
+          )]
+        });
+      } catch {}
+    }
+
+    // Update embed
+    const updated = getAssignment(assignmentId);
+    const embed = buildAssignmentEmbed(updated, null, null, { assignmentNumber: `ASN-${assignmentId}` });
+    const newStatus = allAcked ? 'awaiting_confirmation' : 'pending';
+    await interaction.update({ embeds: [embed], components: buildAssignmentButtons(assignmentId, newStatus, !allAcked) });
+
+    if (!allAcked) {
+      await interaction.followUp({ content: `✅ **${interaction.user.username}** acknowledged the assignment. (${acks.length}/${members.length})`, ephemeral: false }).catch(() => {});
+    } else {
+      await interaction.followUp({ content: `🎉 All **${members.length}** team members have acknowledged! The assigner has been notified.`, ephemeral: false }).catch(() => {});
+    }
+    return;
+  }
 
   // ── Mark as Complete ──
   if (customId.startsWith('assign_complete_')) {
