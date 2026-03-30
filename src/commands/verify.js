@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { getPortalUser, isSuperuser, applyVerification, getOrCreateVerificationChannel } from '../utils/verifyHelper.js';
+import { hasPortalAuth } from '../utils/permissions.js';
 import { POSITIONS, getAuthLevelRole } from '../utils/positions.js';
 import db from '../utils/botDb.js';
 import { VERIFY_UNVERIFY_LOG_CHANNEL_ID, OFFICIAL_BYPASS_IDS } from '../config.js';
@@ -168,8 +169,8 @@ export async function handleSelect(interaction) {
         await interaction.update({ content: 'Member not found in server.', embeds: [], components: [] });
         return;
       }
-      if (!(await isSuperuser(interaction.user.id))) {
-        await interaction.reply({ content: '❌ Only superusers can approve verification requests.', ephemeral: true });
+      if (!(await isSuperuser(interaction.user.id)) && !(await hasPortalAuth(interaction.user.id, 6))) {
+        await interaction.reply({ content: '❌ You need auth level 6+ to approve verification requests.', ephemeral: true });
         return;
       }
       await interaction.deferUpdate();
@@ -194,7 +195,7 @@ export async function handleButton(interaction) {
     const queueId = customId.replace('verify_auth_select_', '');
     const overrideLevel = parseInt(interaction.values[0]);
 
-    if (!await isSuperuser(interaction.user.id)) {
+    if (!(await isSuperuser(interaction.user.id)) && !(await hasPortalAuth(interaction.user.id, 6))) {
       return interaction.reply({ content: '❌ Only superusers can approve verifications.', ephemeral: true });
     }
 
@@ -323,7 +324,7 @@ export async function handleButton(interaction) {
   // ── Auth Override button — show ephemeral select menu ──────────────────
   if (customId.startsWith('verify_auth_override_')) {
     const queueId = customId.replace('verify_auth_override_', '');
-    if (!await isSuperuser(interaction.user.id)) {
+    if (!(await isSuperuser(interaction.user.id)) && !(await hasPortalAuth(interaction.user.id, 6))) {
       return interaction.reply({ content: '❌ Only superusers can use this.', ephemeral: true });
     }
 
@@ -373,7 +374,7 @@ export async function handleButton(interaction) {
     const queueId = parts[0];
     const overrideLevel = parts.length > 1 ? parseInt(parts[1]) : 0;
 
-    if (!await isSuperuser(interaction.user.id)) {
+    if (!(await isSuperuser(interaction.user.id)) && !(await hasPortalAuth(interaction.user.id, 6))) {
       return interaction.reply({ content: '❌ Only superusers can approve verifications.', ephemeral: true });
     }
 
@@ -404,7 +405,7 @@ export async function handleButton(interaction) {
   if (customId.startsWith('verify_deny_')) {
     const queueId = customId.replace('verify_deny_', '');
 
-    if (!await isSuperuser(interaction.user.id)) {
+    if (!(await isSuperuser(interaction.user.id)) && !(await hasPortalAuth(interaction.user.id, 6))) {
       return interaction.reply({ content: '❌ Only superusers can deny verifications.', ephemeral: true });
     }
 
