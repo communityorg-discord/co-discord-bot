@@ -3,6 +3,8 @@ import { startRecording, stopRecording, isRecording } from '../services/recordin
 import { hasPortalAuth } from '../utils/permissions.js';
 import { db } from '../utils/botDb.js';
 
+const SUPERUSER_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'];
+
 export const data = new SlashCommandBuilder()
   .setName('record')
   .setDescription('Voice recording system — record meetings with separate tracks per speaker')
@@ -31,7 +33,7 @@ export async function execute(interaction) {
   const sub = interaction.options.getSubcommand();
 
   if (sub === 'start') {
-    if (!await hasPortalAuth(interaction.user.id, 5)) {
+    if (!SUPERUSER_IDS.includes(interaction.user.id) && !await hasPortalAuth(interaction.user.id, 5)) {
       return interaction.editReply({ content: '❌ You need authorisation level 5+ to start recordings.' });
     }
 
