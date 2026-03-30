@@ -1,5 +1,5 @@
 import { EndBehaviorType, VoiceConnectionStatus, entersState, joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, StreamType, NoSubscriberBehavior } from '@discordjs/voice';
-import { createWriteStream, mkdirSync, existsSync, unlinkSync, writeFileSync, statSync } from 'fs';
+import { createWriteStream, mkdirSync, existsSync, unlinkSync, writeFileSync, statSync, readFileSync, openSync, writeSync, readSync, closeSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { spawn } from 'child_process';
@@ -9,8 +9,8 @@ import googleTTS from 'google-tts-api';
 import ffmpegStatic from 'ffmpeg-static';
 
 const FFMPEG_PATH = ffmpegStatic;
-
 const RECORDINGS_DIR = '/home/vpcommunityorganisation/clawd/recordings';
+const BYTES_PER_MS = 192; // 48kHz * 2ch * 2bytes / 1000
 
 // Active recordings: guildId → { connection, timeline, recordingId, ... }
 const activeRecordings = new Map();
@@ -34,93 +34,61 @@ function expandForSpeech(text) {
     .replace(/\bSG\b/g, 'S. G.');
 }
 
-// ─── Single mixed timeline ────────────────────────────────────────────
-// Writes ALL audio (speakers + TTS) into one shared PCM file in real-time.
-// Individual speaker tracks are also kept for per-speaker downloads.
+// ─── Recording timeline — stores raw Opus packets, decodes after stop ──
 class RecordingTimeline {
   constructor(recordingDir, recordingId) {
     this.startTime = Date.now();
-    // 48kHz stereo s16le = 192 bytes per ms
-    this.bytesPerMs = (48000 * 2 * 2) / 1000;
-    this.mixedPath = join(recordingDir, 'mixed_raw.pcm');
-    this.mixedStream = createWriteStream(this.mixedPath);
-    this.currentBytePos = 0;
-    this.speakerFiles = new Map(); // userId → { stream, path, username }
-    this.activeStreams = new Map(); // userId → { audioStream, decoder, username }
-    this.currentlySpeaking = new Set(); // userIds currently producing audio
-    this.speakerLastActive = new Map(); // userId → Date.now() of last audio chunk
+    this.speakerStreams = new Map();   // userId → { fileStream, opusPath, username, packetCount }
+    this.activeAudioStreams = new Map(); // userId → { audioStream, username }
+    this.currentlySpeaking = new Set();
+    this.speakerLastActive = new Map();
+    this.ttsSegments = [];             // { pcmPath, offsetMs }
     this.recordingDir = recordingDir;
     this.recordingId = recordingId;
-    this.liveMessage = null; // Discord message to update with live status
+    this.liveMessage = null;
     this.liveInterval = null;
   }
 
-  get currentPositionMs() {
-    return this.currentBytePos / this.bytesPerMs;
-  }
-
-  // Write raw PCM directly to the mixed stream (for TTS) — sequential, no gap calc
-  writeDirect(chunk) {
-    this.mixedStream.write(chunk);
-    this.currentBytePos += chunk.length;
-  }
-
-  // Write silence to fill a gap in the mixed timeline
-  writeSilenceMs(ms) {
-    if (ms <= 0) return;
-    const totalBytes = Math.floor(ms * this.bytesPerMs);
-    // Write in ≤192 KB chunks to avoid huge allocations
-    const maxChunk = 192000;
-    let remaining = totalBytes;
-    while (remaining > 0) {
-      const sz = Math.min(remaining, maxChunk);
-      this.mixedStream.write(Buffer.alloc(sz, 0));
-      remaining -= sz;
-    }
-    this.currentBytePos += totalBytes;
-  }
-
-  // Called when a decoded PCM chunk arrives from a speaker
-  writeSpeakerChunk(userId, username, pcmChunk) {
-    // Create individual file on first chunk
-    if (!this.speakerFiles.has(userId)) {
+  // Write a raw Opus packet with its timestamp — no decoding during recording
+  writeOpusPacket(userId, username, packet) {
+    if (!this.speakerStreams.has(userId)) {
       const safeName = username.replace(/[^a-z0-9_-]/gi, '_');
-      const filePath = join(this.recordingDir, `${userId}_${safeName}.pcm`);
-      this.speakerFiles.set(userId, {
-        stream: createWriteStream(filePath, { flags: 'a' }),
-        path: filePath,
+      const opusPath = join(this.recordingDir, `${userId}_${safeName}.opus`);
+      this.speakerStreams.set(userId, {
+        fileStream: createWriteStream(opusPath),
+        opusPath,
         username,
-        offsetSeconds: (Date.now() - this.startTime) / 1000
+        packetCount: 0
       });
 
       db.prepare(`
         INSERT OR IGNORE INTO recording_participants (recording_id, discord_id, username, file_path, started_at, offset_seconds)
         VALUES (?, ?, ?, ?, datetime('now'), ?)
-      `).run(this.recordingId, userId, username, filePath, (Date.now() - this.startTime) / 1000);
+      `).run(this.recordingId, userId, username, opusPath, (Date.now() - this.startTime) / 1000);
 
-      console.log(`[Recording] New speaker: ${username} (offset: ${((Date.now() - this.startTime) / 1000).toFixed(1)}s)`);
+      console.log(`[Recording] New speaker: ${username}`);
     }
 
-    // Track speaking activity
+    const speaker = this.speakerStreams.get(userId);
+    const ts = Date.now() - this.startTime;
+
+    // Format: [4 bytes timestamp ms LE][2 bytes packet length LE][packet data]
+    const header = Buffer.allocUnsafe(6);
+    header.writeUInt32LE(ts, 0);
+    header.writeUInt16LE(packet.length, 4);
+    speaker.fileStream.write(header);
+    speaker.fileStream.write(packet);
+    speaker.packetCount++;
+
+    // Track speaking state for live embed
     this.currentlySpeaking.add(userId);
     this.speakerLastActive.set(userId, Date.now());
-
-    // Write to individual speaker file
-    this.speakerFiles.get(userId).stream.write(pcmChunk);
-
-    // Write to mixed timeline — fill gap since last write with silence
-    const chunkMs = Date.now() - this.startTime;
-    const gap = chunkMs - this.currentPositionMs;
-    if (gap > 1) this.writeSilenceMs(gap);
-
-    this.mixedStream.write(pcmChunk);
-    this.currentBytePos += pcmChunk.length;
   }
 
-  // Subscribe a user to the voice receiver and pipe decoded PCM through ffmpeg for cleanup
+  // Subscribe a user — forward raw Opus packets to disk, zero processing
   subscribeUser(userId, receiver, channel) {
-    if (this.activeStreams.has(userId)) {
-      const existing = this.activeStreams.get(userId);
+    if (this.activeAudioStreams.has(userId)) {
+      const existing = this.activeAudioStreams.get(userId);
       if (!existing.audioStream.destroyed) return;
     }
 
@@ -131,49 +99,29 @@ class RecordingTimeline {
       end: { behavior: EndBehaviorType.AfterInactivity, duration: 300000 }
     });
 
-    // Decode Opus packets → raw PCM via OpusScript
-    const decoder = new OpusScript(48000, 2);
-
-    // Pipe decoded PCM through ffmpeg with async resampling to fix timing jitter artifacts
-    const ffmpegClean = spawn(FFMPEG_PATH, [
-      '-f', 's16le', '-ar', '48000', '-ac', '2', '-i', 'pipe:0',
-      '-af', 'aresample=async=1000:first_pts=0',
-      '-f', 's16le', '-ar', '48000', '-ac', '2', 'pipe:1'
-    ], { stdio: ['pipe', 'pipe', 'ignore'] });
-
-    audioStream.on('data', (opusPacket) => {
-      try {
-        const pcm = decoder.decode(opusPacket);
-        if (!ffmpegClean.stdin.destroyed) ffmpegClean.stdin.write(pcm);
-      } catch {}
+    audioStream.on('data', (packet) => {
+      this.writeOpusPacket(userId, username, packet);
     });
 
-    ffmpegClean.stdout.on('data', (cleanPcm) => {
-      // Ensure chunk is aligned to stereo s16le samples (4 bytes per sample-pair)
-      if (cleanPcm.length % 4 !== 0) return;
-      this.writeSpeakerChunk(userId, username, cleanPcm);
-    });
-
-    // When audio stream ends (5min silence), close ffmpeg stdin to flush
     audioStream.on('end', () => {
       console.log(`[Recording] Stream ended for ${username} — will re-subscribe on next speak`);
-      try { if (!ffmpegClean.stdin.destroyed) ffmpegClean.stdin.end(); } catch {}
-      this.activeStreams.delete(userId);
+      this.activeAudioStreams.delete(userId);
     });
     audioStream.on('error', (e) => {
       console.error(`[Recording] Stream error for ${username}:`, e.message);
-      try { if (!ffmpegClean.stdin.destroyed) ffmpegClean.stdin.end(); } catch {}
-      this.activeStreams.delete(userId);
+      this.activeAudioStreams.delete(userId);
     });
 
-    ffmpegClean.on('error', (e) => {
-      console.error(`[Recording] ffmpeg decoder error for ${username}:`, e.message);
-    });
-
-    this.activeStreams.set(userId, { audioStream, decoder, ffmpegProcess: ffmpegClean, username });
+    this.activeAudioStreams.set(userId, { audioStream, username });
   }
 
-  // Returns current recording status for the live embed
+  // Register a pre-decoded TTS PCM segment with its timeline offset
+  addTTSSegment(pcmPath, offsetMs) {
+    this.ttsSegments.push({ pcmPath, offsetMs });
+  }
+
+  // ── Live embed status ──────────────────────────────────────────────
+
   getStatus() {
     const now = Date.now();
     const elapsedSecs = Math.round((now - this.startTime) / 1000);
@@ -181,34 +129,25 @@ class RecordingTimeline {
     const secs = elapsedSecs % 60;
     const durationStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 
-    // Mark users as not speaking if no audio for 500ms
     for (const userId of this.currentlySpeaking) {
       const lastActive = this.speakerLastActive.get(userId) || 0;
       if (now - lastActive > 500) this.currentlySpeaking.delete(userId);
     }
 
-    // Build participant list with speaking indicators
     const participants = [];
-    for (const [userId, speaker] of this.speakerFiles) {
-      if (userId === 'BOT') continue; // skip bot notice track
+    for (const [userId, speaker] of this.speakerStreams) {
       const isSpeaking = this.currentlySpeaking.has(userId);
-      participants.push({
-        userId,
-        username: speaker.username,
-        isSpeaking,
-      });
+      participants.push({ userId, username: speaker.username, isSpeaking });
     }
 
     return { durationStr, elapsedSecs, participants, speakerCount: participants.length };
   }
 
-  // Start the live embed update interval
   startLiveUpdates(message, channelName, startedByTag) {
     this.liveMessage = message;
     this._channelName = channelName;
     this._startedByTag = startedByTag;
     this._startTs = Math.floor(this.startTime / 1000);
-
     this.liveInterval = setInterval(() => this._updateLiveEmbed(), 5000);
   }
 
@@ -238,7 +177,6 @@ class RecordingTimeline {
 
       await this.liveMessage.edit({ embeds: [embed] });
     } catch (e) {
-      // Message might have been deleted — stop updating
       if (e.code === 10008) {
         clearInterval(this.liveInterval);
         this.liveInterval = null;
@@ -255,53 +193,28 @@ class RecordingTimeline {
     this.liveMessage = null;
   }
 
-  // Fill timeline silence up to current real time (call before closing notice)
-  catchUpToNow() {
-    const nowMs = Date.now() - this.startTime;
-    const gap = nowMs - this.currentPositionMs;
-    if (gap > 0) this.writeSilenceMs(gap);
-  }
+  // ── Cleanup ────────────────────────────────────────────────────────
 
   async close() {
     this.stopLiveUpdates();
 
-    // End audio streams and close ffmpeg stdin to flush remaining audio
-    for (const [, s] of this.activeStreams) {
+    for (const [, s] of this.activeAudioStreams) {
       try { s.audioStream?.destroy(); } catch {}
-      try { if (!s.ffmpegProcess?.stdin?.destroyed) s.ffmpegProcess.stdin.end(); } catch {}
     }
 
-    // Wait for ffmpeg processes to flush their remaining output
-    await new Promise(r => setTimeout(r, 2000));
-
-    // Kill any remaining ffmpeg processes
-    for (const [, s] of this.activeStreams) {
-      try { s.ffmpegProcess?.kill('SIGTERM'); } catch {}
-    }
-
-    // Close individual speaker file streams
-    for (const [, speaker] of this.speakerFiles) {
+    for (const [, speaker] of this.speakerStreams) {
       await new Promise(resolve => {
-        if (speaker.stream.writableEnded) return resolve();
-        speaker.stream.end(resolve);
+        if (speaker.fileStream.writableEnded) return resolve();
+        speaker.fileStream.end(resolve);
       });
-      const size = existsSync(speaker.path) ? statSync(speaker.path).size : 0;
-      console.log(`[Recording] Closed track for ${speaker.username} — ${Math.round(size / 192000)}s of audio (${size} bytes)`);
+      console.log(`[Recording] Closed raw track for ${speaker.username} — ${speaker.packetCount} packets`);
     }
-    // Close mixed stream
-    await new Promise(resolve => {
-      if (this.mixedStream.writableEnded) return resolve();
-      this.mixedStream.end(resolve);
-    });
-    const mixedSize = existsSync(this.mixedPath) ? statSync(this.mixedPath).size : 0;
-    console.log(`[Recording] Mixed timeline closed — ${Math.round(mixedSize / 192000)}s total (${mixedSize} bytes)`);
   }
 }
 
 // ─── TTS notice functions ─────────────────────────────────────────────
 
-async function speakTTSSentences(connection, sentences, timeline, noticeFileStream) {
-  const ffmpegPath = (await import('ffmpeg-static')).default;
+async function speakTTSSentences(connection, sentences, noticeFileStream) {
   const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
   connection.subscribe(player);
 
@@ -316,18 +229,16 @@ async function speakTTSSentences(connection, sentences, timeline, noticeFileStre
     const tmpMp3 = join(tmpdir(), `co_tts_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.mp3`);
     writeFileSync(tmpMp3, Buffer.concat(mp3Buffers));
 
-    const ff = spawn(ffmpegPath, ['-i', tmpMp3, '-f', 's16le', '-ar', '48000', '-ac', '2', 'pipe:1'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const ff = spawn(FFMPEG_PATH, ['-i', tmpMp3, '-f', 's16le', '-ar', '48000', '-ac', '2', 'pipe:1'], { stdio: ['ignore', 'pipe', 'ignore'] });
 
     const pcmChunks = [];
     ff.stdout.on('data', (chunk) => {
       pcmChunks.push(chunk);
       noticeFileStream.write(chunk);
-      timeline.writeDirect(chunk);
     });
 
     await new Promise(resolve => ff.stdout.on('end', resolve));
 
-    // Play the collected PCM to Discord
     const { Readable } = await import('stream');
     const pcmBuffer = Buffer.concat(pcmChunks);
     const resource = createAudioResource(Readable.from(pcmBuffer), { inputType: StreamType.Raw });
@@ -343,8 +254,9 @@ async function speakTTSSentences(connection, sentences, timeline, noticeFileStre
 
     try { unlinkSync(tmpMp3); } catch {}
 
-    // Inter-sentence pause — write silence to timeline
-    timeline.writeSilenceMs(400);
+    // Inter-sentence pause — write silence to the notice file
+    const silence = Buffer.alloc(Math.floor(400 * BYTES_PER_MS), 0);
+    noticeFileStream.write(silence);
     await new Promise(r => setTimeout(r, 400));
   }
 }
@@ -373,20 +285,22 @@ async function speakRecordingNotice(connection, voiceChannel, timeline) {
     'For the records, could the Chair please state the Case Number before beginning the meeting.',
   ].map(expandForSpeech);
 
-  const noticeTrackPath = join(timeline.recordingDir, 'BOT_Notice.pcm');
-  const noticeFileStream = createWriteStream(noticeTrackPath);
+  const noticePath = join(timeline.recordingDir, 'BOT_Notice_open.pcm');
+  const noticeStream = createWriteStream(noticePath);
+  const offsetMs = Date.now() - timeline.startTime;
 
-  await speakTTSSentences(connection, sentences, timeline, noticeFileStream);
+  await speakTTSSentences(connection, sentences, noticeStream);
 
-  noticeFileStream.end();
+  await new Promise(resolve => noticeStream.end(resolve));
+  timeline.addTTSSegment(noticePath, offsetMs);
 
-  // Register bot notice as a participant for individual download
+  // Register bot notice as participant for individual download
   db.prepare(`
     INSERT OR IGNORE INTO recording_participants (recording_id, discord_id, username, file_path, started_at, offset_seconds)
     VALUES (?, ?, ?, ?, datetime('now'), 0)
-  `).run(timeline.recordingId, 'BOT', 'CO Bot (Recording Notice)', noticeTrackPath);
+  `).run(timeline.recordingId, 'BOT', 'CO Bot (Recording Notice)', noticePath);
 
-  console.log('[Recording] Opening notice spoken and written to mixed timeline');
+  console.log('[Recording] Opening notice spoken and saved');
 }
 
 async function speakClosingNotice(connection, timeline) {
@@ -412,14 +326,140 @@ async function speakClosingNotice(connection, timeline) {
     'Thank you.',
   ].map(expandForSpeech);
 
-  // Append closing notice to existing BOT_Notice.pcm
-  const noticeTrackPath = join(timeline.recordingDir, 'BOT_Notice.pcm');
-  const noticeFileStream = createWriteStream(noticeTrackPath, { flags: 'a' });
+  const noticePath = join(timeline.recordingDir, 'BOT_Notice_close.pcm');
+  const noticeStream = createWriteStream(noticePath);
+  const offsetMs = Date.now() - timeline.startTime;
 
-  await speakTTSSentences(connection, sentences, timeline, noticeFileStream);
+  await speakTTSSentences(connection, sentences, noticeStream);
 
-  noticeFileStream.end();
-  console.log('[Recording] Closing notice spoken and written to mixed timeline');
+  await new Promise(resolve => noticeStream.end(resolve));
+  timeline.addTTSSegment(noticePath, offsetMs);
+
+  console.log('[Recording] Closing notice spoken and saved');
+}
+
+// ─── Post-recording: decode Opus packets and build mixed timeline ─────
+
+async function decodeAndBuildTimeline(recordingDir, recordingId, ttsSegments) {
+  const participants = db.prepare('SELECT * FROM recording_participants WHERE recording_id = ?').all(recordingId);
+  const speakerTracks = participants.filter(p => p.discord_id !== 'BOT' && p.file_path && existsSync(p.file_path));
+
+  // Find total duration from all sources
+  let maxEndMs = 0;
+
+  for (const track of speakerTracks) {
+    const buf = readFileSync(track.file_path);
+    let pos = 0;
+    while (pos + 6 <= buf.length) {
+      const ts = buf.readUInt32LE(pos);
+      const len = buf.readUInt16LE(pos + 4);
+      pos += 6 + len;
+      if (ts + 20 > maxEndMs) maxEndMs = ts + 20;
+    }
+  }
+
+  for (const seg of ttsSegments) {
+    if (!existsSync(seg.pcmPath)) continue;
+    const segEndMs = seg.offsetMs + (statSync(seg.pcmPath).size / BYTES_PER_MS);
+    if (segEndMs > maxEndMs) maxEndMs = Math.ceil(segEndMs);
+  }
+
+  maxEndMs += 100;
+  const totalBytes = Math.ceil(maxEndMs * BYTES_PER_MS);
+  // Ensure aligned to 4 bytes (stereo s16le sample pair)
+  const alignedTotal = totalBytes - (totalBytes % 4);
+
+  console.log(`[Recording] Building mixed timeline: ${Math.round(maxEndMs / 1000)}s, ${Math.round(alignedTotal / 1024 / 1024)}MB`);
+
+  // Create mixed file filled with silence
+  const mixedPath = join(recordingDir, 'mixed_raw.pcm');
+  const fd = openSync(mixedPath, 'w');
+  const silenceBlock = Buffer.alloc(192000, 0);
+  for (let written = 0; written < alignedTotal;) {
+    const toWrite = Math.min(silenceBlock.length, alignedTotal - written);
+    writeSync(fd, silenceBlock, 0, toWrite, written);
+    written += toWrite;
+  }
+
+  // Mix TTS segments (overwrite — TTS doesn't overlap with speakers at those positions)
+  for (const seg of ttsSegments) {
+    if (!existsSync(seg.pcmPath)) continue;
+    const pcmData = readFileSync(seg.pcmPath);
+    const byteOffset = Math.floor(seg.offsetMs * BYTES_PER_MS);
+    const writeLen = Math.min(pcmData.length, alignedTotal - byteOffset);
+    if (writeLen > 0) {
+      writeSync(fd, pcmData, 0, writeLen, byteOffset);
+    }
+    console.log(`[Recording] Mixed TTS at ${Math.round(seg.offsetMs / 1000)}s (${Math.round(pcmData.length / 192000)}s of audio)`);
+  }
+
+  // Decode speaker Opus packets and mix into timeline
+  const decoder = new OpusScript(48000, 2);
+
+  for (const track of speakerTracks) {
+    const buf = readFileSync(track.file_path);
+    let pos = 0;
+    let packetCount = 0;
+
+    // Also write individual speaker PCM (with proper gaps for standalone playback)
+    const individualPcmPath = track.file_path.replace('.opus', '.pcm');
+    const indFd = openSync(individualPcmPath, 'w');
+    let indPos = 0;
+    let lastEndMs = -1;
+
+    while (pos + 6 <= buf.length) {
+      const ts = buf.readUInt32LE(pos);
+      const len = buf.readUInt16LE(pos + 4);
+      if (pos + 6 + len > buf.length) break;
+      const packet = buf.subarray(pos + 6, pos + 6 + len);
+      pos += 6 + len;
+
+      try {
+        const pcm = decoder.decode(packet);
+        const byteOffset = Math.floor(ts * BYTES_PER_MS);
+
+        // Mix into timeline: read existing samples, add incoming, clamp, write back
+        const mixLen = Math.min(pcm.length, alignedTotal - byteOffset);
+        if (mixLen > 0) {
+          const existing = Buffer.alloc(mixLen);
+          readSync(fd, existing, 0, mixLen, byteOffset);
+
+          for (let i = 0; i + 1 < mixLen; i += 2) {
+            const ex = existing.readInt16LE(i);
+            const inc = pcm.readInt16LE(i);
+            existing.writeInt16LE(Math.max(-32768, Math.min(32767, ex + inc)), i);
+          }
+          writeSync(fd, existing, 0, mixLen, byteOffset);
+        }
+
+        // Write to individual track with gap silence
+        if (lastEndMs >= 0 && ts > lastEndMs) {
+          const gapBytes = Math.floor((ts - lastEndMs) * BYTES_PER_MS);
+          let remaining = gapBytes;
+          while (remaining > 0) {
+            const toWrite = Math.min(remaining, silenceBlock.length);
+            writeSync(indFd, silenceBlock, 0, toWrite, indPos);
+            indPos += toWrite;
+            remaining -= toWrite;
+          }
+        }
+        writeSync(indFd, pcm, 0, pcm.length, indPos);
+        indPos += pcm.length;
+        lastEndMs = ts + 20;
+
+        packetCount++;
+      } catch {}
+    }
+
+    closeSync(indFd);
+
+    // Update DB to point to decoded .pcm file
+    db.prepare('UPDATE recording_participants SET file_path = ? WHERE id = ?').run(individualPcmPath, track.id);
+    console.log(`[Recording] Decoded ${packetCount} packets from ${track.username}`);
+  }
+
+  closeSync(fd);
+  console.log('[Recording] Mixed timeline built');
 }
 
 // ─── Public API ───────────────────────────────────────────────────────
@@ -467,11 +507,9 @@ export async function startRecording(channel, startedBy) {
   `).run(recordingKey, channel.guild.id, channel.id, channel.name, startedBy.id, startedBy.tag, accessCode);
 
   const recordingId = result.lastInsertRowid;
-
-  // Create the shared mixed timeline
   const timeline = new RecordingTimeline(recordingDir, recordingId);
 
-  // Subscribe speakers — decoded PCM flows into both individual files and mixed timeline
+  // Subscribe speakers — raw Opus packets written to disk, zero processing
   const receiver = connection.receiver;
   receiver.speaking.on('start', (userId) => timeline.subscribeUser(userId, receiver, channel));
 
@@ -480,7 +518,7 @@ export async function startRecording(channel, startedBy) {
     recordingDir, startedBy, channelName: channel.name, channel
   });
 
-  // Speak the opening notice — writes TTS PCM to mixed timeline + BOT_Notice.pcm
+  // Speak the opening notice — PCM saved to file for post-processing
   try {
     await speakRecordingNotice(connection, channel, timeline);
   } catch (e) {
@@ -495,13 +533,10 @@ export async function stopRecording(guildId) {
   if (!recording) throw new Error('No active recording found in this server.');
 
   const { connection, timeline, recordingId, recordingKey, recordingDir } = recording;
-
-  // Calculate duration
   const rec = db.prepare('SELECT started_at FROM recordings WHERE id = ?').get(recordingId);
 
-  // Fill mixed timeline silence up to now, then speak closing notice
+  // Speak closing notice before disconnecting
   try {
-    timeline.catchUpToNow();
     await speakClosingNotice(connection, timeline);
   } catch (e) {
     console.error('[Recording] Closing notice failed:', e.message);
@@ -509,10 +544,13 @@ export async function stopRecording(guildId) {
 
   await new Promise(r => setTimeout(r, 1000));
 
-  // Close all streams (speaker files + mixed file)
+  // Close all raw Opus streams
   await timeline.close();
 
-  await new Promise(r => setTimeout(r, 3000));
+  // Save TTS segments list before destroying the timeline reference
+  const ttsSegments = [...timeline.ttsSegments];
+
+  await new Promise(r => setTimeout(r, 2000));
   connection.destroy();
   activeRecordings.delete(guildId);
 
@@ -524,22 +562,26 @@ export async function stopRecording(guildId) {
     WHERE id = ?
   `).run(participants.length, finalDurationSecs, recordingId);
 
-  // Convert mixed PCM → merged.ogg (the single pre-mixed output)
+  // Decode all Opus packets offline and build the mixed timeline
+  console.log('[Recording] Starting offline decode and mix...');
+  await decodeAndBuildTimeline(recordingDir, recordingId, ttsSegments);
+
+  // Convert mixed PCM → merged.ogg
   await convertMixed(recordingDir);
 
-  // Convert individual speaker tracks → .ogg
-  await convertTracks(recordingId, participants);
+  // Convert individual speaker PCM → .ogg
+  const updatedParticipants = db.prepare('SELECT * FROM recording_participants WHERE recording_id = ?').all(recordingId);
+  await convertTracks(recordingId, updatedParticipants);
 
   db.prepare(`UPDATE recordings SET status = 'ready' WHERE id = ?`).run(recordingId);
 
-  return { recordingId, recordingKey, participants, recordingDir, durationSecs: finalDurationSecs };
+  return { recordingId, recordingKey, participants: updatedParticipants, recordingDir, durationSecs: finalDurationSecs };
 }
 
 async function convertMixed(recordingDir) {
   const { execFile } = await import('child_process');
   const { promisify } = await import('util');
   const execFileAsync = promisify(execFile);
-  const ffmpegPath = (await import('ffmpeg-static')).default;
 
   const mixedPcm = join(recordingDir, 'mixed_raw.pcm');
   const mergedOgg = join(recordingDir, 'merged.ogg');
@@ -550,7 +592,7 @@ async function convertMixed(recordingDir) {
   }
 
   try {
-    await execFileAsync(ffmpegPath, [
+    await execFileAsync(FFMPEG_PATH, [
       '-y', '-f', 's16le', '-ar', '48000', '-ac', '2',
       '-i', mixedPcm,
       '-c:a', 'libvorbis', '-q:a', '5',
@@ -566,18 +608,19 @@ async function convertTracks(recordingId, participants) {
   const { execFile } = await import('child_process');
   const { promisify } = await import('util');
   const execFileAsync = promisify(execFile);
-  const ffmpegPath = (await import('ffmpeg-static')).default;
 
   for (const p of participants) {
     if (!p.file_path || !existsSync(p.file_path)) continue;
+    // Only convert .pcm files (skip .opus raw files, skip already-converted .ogg)
+    if (!p.file_path.endsWith('.pcm')) continue;
     const output = p.file_path.replace('.pcm', '.ogg');
     try {
-      await execFileAsync(ffmpegPath, [
+      await execFileAsync(FFMPEG_PATH, [
         '-y', '-f', 's16le', '-ar', '48000', '-ac', '2',
         '-i', p.file_path,
         '-c:a', 'libvorbis', '-q:a', '5',
         output
-      ], { timeout: 60000 });
+      ], { timeout: 120000 });
       db.prepare('UPDATE recording_participants SET file_path = ? WHERE id = ?').run(output, p.id);
       console.log(`[Recording] Converted ${p.username} to OGG`);
     } catch (e) {
