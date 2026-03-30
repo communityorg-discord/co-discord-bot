@@ -764,13 +764,16 @@ client.once('ready', async () => {
 const COMMAND_CHANNEL_ID = '1487636502593798255';
 const COMMAND_CHANNEL_GUILD = '1357119461957570570';
 const COMMAND_SUPERUSERS = ['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'];
+const VERIFICATION_CHANNEL_ID = '1487631939103100969';
 
 client.on('interactionCreate', async interaction => {
   try {
   console.log('[Interaction]', interaction.type, interaction.isChatInputCommand() ? interaction.commandName : '');
   if (interaction.isChatInputCommand()) {
     // Restrict slash commands to the bot commands channel in Staff HQ (superusers exempt)
-    if (interaction.guildId === COMMAND_CHANNEL_GUILD && interaction.channelId !== COMMAND_CHANNEL_ID && !COMMAND_SUPERUSERS.includes(interaction.user.id)) {
+    // Allow /verify in the verification channel as well
+    const isVerifyInVerificationChannel = interaction.commandName === 'verify' && interaction.channelId === VERIFICATION_CHANNEL_ID;
+    if (interaction.guildId === COMMAND_CHANNEL_GUILD && interaction.channelId !== COMMAND_CHANNEL_ID && !COMMAND_SUPERUSERS.includes(interaction.user.id) && !isVerifyInVerificationChannel) {
       return interaction.reply({ content: `❌ Bot commands can only be used in <#${COMMAND_CHANNEL_ID}>.`, ephemeral: true });
     }
 
