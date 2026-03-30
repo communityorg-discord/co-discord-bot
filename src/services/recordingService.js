@@ -575,6 +575,12 @@ export async function stopRecording(guildId) {
 
   db.prepare(`UPDATE recordings SET status = 'ready' WHERE id = ?`).run(recordingId);
 
+  // Trigger transcription on portal
+  fetch(`http://localhost:3016/api/recordings/${recordingId}/transcribe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET || 'co-bot-internal' }
+  }).catch(e => console.error('[Transcript] Failed to trigger:', e.message));
+
   return { recordingId, recordingKey, participants: updatedParticipants, recordingDir, durationSecs: finalDurationSecs };
 }
 

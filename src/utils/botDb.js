@@ -1058,4 +1058,16 @@ db.exec(`CREATE TABLE IF NOT EXISTS recording_participants (
 try { db.exec("ALTER TABLE recording_participants ADD COLUMN started_at DATETIME"); } catch (e) { /* already exists */ }
 try { db.exec("ALTER TABLE recording_participants ADD COLUMN offset_seconds REAL DEFAULT 0"); } catch (e) { /* already exists */ }
 
+db.exec(`CREATE TABLE IF NOT EXISTS recording_transcripts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  recording_id INTEGER NOT NULL,
+  transcript_text TEXT,
+  transcript_json TEXT,
+  status TEXT DEFAULT 'pending',
+  word_count INTEGER,
+  duration_seconds INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  completed_at DATETIME
+)`);
+
 export { db };
