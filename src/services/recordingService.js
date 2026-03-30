@@ -142,8 +142,12 @@ export async function startRecording(channel, startedBy) {
   const receiver = connection.receiver;
   const activeStreams = new Map();
 
-  receiver.speaking.on('start', (userId) => {
-    if (activeStreams.has(userId)) return;
+  function subscribeUser(userId) {
+    // If already actively subscribed with a live stream, skip
+    if (activeStreams.has(userId)) {
+      const existing = activeStreams.get(userId);
+      if (!existing.audioStream.destroyed) return;
+    }
 
     const member = channel.members.get(userId);
     const username = member?.user?.tag || userId;
@@ -151,10 +155,9 @@ export async function startRecording(channel, startedBy) {
     const filePath = join(recordingDir, `${userId}_${safeName}.pcm`);
 
     const audioStream = receiver.subscribe(userId, {
-      end: { behavior: EndBehaviorType.Manual }
+      end: { behavior: EndBehaviorType.AfterInactivity, duration: 300000 } // 5 min inactivity before closing
     });
 
-    // Decode opus to PCM using opusscript
     const decoder = new OpusScript(48000, 2);
     const fileStream = createWriteStream(filePath, { flags: 'a' });
 
@@ -164,7 +167,16 @@ export async function startRecording(channel, startedBy) {
         fileStream.write(pcm);
       } catch {}
     });
-    audioStream.on('error', (e) => console.error(`[Recording] Stream error for ${username}:`, e.message));
+
+    // When stream ends (after 5min silence), allow re-subscription on next speak
+    audioStream.on('end', () => {
+      console.log(`[Recording] Stream ended for ${username} — will re-subscribe on next speak`);
+      activeStreams.delete(userId);
+    });
+    audioStream.on('error', (e) => {
+      console.error(`[Recording] Stream error for ${username}:`, e.message);
+      activeStreams.delete(userId);
+    });
 
     activeStreams.set(userId, { audioStream, fileStream, filePath, username, decoder });
 
@@ -173,8 +185,11 @@ export async function startRecording(channel, startedBy) {
       VALUES (?, ?, ?, ?)
     `).run(recordingId, userId, username, filePath);
 
-    console.log(`[Recording] Started track for ${username}`);
-  });
+    console.log(`[Recording] Subscribed track for ${username}`);
+  }
+
+  // Re-subscribe every time someone starts speaking (handles silence gaps)
+  receiver.speaking.on('start', (userId) => subscribeUser(userId));
 
   // Store in active map
   activeRecordings.set(channel.guild.id, {
@@ -197,14 +212,19 @@ export async function stopRecording(guildId) {
 
   const { connection, activeStreams, recordingId, recordingKey, recordingDir, channelName } = recording;
 
-  // Destroy all audio streams and close file writers
+  // Destroy all audio streams and flush file writers
   for (const [userId, stream] of activeStreams) {
     try { stream.audioStream?.destroy(); } catch {}
-    try { stream.fileStream?.end(); } catch {}
-    console.log(`[Recording] Closed track for ${stream.username}`);
+    // Wait for file stream to flush completely
+    await new Promise(resolve => {
+      if (!stream.fileStream || stream.fileStream.writableEnded) return resolve();
+      stream.fileStream.end(() => resolve());
+    });
+    const size = existsSync(stream.filePath) ? (await import('fs')).statSync(stream.filePath).size : 0;
+    console.log(`[Recording] Closed track for ${stream.username} — ${Math.round(size / 192000)}s of audio (${size} bytes)`);
   }
 
-  await new Promise(r => setTimeout(r, 2000));
+  await new Promise(r => setTimeout(r, 3000));
   connection.destroy();
   activeRecordings.delete(guildId);
 
