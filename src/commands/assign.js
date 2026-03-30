@@ -8,6 +8,17 @@ import fetch from 'node-fetch';
 const ASSIGNMENTS_CHANNEL_ID = '1487630065008115824';
 const SUPERUSER_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'];
 
+const TEAMS = {
+  'executive_operations_board': 'Executive Operations Board',
+  'board_of_directors': 'Board of Directors',
+  'extended_board_of_directors': 'Extended Board of Directors',
+  'dmspc': 'Department of Management Strategy, Policy and Compliance',
+  'dss': 'Department for Safety and Security',
+  'dcos': 'Department of Communications and Operational Support',
+  'dgacm': 'Department of General Assembly and Conference Management',
+  'ic': 'International Court',
+};
+
 const MANAGER_POSITIONS = [
   'Line Manager', 'Supervisor', 'Director', 'Secretary-General',
   'Deputy Secretary-General', 'Chef de Cabinet', 'Director-General',
@@ -169,7 +180,8 @@ export const data = new SlashCommandBuilder()
   .addStringOption(opt => opt.setName('task').setDescription('Task description').setRequired(true))
   .addStringOption(opt => opt.setName('duration').setDescription('Duration e.g. "3d", "1w", "24h", "30m", "until Sunday"').setRequired(true))
   .addUserOption(opt => opt.setName('assigned_to').setDescription('Staff member to assign to (optional if team is set)').setRequired(false))
-  .addStringOption(opt => opt.setName('team').setDescription('Team name — assigns to the whole team').setRequired(false))
+  .addStringOption(opt => opt.setName('team').setDescription('Team — assigns to the whole team').setRequired(false)
+    .addChoices(...Object.entries(TEAMS).map(([value, name]) => ({ name, value }))))
   .addStringOption(opt => opt.setName('notes').setDescription('Additional notes').setRequired(false));
 
 export async function execute(interaction) {
@@ -183,7 +195,8 @@ export async function execute(interaction) {
   const targetUser = interaction.options.getUser('assigned_to');
   const taskDesc = interaction.options.getString('task');
   const durationStr = interaction.options.getString('duration');
-  const team = interaction.options.getString('team');
+  const teamKey = interaction.options.getString('team');
+  const team = teamKey ? (TEAMS[teamKey] || teamKey) : null;
   const notes = interaction.options.getString('notes');
 
   if (!targetUser && !team) {
@@ -228,11 +241,11 @@ export async function execute(interaction) {
     console.error('[assign] Portal API error:', e.message);
   }
 
-  // Create in bot DB
+  // Create in bot DB — use 'TEAM' for team-only assignments (assigned_to is NOT NULL)
   const result = createAssignment({
     title: taskDesc,
     description: notes || null,
-    assignedTo: targetUser?.id || null,
+    assignedTo: targetUser?.id || 'TEAM',
     assignedBy: interaction.user.id,
     team: team || null,
     dueDate: dueDate.toISOString(),
