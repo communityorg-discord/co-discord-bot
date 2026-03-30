@@ -71,8 +71,16 @@ export async function execute(interaction) {
       'SELECT * FROM brag_records WHERE discord_id = ? AND week_key = ?'
     ).get(targetDbUser.discord_id, previousWeekKey);
 
-    const thresholdsGreen = 150;
-    const thresholdsAmber = 100;
+    // Fetch threshold from portal settings (may be overridden for specific weeks)
+    let thresholdsGreen = 150;
+    try {
+      const resp = await fetch('http://localhost:3016/api/brag/threshold', { headers: { 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET } }).catch(() => null);
+      if (resp?.ok) {
+        const data = await resp.json();
+        if (data.green) thresholdsGreen = data.green;
+      }
+    } catch {}
+    const thresholdsAmber = Math.round(thresholdsGreen * 0.6667);
 
     let projected = null;
     const currentCount = currentWeekRecord?.message_count || 0;
