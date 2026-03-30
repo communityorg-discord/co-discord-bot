@@ -4,6 +4,7 @@ import { getAuthLevelRole } from '../utils/positions.js';
 import { ALL_SERVER_IDS } from '../config.js';
 import { logAction } from '../utils/logger.js';
 import { AUTH_OVERRIDE_LOG_CHANNEL_ID } from '../config.js';
+import { setAuthOverride, removeAuthOverride } from '../utils/botDb.js';
 
 export const data = new SlashCommandBuilder()
   .setName('authorisation-override')
@@ -15,9 +16,9 @@ export const data = new SlashCommandBuilder()
   )
   .addIntegerOption(opt =>
     opt.setName('level')
-      .setDescription('New authorisation level (1-7)')
+      .setDescription('New authorisation level (1-7, or 0 to remove override)')
       .setRequired(true)
-      .setMinValue(1)
+      .setMinValue(0)
       .setMaxValue(7)
   )
   .addStringOption(opt =>
@@ -44,9 +45,23 @@ export async function execute(interaction) {
 
     const targetUserId = targetUser.id;
 
-    const newAuthLevelRoleName = getAuthLevelRole(newAuthLevel);
+    // Level 0 = remove override, revert to position-based auth
+    if (newAuthLevel === 0) {
+      removeAuthOverride(targetUserId);
+      return interaction.editReply({
+        embeds: [new EmbedBuilder()
+          .setTitle('🔓 Auth Override Removed')
+          .setColor(0xF59E0B)
+          .setDescription(`Auth override for <@${targetUserId}> has been removed.\n\nTheir auth level will revert to their position-based level on next verification/role sync.`)
+          .setTimestamp()
+        ]
+      });
+    }
 
-    // Uses ALL_SERVER_IDS from config.js
+    // Save override to DB — persists across reverifications
+    setAuthOverride(targetUserId, newAuthLevel, reason, interaction.user.id);
+
+    const newAuthLevelRoleName = getAuthLevelRole(newAuthLevel);
 
     let updated = 0;
     const results = [];

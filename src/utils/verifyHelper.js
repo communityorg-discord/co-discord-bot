@@ -1,6 +1,6 @@
 import { POSITIONS, ALL_MANAGED_ROLES } from './positions.js';
 import { STAFF_HQ_ID } from '../config.js';
-import db from './botDb.js';
+import db, { getAuthOverride } from './botDb.js';
 
 /**
  * Apply roles + nickname for a verified member across ALL guilds.
@@ -9,9 +9,12 @@ import db from './botDb.js';
 export async function applyVerification(client, discordId, position, nickname, { isProbation = false, overrideAuthLevel = null } = {}) {
   const baseRoles = [...(POSITIONS[position] || []), 'Verified', 'CO Staff'];
 
+  // Check for a persistent auth override in the DB (set via /authorisation-override)
+  const storedOverride = getAuthOverride(discordId);
+
   // If on probation, replace the auth level role with one level lower
   let roleNames = baseRoles;
-  if (isProbation && !overrideAuthLevel) {
+  if (isProbation && !overrideAuthLevel && !storedOverride) {
     const authLevelMatch = baseRoles.find(r => r.startsWith('Authorisation Level '));
     if (authLevelMatch) {
       const currentLevel = parseInt(authLevelMatch.replace('Authorisation Level ', ''), 10);
@@ -21,8 +24,13 @@ export async function applyVerification(client, discordId, position, nickname, {
     }
   }
 
-  // If override is provided, replace auth level role with the override
-  if (overrideAuthLevel) {
+  // Stored DB override takes priority (persists across reverifications)
+  if (storedOverride) {
+    roleNames = roleNames.map(r => r.startsWith('Authorisation Level ') ? `Authorisation Level ${storedOverride.auth_level}` : r);
+    console.log(`[Verify] Auth override active for ${discordId}: level ${storedOverride.auth_level} (set by ${storedOverride.set_by})`);
+  }
+  // One-time override from the verify approval UI
+  else if (overrideAuthLevel) {
     roleNames = roleNames.map(r => r.startsWith('Authorisation Level ') ? `Authorisation Level ${overrideAuthLevel}` : r);
   }
 

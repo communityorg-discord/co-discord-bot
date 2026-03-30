@@ -224,6 +224,15 @@ try { db.exec("ALTER TABLE assignments ADD COLUMN team_members TEXT DEFAULT '[]'
 try { db.exec("ALTER TABLE assignments ADD COLUMN team_acknowledgements TEXT DEFAULT '[]'"); } catch (e) { /* exists */ }
 try { db.exec("ALTER TABLE assignments ADD COLUMN team_confirmations TEXT DEFAULT '[]'"); } catch (e) { /* exists */ }
 
+db.exec(`CREATE TABLE IF NOT EXISTS auth_overrides (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  discord_id TEXT NOT NULL UNIQUE,
+  auth_level INTEGER NOT NULL,
+  reason TEXT,
+  set_by TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
 db.exec(`CREATE TABLE IF NOT EXISTS assignment_counter (
   year INTEGER PRIMARY KEY,
   counter INTEGER NOT NULL DEFAULT 0
@@ -1073,5 +1082,19 @@ db.exec(`CREATE TABLE IF NOT EXISTS recording_transcripts (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   completed_at DATETIME
 )`);
+
+// Auth override helpers
+export function getAuthOverride(discordId) {
+  return db.prepare('SELECT * FROM auth_overrides WHERE discord_id = ?').get(String(discordId));
+}
+
+export function setAuthOverride(discordId, authLevel, reason, setBy) {
+  db.prepare(`INSERT OR REPLACE INTO auth_overrides (discord_id, auth_level, reason, set_by, created_at) VALUES (?, ?, ?, ?, datetime('now'))`)
+    .run(String(discordId), authLevel, reason, String(setBy));
+}
+
+export function removeAuthOverride(discordId) {
+  db.prepare('DELETE FROM auth_overrides WHERE discord_id = ?').run(String(discordId));
+}
 
 export { db };
