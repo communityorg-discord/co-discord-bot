@@ -81,6 +81,7 @@ export async function execute(interaction) {
       }
     } catch {}
     const thresholdsAmber = Math.round(thresholdsGreen * 0.6667);
+    const thresholdsRed = Math.round(thresholdsGreen * 0.3333);
 
     let projected = null;
     const currentCount = currentWeekRecord?.message_count || 0;
@@ -107,7 +108,7 @@ export async function execute(interaction) {
         { name: 'Department', value: targetDbUser.department || 'N/A', inline: true },
         { name: '\u200B', value: '\u200B', inline: true },
         { name: '📊 This Week', value: String(currentCount), inline: true },
-        { name: '🎯 Target', value: `${thresholdsGreen}+ 🟢 | ${thresholdsAmber}+ 🟡`, inline: true },
+        { name: '🎯 Target', value: `🟢 ${thresholdsGreen}+\n🟡 ${thresholdsAmber}-${thresholdsGreen}\n🔴 ${thresholdsRed}-${thresholdsAmber}\n⚫ 0-${thresholdsRed}`, inline: true },
         { name: '📈 Projected', value: projected !== null ? String(projected) : 'N/A', inline: true },
         { name: '🏆 Last Week', value: lastWeekCount > 0 ? `${lastWeekCount} — ${gradeEmoji(lastWeekGrade)} ${lastWeekGrade?.toUpperCase()}` : 'No data', inline: true },
         { name: 'Overall Grade', value: `${gradeEmoji(lastWeekGrade)} ${(lastWeekGrade || 'N/A').toUpperCase()}`, inline: true },
