@@ -15,7 +15,13 @@ const activeRecordings = new Map();
 async function speakRecordingNotice(connection, voiceChannel) {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Europe/London' });
-  const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
+
+  // Natural spoken time — "1 o'clock", "2 thirty", "3 oh 5"
+  const h = parseInt(now.toLocaleString('en-GB', { hour: 'numeric', hour12: true, timeZone: 'Europe/London' }));
+  const m = now.getMinutes();
+  const ampm = now.getHours() < 12 ? 'AM' : 'PM';
+  const minuteStr = m === 0 ? "o'clock" : m < 10 ? `oh ${m}` : String(m);
+  const timeStr = `${h} ${minuteStr} ${ampm}`;
 
   await voiceChannel.guild.members.fetch();
   const presentMembers = voiceChannel.members
@@ -23,52 +29,46 @@ async function speakRecordingNotice(connection, voiceChannel) {
     .map(m => m.displayName || m.user.username);
   const presentList = presentMembers.length > 0 ? presentMembers.join(', ') : 'no members detected';
 
-  const script = `This voice channel is now being recorded, in line with the Community Organisation Internal Staff Policy. The date is ${dateStr}. The time is ${timeStr}. The following members are present: ${presentList}. For the records, could the Chair please state the Case Number before beginning the meeting.`;
+  const sentences = [
+    'This voice channel is now being recorded, in line with the Community Organisation Internal Staff Policy.',
+    `The date is ${dateStr}.`,
+    `The time is ${timeStr}.`,
+    `The following members are present: ${presentList}.`,
+    'For the records, could the Chair please state the Case Number before beginning the meeting.',
+  ];
 
-  // Download TTS audio parts from Google Translate
-  const audioParts = googleTTS.getAllAudioUrls(script, { lang: 'en-GB', slow: false });
-  const buffers = [];
-  for (const part of audioParts) {
-    const res = await fetch(part.url);
-    buffers.push(Buffer.from(await res.arrayBuffer()));
-  }
-  const mp3Buffer = Buffer.concat(buffers);
-
-  const tmpMp3 = join(tmpdir(), `co_notice_${Date.now()}.mp3`);
-  writeFileSync(tmpMp3, mp3Buffer);
-  console.log('[TTS] MP3 generated:', mp3Buffer.length, 'bytes');
-
-  // Pipe MP3 through ffmpeg → raw PCM so @discordjs/voice can play it
   const ffmpegPath = (await import('ffmpeg-static')).default;
-  const ffmpeg = spawn(ffmpegPath, ['-i', tmpMp3, '-f', 's16le', '-ar', '48000', '-ac', '2', 'pipe:1'], { stdio: ['ignore', 'pipe', 'ignore'] });
-
   const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
-  const resource = createAudioResource(ffmpeg.stdout, { inputType: StreamType.Raw });
-
   connection.subscribe(player);
-  player.play(resource);
-  console.log('[TTS] Playing notice...');
 
-  await new Promise((resolve) => {
-    player.on(AudioPlayerStatus.Idle, () => {
-      console.log('[TTS] Notice finished');
-      try { unlinkSync(tmpMp3); } catch {}
-      resolve();
+  for (const sentence of sentences) {
+    // Download TTS for this sentence
+    const parts = googleTTS.getAllAudioUrls(sentence, { lang: 'en-GB', slow: false });
+    const buffers = [];
+    for (const part of parts) {
+      const res = await fetch(part.url);
+      buffers.push(Buffer.from(await res.arrayBuffer()));
+    }
+
+    const tmpMp3 = join(tmpdir(), `co_notice_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.mp3`);
+    writeFileSync(tmpMp3, Buffer.concat(buffers));
+
+    // Pipe through ffmpeg to PCM
+    const ff = spawn(ffmpegPath, ['-i', tmpMp3, '-f', 's16le', '-ar', '48000', '-ac', '2', 'pipe:1'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const resource = createAudioResource(ff.stdout, { inputType: StreamType.Raw });
+
+    player.play(resource);
+    console.log(`[TTS] Playing: "${sentence.slice(0, 60)}..."`);
+
+    await new Promise((resolve) => {
+      player.once(AudioPlayerStatus.Idle, resolve);
+      player.once('error', (e) => { console.error('[TTS] Error:', e.message); resolve(); });
+      setTimeout(resolve, 30000);
     });
-    player.on('error', (e) => {
-      console.error('[TTS] Player error:', e.message);
-      try { unlinkSync(tmpMp3); } catch {}
-      resolve();
-    });
-    ffmpeg.on('error', (e) => {
-      console.error('[TTS] ffmpeg error:', e.message);
-      resolve();
-    });
-    setTimeout(() => {
-      try { unlinkSync(tmpMp3); } catch {}
-      resolve();
-    }, 90000);
-  });
+
+    try { unlinkSync(tmpMp3); } catch {}
+    await new Promise(r => setTimeout(r, 400));
+  }
 
   console.log('[Recording] Notice spoken');
 }
