@@ -96,6 +96,21 @@ export async function startRecording(channel, startedBy) {
 
   await entersState(connection, VoiceConnectionStatus.Ready, 20000);
 
+  // Handle disconnection — try to reconnect
+  connection.on(VoiceConnectionStatus.Disconnected, async () => {
+    try {
+      await Promise.race([
+        entersState(connection, VoiceConnectionStatus.Signalling, 5000),
+        entersState(connection, VoiceConnectionStatus.Connecting, 5000),
+      ]);
+      console.log('[Recording] Reconnecting...');
+    } catch {
+      console.error('[Recording] Connection lost — cleaning up');
+      activeRecordings.delete(channel.guild.id);
+      connection.destroy();
+    }
+  });
+
   // DB insert
   const result = db.prepare(`
     INSERT INTO recordings (recording_key, guild_id, channel_id, channel_name, started_by, started_by_username, expires_at, access_code)
@@ -117,7 +132,7 @@ export async function startRecording(channel, startedBy) {
     const filePath = join(recordingDir, `${userId}_${safeName}.pcm`);
 
     const audioStream = receiver.subscribe(userId, {
-      end: { behavior: EndBehaviorType.AfterSilence, duration: 500 }
+      end: { behavior: EndBehaviorType.Manual }
     });
 
     // Decode opus to PCM using opusscript
@@ -130,10 +145,9 @@ export async function startRecording(channel, startedBy) {
         fileStream.write(pcm);
       } catch {}
     });
-    audioStream.on('end', () => activeStreams.delete(userId));
-    audioStream.on('error', () => activeStreams.delete(userId));
+    audioStream.on('error', (e) => console.error(`[Recording] Stream error for ${username}:`, e.message));
 
-    activeStreams.set(userId, { fileStream, filePath, username, decoder });
+    activeStreams.set(userId, { audioStream, fileStream, filePath, username, decoder });
 
     db.prepare(`
       INSERT OR IGNORE INTO recording_participants (recording_id, discord_id, username, file_path)
@@ -164,12 +178,14 @@ export async function stopRecording(guildId) {
 
   const { connection, activeStreams, recordingId, recordingKey, recordingDir, channelName } = recording;
 
-  // Close all streams
-  for (const [, stream] of activeStreams) {
-    try { stream.fileStream.end(); } catch {}
+  // Destroy all audio streams and close file writers
+  for (const [userId, stream] of activeStreams) {
+    try { stream.audioStream?.destroy(); } catch {}
+    try { stream.fileStream?.end(); } catch {}
+    console.log(`[Recording] Closed track for ${stream.username}`);
   }
 
-  await new Promise(r => setTimeout(r, 1500));
+  await new Promise(r => setTimeout(r, 2000));
   connection.destroy();
   activeRecordings.delete(guildId);
 
