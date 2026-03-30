@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, ChannelType } from 'discord.js';
-import { startRecording, stopRecording, isRecording } from '../services/recordingService.js';
+import { startRecording, stopRecording, isRecording, getActiveRecording } from '../services/recordingService.js';
 import { hasPortalAuth } from '../utils/permissions.js';
 import { db } from '../utils/botDb.js';
 
@@ -71,16 +71,27 @@ export async function execute(interaction) {
 
       await interaction.editReply({ content: `✅ Recording started in **${voiceChannel.name}**. Check your DMs for details.` });
 
-      // Announce in text channel
-      await interaction.channel.send({
-        embeds: [new EmbedBuilder()
-          .setColor(0xef4444)
-          .setTitle('🔴 Recording in Progress')
-          .setDescription(`**${interaction.user.tag}** has started a recording in **${voiceChannel.name}**.\n\nAll participants will be recorded on separate tracks. Use \`/record stop\` to end.\n\nAn access code has been sent via DM — files can be downloaded at [portal.communityorg.co.uk/recordings](https://portal.communityorg.co.uk/recordings).`)
-          .setFooter({ text: 'CO Recording System' })
-          .setTimestamp()
-        ]
-      }).catch(() => {});
+      // Post live-updating embed in text channel
+      const liveEmbed = new EmbedBuilder()
+        .setColor(0xef4444)
+        .setTitle('🔴 Recording in Progress')
+        .setDescription(`Recording active in **${voiceChannel.name}**\nStarted by **${interaction.user.tag}** — <t:${startTs}:R>`)
+        .addFields(
+          { name: 'Participants (0)', value: '*Waiting for speakers...*', inline: true },
+          { name: 'Duration', value: '`00:00`', inline: true },
+        )
+        .setFooter({ text: 'Use /record stop to end · Updates every 5s' })
+        .setTimestamp();
+
+      const liveMsg = await interaction.channel.send({ embeds: [liveEmbed] }).catch(() => null);
+
+      // Start live embed updates on the timeline
+      if (liveMsg) {
+        const active = getActiveRecording(interaction.guild.id);
+        if (active?.timeline) {
+          active.timeline.startLiveUpdates(liveMsg, voiceChannel.name, interaction.user.tag);
+        }
+      }
 
     } catch (e) {
       await interaction.editReply({ content: `❌ Failed to start recording: ${e.message}` });
@@ -93,6 +104,10 @@ export async function execute(interaction) {
     }
 
     try {
+      // Grab the live message before stopRecording destroys the timeline
+      const active = getActiveRecording(interaction.guild.id);
+      const liveMsg = active?.timeline?.liveMessage || null;
+
       const { recordingId, recordingKey, participants, recordingDir, durationSecs } = await stopRecording(interaction.guild.id);
 
       const durationStr = `${Math.floor(durationSecs / 60)}m ${durationSecs % 60}s`;
@@ -100,18 +115,19 @@ export async function execute(interaction) {
       const rec = db.prepare('SELECT * FROM recordings WHERE id = ?').get(recordingId);
       const expiresTs = Math.floor(new Date(rec.expires_at).getTime() / 1000);
 
+      const trackList = participants.filter(p => p.discord_id !== 'BOT').map(p => `• ${p.username}`).join('\n') || 'None';
+
       const embed = new EmbedBuilder()
         .setColor(0x22c55e)
         .setTitle('✅ Recording Complete')
         .setDescription(`Recording from **${rec.channel_name}** is ready.`)
         .addFields(
           { name: 'Duration', value: durationStr, inline: true },
-          { name: 'Participants', value: String(participants.length), inline: true },
+          { name: 'Participants', value: String(participants.filter(p => p.discord_id !== 'BOT').length), inline: true },
           { name: 'Expires', value: `<t:${expiresTs}:R>`, inline: true },
-          { name: 'Tracks', value: participants.map(p => `• ${p.username}`).join('\n') || 'None', inline: false },
-          { name: 'Files', value: `\`${recordingDir}\``, inline: false },
+          { name: 'Tracks', value: trackList, inline: false },
         )
-        .setFooter({ text: 'Files are kept for 7 days then automatically deleted.' })
+        .setFooter({ text: 'Files are kept for 7 days · Download at portal.communityorg.co.uk/recordings' })
         .setTimestamp();
 
       // DM the starter
@@ -121,16 +137,26 @@ export async function execute(interaction) {
         await interaction.user.send({ embeds: [embed] }).catch(() => {});
       }
 
-      await interaction.editReply({ content: `✅ Recording stopped. ${participants.length} track(s) saved. Duration: **${durationStr}**. Check your DMs.` });
+      await interaction.editReply({ content: `✅ Recording stopped. ${participants.filter(p => p.discord_id !== 'BOT').length} track(s) saved. Duration: **${durationStr}**. Check your DMs.` });
 
-      await interaction.channel.send({
-        embeds: [new EmbedBuilder()
-          .setColor(0x22c55e)
-          .setTitle('⏹️ Recording Ended')
-          .setDescription(`Recording stopped by **${interaction.user.tag}**. Duration: **${durationStr}**. ${participants.length} participant track(s) saved.`)
-          .setFooter({ text: 'CO Recording System' })
-        ]
-      }).catch(() => {});
+      // Update the live embed to show final state, or post a new one
+      const finalEmbed = new EmbedBuilder()
+        .setColor(0x22c55e)
+        .setTitle('⏹️ Recording Ended')
+        .setDescription(`Recording stopped by **${interaction.user.tag}**`)
+        .addFields(
+          { name: 'Duration', value: `**${durationStr}**`, inline: true },
+          { name: 'Participants', value: String(participants.filter(p => p.discord_id !== 'BOT').length), inline: true },
+          { name: 'Tracks', value: trackList, inline: false },
+        )
+        .setFooter({ text: 'CO Recording System · Download at portal.communityorg.co.uk/recordings' })
+        .setTimestamp();
+
+      if (liveMsg) {
+        await liveMsg.edit({ embeds: [finalEmbed] }).catch(() => {});
+      } else {
+        await interaction.channel.send({ embeds: [finalEmbed] }).catch(() => {});
+      }
 
     } catch (e) {
       await interaction.editReply({ content: `❌ Failed to stop recording: ${e.message}` });

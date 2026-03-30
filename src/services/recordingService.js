@@ -47,8 +47,12 @@ class RecordingTimeline {
     this.currentBytePos = 0;
     this.speakerFiles = new Map(); // userId → { stream, path, username }
     this.activeStreams = new Map(); // userId → { audioStream, decoder, username }
+    this.currentlySpeaking = new Set(); // userIds currently producing audio
+    this.speakerLastActive = new Map(); // userId → Date.now() of last audio chunk
     this.recordingDir = recordingDir;
     this.recordingId = recordingId;
+    this.liveMessage = null; // Discord message to update with live status
+    this.liveInterval = null;
   }
 
   get currentPositionMs() {
@@ -96,6 +100,10 @@ class RecordingTimeline {
 
       console.log(`[Recording] New speaker: ${username} (offset: ${((Date.now() - this.startTime) / 1000).toFixed(1)}s)`);
     }
+
+    // Track speaking activity
+    this.currentlySpeaking.add(userId);
+    this.speakerLastActive.set(userId, Date.now());
 
     // Write to individual speaker file
     this.speakerFiles.get(userId).stream.write(pcmChunk);
@@ -165,6 +173,88 @@ class RecordingTimeline {
     this.activeStreams.set(userId, { audioStream, decoder, ffmpegProcess: ffmpegClean, username });
   }
 
+  // Returns current recording status for the live embed
+  getStatus() {
+    const now = Date.now();
+    const elapsedSecs = Math.round((now - this.startTime) / 1000);
+    const mins = Math.floor(elapsedSecs / 60);
+    const secs = elapsedSecs % 60;
+    const durationStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+    // Mark users as not speaking if no audio for 500ms
+    for (const userId of this.currentlySpeaking) {
+      const lastActive = this.speakerLastActive.get(userId) || 0;
+      if (now - lastActive > 500) this.currentlySpeaking.delete(userId);
+    }
+
+    // Build participant list with speaking indicators
+    const participants = [];
+    for (const [userId, speaker] of this.speakerFiles) {
+      if (userId === 'BOT') continue; // skip bot notice track
+      const isSpeaking = this.currentlySpeaking.has(userId);
+      participants.push({
+        userId,
+        username: speaker.username,
+        isSpeaking,
+      });
+    }
+
+    return { durationStr, elapsedSecs, participants, speakerCount: participants.length };
+  }
+
+  // Start the live embed update interval
+  startLiveUpdates(message, channelName, startedByTag) {
+    this.liveMessage = message;
+    this._channelName = channelName;
+    this._startedByTag = startedByTag;
+    this._startTs = Math.floor(this.startTime / 1000);
+
+    this.liveInterval = setInterval(() => this._updateLiveEmbed(), 5000);
+  }
+
+  async _updateLiveEmbed() {
+    if (!this.liveMessage) return;
+    try {
+      const { EmbedBuilder } = await import('discord.js');
+      const status = this.getStatus();
+
+      const participantLines = status.participants.length > 0
+        ? status.participants.map(p => {
+            const indicator = p.isSpeaking ? '🔊' : '🔇';
+            return `${indicator} <@${p.userId}>`;
+          }).join('\n')
+        : '*Waiting for speakers...*';
+
+      const embed = new EmbedBuilder()
+        .setColor(0xef4444)
+        .setTitle('🔴 Recording in Progress')
+        .setDescription(`Recording active in **${this._channelName}**\nStarted by **${this._startedByTag}** — <t:${this._startTs}:R>`)
+        .addFields(
+          { name: `Participants (${status.speakerCount})`, value: participantLines, inline: true },
+          { name: 'Duration', value: `\`${status.durationStr}\``, inline: true },
+        )
+        .setFooter({ text: 'Use /record stop to end · Updates every 5s' })
+        .setTimestamp();
+
+      await this.liveMessage.edit({ embeds: [embed] });
+    } catch (e) {
+      // Message might have been deleted — stop updating
+      if (e.code === 10008) {
+        clearInterval(this.liveInterval);
+        this.liveInterval = null;
+        this.liveMessage = null;
+      }
+    }
+  }
+
+  stopLiveUpdates() {
+    if (this.liveInterval) {
+      clearInterval(this.liveInterval);
+      this.liveInterval = null;
+    }
+    this.liveMessage = null;
+  }
+
   // Fill timeline silence up to current real time (call before closing notice)
   catchUpToNow() {
     const nowMs = Date.now() - this.startTime;
@@ -173,6 +263,8 @@ class RecordingTimeline {
   }
 
   async close() {
+    this.stopLiveUpdates();
+
     // End audio streams and close ffmpeg stdin to flush remaining audio
     for (const [, s] of this.activeStreams) {
       try { s.audioStream?.destroy(); } catch {}
