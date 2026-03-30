@@ -12,6 +12,25 @@ const RECORDINGS_DIR = '/home/vpcommunityorganisation/clawd/recordings';
 // Active recordings: guildId → { connection, receiver, activeStreams, recordingId, ... }
 const activeRecordings = new Map();
 
+// Expand abbreviations so TTS reads them as individual letters
+function expandForSpeech(text) {
+  return text
+    .replace(/\bCO\s*\|\s*/g, 'C. O. ')
+    .replace(/\bCO\b/g, 'C. O.')
+    .replace(/\bDMSPC\b/g, 'D. M. S. P. C.')
+    .replace(/\bDCOS\b/g, 'D. C. O. S.')
+    .replace(/\bDGACM\b/g, 'D. G. A. C. M.')
+    .replace(/\bDSS\b/g, 'D. S. S.')
+    .replace(/\bIAC\b/g, 'I. A. C.')
+    .replace(/\bUSG\b/g, 'U. S. G.')
+    .replace(/\bASG\b/g, 'A. S. G.')
+    .replace(/\bDSG\b/g, 'D. S. G.')
+    .replace(/\bEOB\b/g, 'E. O. B.')
+    .replace(/\bBOD\b/g, 'B. O. D.')
+    .replace(/\bIC\b/g, 'I. C.')
+    .replace(/\bSG\b/g, 'S. G.');
+}
+
 async function speakRecordingNotice(connection, voiceChannel) {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Europe/London' });
@@ -26,7 +45,7 @@ async function speakRecordingNotice(connection, voiceChannel) {
   await voiceChannel.guild.members.fetch();
   const presentMembers = voiceChannel.members
     .filter(m => !m.user.bot)
-    .map(m => m.displayName || m.user.username);
+    .map(m => expandForSpeech(m.displayName || m.user.username));
   const presentList = presentMembers.length > 0 ? presentMembers.join(', ') : 'no members detected';
 
   const sentences = [
@@ -35,7 +54,7 @@ async function speakRecordingNotice(connection, voiceChannel) {
     `The time is ${timeStr}.`,
     `The following members are present: ${presentList}.`,
     'For the records, could the Chair please state the Case Number before beginning the meeting.',
-  ];
+  ].map(expandForSpeech);
 
   const ffmpegPath = (await import('ffmpeg-static')).default;
   const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
