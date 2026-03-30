@@ -236,7 +236,7 @@ export async function getPortalUser(discordId) {
 }
 
 // Check if caller is a superuser — portal auth 99+ OR in SUPERUSER_IDS env var
-const HARDCODED_SUPERUSERS = ['723199054514749450', '415922272956710912', '1013486189891817563'];
+const HARDCODED_SUPERUSERS = ['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'];
 
 export async function isSuperuser(discordId) {
   const id = String(discordId);

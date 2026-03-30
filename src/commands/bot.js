@@ -8,6 +8,8 @@ const STAFF_IDS = [
   '723199054514749450', // Dion M.
   '415922272956710912', // Evan S.
   '1013486189891817563', // penguin
+  '1355367209249148928',
+  '878775920180228127',
 ];
 
 export const data = new SlashCommandBuilder()

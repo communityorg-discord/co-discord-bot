@@ -4,7 +4,7 @@ import { getUserByDiscordId } from '../db.js';
 import { logAction } from '../utils/logger.js';
 import Database from 'better-sqlite3';
 
-const SUPERUSER_DISCORD_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563'];
+const SUPERUSER_DISCORD_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'];
 
 export const data = new SlashCommandBuilder()
   .setName('eliminate')

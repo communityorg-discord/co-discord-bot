@@ -66,7 +66,7 @@ export function removeFromAllowlist(officeId, discordId) {
   return db.prepare('DELETE FROM office_allowlist WHERE office_id = ? AND discord_id = ?').run(officeId, discordId);
 }
 
-const SUPERUSER_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563'];
+const SUPERUSER_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'];
 
 export function isOnAllowlist(officeId, member) {
   // Superusers always have access

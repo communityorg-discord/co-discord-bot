@@ -5,7 +5,7 @@ import { db } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { OFFICIAL_BYPASS_IDS } from '../config.js';
 
-const SUPERUSER_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563'];
+const SUPERUSER_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'];
 
 export const data = new SlashCommandBuilder()
   .setName('force-verify')

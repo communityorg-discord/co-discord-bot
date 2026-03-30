@@ -6,7 +6,7 @@ import { getActiveActingAssignment, endActingAssignment } from '../utils/botDb.j
 import { applyActingRoles, revertActingRoles } from '../services/leaveRoles.js';
 import { logAction } from '../utils/logger.js';
 
-const SUPERUSER_DISCORD_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563'];
+const SUPERUSER_DISCORD_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'];
 
 // Build position choices (Discord allows max 25)
 const positionChoices = Object.keys(POSITIONS)

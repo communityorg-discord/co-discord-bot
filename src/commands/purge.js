@@ -143,7 +143,7 @@ export async function execute(interaction) {
     }
     if (scope === 'global') {
       const { SUPERUSER_IDS } = await import('../config.js');
-      if (!SUPERUSER_IDS.includes(interaction.user.id) && !['723199054514749450', '415922272956710912', '1013486189891817563'].includes(interaction.user.id)) {
+      if (!SUPERUSER_IDS.includes(interaction.user.id) && !['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'].includes(interaction.user.id)) {
         return interaction.editReply({ content: '❌ Global purge is superuser only.' });
       }
     }
