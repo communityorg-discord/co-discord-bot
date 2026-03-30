@@ -47,14 +47,51 @@ export function getRecentCases(userId) {
   `).all(userId, userId);
 }
 
+// Map team names to abbreviations used in position titles like "Under Secretary-General (IC)"
+const TEAM_ABBREVS = {
+  'International Court': 'IC',
+  'Department for Safety and Security': 'DSS',
+  'Department of Management Strategy, Policy and Compliance': 'DMSPC',
+  'Department of Communications and Operational Support': 'DCOS',
+  'Department of General Assembly and Conference Management': 'DGACM',
+};
+
 export function getTeamMembers(department) {
-  return db.prepare(`
-    SELECT id, display_name, username, position, discord_id
+  // Get direct department members
+  const direct = db.prepare(`
+    SELECT id, display_name, username, position, department, discord_id
     FROM users
     WHERE lower(account_status) = 'active'
     AND department = ?
     ORDER BY display_name ASC
   `).all(department);
+
+  // Also get USGs/ASGs whose position contains the team abbreviation
+  const abbrev = TEAM_ABBREVS[department];
+  let leaders = [];
+  if (abbrev) {
+    leaders = db.prepare(`
+      SELECT id, display_name, username, position, department, discord_id
+      FROM users
+      WHERE lower(account_status) = 'active'
+      AND position LIKE ?
+      AND department != ?
+    `).all(`%(${abbrev})%`, department);
+  }
+
+  // For EOB/BOD — also include members whose department matches directly
+  // (already handled by the first query)
+
+  // Deduplicate by id
+  const seen = new Set();
+  const result = [];
+  for (const m of [...direct, ...leaders]) {
+    if (!seen.has(m.id)) {
+      seen.add(m.id);
+      result.push(m);
+    }
+  }
+  return result;
 }
 
 export function getPendingLeaveRequests(userId) {
