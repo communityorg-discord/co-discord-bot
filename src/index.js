@@ -908,11 +908,12 @@ client.on('interactionCreate', async interaction => {
       await interaction.update({ content: 'NID submission cancelled.', embeds: [], components: [] });
     }
 
-    // DM acknowledgement button — dm_ack_<moderatorId> or dm_ack_<moderatorId>_<recipientId>
+    // DM acknowledgement button — dm_ack_<senderId> or dm_ack_<senderId>_<recipientId>
     if (interaction.customId.startsWith('dm_ack_')) {
       const parts = interaction.customId.split('_');
-      const moderatorId = parts[2];
+      const senderId = parts[2];
       const recipientId = parts[3] || null;
+      const acknowledgerName = interaction.user.username;
 
       await interaction.update({
         content: `✅ **Acknowledged.** The sender has been notified that you have read this message.`,
@@ -921,13 +922,20 @@ client.on('interactionCreate', async interaction => {
       });
 
       try {
-        const sender = await interaction.client.users.fetch(moderatorId).catch(() => null);
+        const sender = await interaction.client.users.fetch(senderId).catch(() => null);
         if (sender) {
           await sender.send({
-            content: `📧 **Acknowledgement received.** ${recipientId ? `<@${recipientId}>` : 'A recipient'} has confirmed reading your DM.`
+            embeds: [new EmbedBuilder()
+              .setTitle('📧 Acknowledgement Received')
+              .setColor(0x22c55e)
+              .setDescription(`**${acknowledgerName}** (<@${interaction.user.id}>) has confirmed reading your DM.`)
+              .setTimestamp()
+            ]
           });
         }
-      } catch {}
+      } catch (e) {
+        console.error('[DM Ack] Failed to notify sender:', e.message);
+      }
     }
 
     // DM exempt button handlers

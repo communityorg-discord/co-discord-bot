@@ -218,7 +218,7 @@ export async function execute(interaction) {
         ];
         msgPayload.components = [new ActionRowBuilder().addComponents(
           new ButtonBuilder()
-            .setCustomId(`dm_ack_${interaction.id}_${recipient.discord_id}`)
+            .setCustomId(`dm_ack_${interaction.user.id}_${recipient.discord_id}`)
             .setLabel('Acknowledge & Confirm Read')
             .setStyle(2)
         )];
