@@ -105,13 +105,86 @@ async function speakRecordingNotice(connection, voiceChannel, recordingDir, reco
 
   noticeFileStream.end();
 
-  // Register the bot notice as a recording participant
+  // Register the bot notice as a recording participant (offset 0 — starts at recording start)
   db.prepare(`
-    INSERT OR IGNORE INTO recording_participants (recording_id, discord_id, username, file_path)
-    VALUES (?, ?, ?, ?)
+    INSERT OR IGNORE INTO recording_participants (recording_id, discord_id, username, file_path, started_at, offset_seconds)
+    VALUES (?, ?, ?, ?, datetime('now'), 0)
   `).run(recordingId, 'BOT', 'CO Bot (Recording Notice)', noticeTrackPath);
 
   console.log('[Recording] Notice spoken and captured to file');
+}
+
+async function speakClosingNotice(connection, recordingDir) {
+  const now = new Date();
+  const h = parseInt(now.toLocaleString('en-GB', { hour: 'numeric', hour12: true, timeZone: 'Europe/London' }));
+  const m = now.getMinutes();
+  const ampm = now.getHours() < 12 ? 'AM' : 'PM';
+  const minuteStr = m === 0 ? "o'clock" : m < 10 ? `oh ${m}` : String(m);
+  const timeStr = `${h} ${minuteStr} ${ampm}`;
+
+  // Calculate duration from the recording DB entry
+  const durationMins = Math.floor((Date.now() - connection._coRecordingStart) / 60000);
+  const durationSecs = Math.round(((Date.now() - connection._coRecordingStart) / 1000) % 60);
+  const durationStr = durationMins > 0
+    ? `${durationMins} minute${durationMins !== 1 ? 's' : ''} and ${durationSecs} second${durationSecs !== 1 ? 's' : ''}`
+    : `${durationSecs} second${durationSecs !== 1 ? 's' : ''}`;
+
+  const sentences = [
+    'This concludes the recorded session.',
+    `The time is ${timeStr}.`,
+    `Total meeting duration: ${durationStr}.`,
+    'This recording will be processed and made available for download via the CO Staff Portal. Files are retained for seven days.',
+    'Thank you.',
+  ].map(expandForSpeech);
+
+  const ffmpegPath = (await import('ffmpeg-static')).default;
+  const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
+  connection.subscribe(player);
+
+  // Append closing notice audio to the existing BOT_Notice.pcm file
+  const noticeTrackPath = join(recordingDir, 'BOT_Notice.pcm');
+  const noticeFileStream = createWriteStream(noticeTrackPath, { flags: 'a' });
+
+  for (const sentence of sentences) {
+    const parts = googleTTS.getAllAudioUrls(sentence, { lang: 'en-GB', slow: false });
+    const mp3Buffers = [];
+    for (const part of parts) {
+      const res = await fetch(part.url);
+      mp3Buffers.push(Buffer.from(await res.arrayBuffer()));
+    }
+
+    const tmpMp3 = join(tmpdir(), `co_closing_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.mp3`);
+    writeFileSync(tmpMp3, Buffer.concat(mp3Buffers));
+
+    const ff = spawn(ffmpegPath, ['-i', tmpMp3, '-f', 's16le', '-ar', '48000', '-ac', '2', 'pipe:1'], { stdio: ['ignore', 'pipe', 'ignore'] });
+
+    const pcmChunks = [];
+    ff.stdout.on('data', (chunk) => {
+      pcmChunks.push(chunk);
+      noticeFileStream.write(chunk);
+    });
+
+    await new Promise(resolve => ff.stdout.on('end', resolve));
+
+    const { Readable } = await import('stream');
+    const pcmBuffer = Buffer.concat(pcmChunks);
+    const resource = createAudioResource(Readable.from(pcmBuffer), { inputType: StreamType.Raw });
+
+    player.play(resource);
+    console.log(`[TTS Closing] Playing: "${sentence.slice(0, 60)}..."`);
+
+    await new Promise((resolve) => {
+      player.once(AudioPlayerStatus.Idle, resolve);
+      player.once('error', (e) => { console.error('[TTS Closing] Error:', e.message); resolve(); });
+      setTimeout(resolve, 30000);
+    });
+
+    try { unlinkSync(tmpMp3); } catch {}
+    await new Promise(r => setTimeout(r, 300));
+  }
+
+  noticeFileStream.end();
+  console.log('[Recording] Closing notice spoken and appended to BOT_Notice.pcm');
 }
 
 export async function startRecording(channel, startedBy) {
@@ -163,6 +236,7 @@ export async function startRecording(channel, startedBy) {
   // Start receiver immediately so TTS notice is captured
   const receiver = connection.receiver;
   const activeStreams = new Map();
+  const recordingStartedAt = Date.now();
 
   function subscribeUser(userId) {
     // If already actively subscribed with a live stream, skip
@@ -182,6 +256,10 @@ export async function startRecording(channel, startedBy) {
 
     const decoder = new OpusScript(48000, 2);
     const fileStream = createWriteStream(filePath, { flags: 'a' });
+
+    // Calculate offset from recording start
+    const speakerStartedAt = Date.now();
+    const offsetSeconds = (speakerStartedAt - recordingStartedAt) / 1000;
 
     audioStream.on('data', (chunk) => {
       try {
@@ -203,11 +281,11 @@ export async function startRecording(channel, startedBy) {
     activeStreams.set(userId, { audioStream, fileStream, filePath, username, decoder });
 
     db.prepare(`
-      INSERT OR IGNORE INTO recording_participants (recording_id, discord_id, username, file_path)
-      VALUES (?, ?, ?, ?)
-    `).run(recordingId, userId, username, filePath);
+      INSERT OR IGNORE INTO recording_participants (recording_id, discord_id, username, file_path, started_at, offset_seconds)
+      VALUES (?, ?, ?, ?, datetime('now'), ?)
+    `).run(recordingId, userId, username, filePath, offsetSeconds);
 
-    console.log(`[Recording] Subscribed track for ${username}`);
+    console.log(`[Recording] Subscribed track for ${username} (offset: ${offsetSeconds.toFixed(1)}s)`);
   }
 
   // Re-subscribe every time someone starts speaking (handles silence gaps)
@@ -215,7 +293,7 @@ export async function startRecording(channel, startedBy) {
 
   // Store in active map
   activeRecordings.set(channel.guild.id, {
-    connection, receiver, activeStreams, recordingId, recordingKey, recordingDir, startedBy, channelName: channel.name, channel
+    connection, receiver, activeStreams, recordingId, recordingKey, recordingDir, startedBy, channelName: channel.name, channel, recordingStartedAt
   });
 
   // NOW speak the notice — also writes PCM directly to recording file
@@ -232,12 +310,26 @@ export async function stopRecording(guildId) {
   const recording = activeRecordings.get(guildId);
   if (!recording) throw new Error('No active recording found in this server.');
 
-  const { connection, activeStreams, recordingId, recordingKey, recordingDir, channelName } = recording;
+  const { connection, activeStreams, recordingId, recordingKey, recordingDir, channelName, recordingStartedAt } = recording;
 
-  // Destroy all audio streams and flush file writers
+  // Calculate duration before closing notice
+  const rec = db.prepare('SELECT started_at FROM recordings WHERE id = ?').get(recordingId);
+  const durationSecs = Math.round((Date.now() - new Date(rec.started_at).getTime()) / 1000);
+
+  // Speak closing notice BEFORE disconnecting — still captured by active streams
+  try {
+    connection._coRecordingStart = recordingStartedAt || new Date(rec.started_at).getTime();
+    await speakClosingNotice(connection, recordingDir);
+  } catch (e) {
+    console.error('[Recording] Closing notice failed:', e.message);
+  }
+
+  // Small pause after notice finishes
+  await new Promise(r => setTimeout(r, 1000));
+
+  // NOW close all streams and disconnect
   for (const [userId, stream] of activeStreams) {
     try { stream.audioStream?.destroy(); } catch {}
-    // Wait for file stream to flush completely
     await new Promise(resolve => {
       if (!stream.fileStream || stream.fileStream.writableEnded) return resolve();
       stream.fileStream.end(() => resolve());
@@ -252,21 +344,20 @@ export async function stopRecording(guildId) {
 
   const participants = db.prepare('SELECT * FROM recording_participants WHERE recording_id = ?').all(recordingId);
 
-  // Calculate duration
-  const rec = db.prepare('SELECT started_at FROM recordings WHERE id = ?').get(recordingId);
-  const durationSecs = Math.round((Date.now() - new Date(rec.started_at).getTime()) / 1000);
+  // Recalculate duration (now includes closing notice time)
+  const finalDurationSecs = Math.round((Date.now() - new Date(rec.started_at).getTime()) / 1000);
 
   db.prepare(`
     UPDATE recordings SET ended_at = datetime('now'), status = 'processing', participant_count = ?, duration_seconds = ?
     WHERE id = ?
-  `).run(participants.length, durationSecs, recordingId);
+  `).run(participants.length, finalDurationSecs, recordingId);
 
-  // Convert PCM to FLAC using ffmpeg-static
+  // Convert PCM to OGG using ffmpeg-static
   await convertTracks(recordingId, participants);
 
   db.prepare(`UPDATE recordings SET status = 'ready' WHERE id = ?`).run(recordingId);
 
-  return { recordingId, recordingKey, participants, recordingDir, durationSecs };
+  return { recordingId, recordingKey, participants, recordingDir, durationSecs: finalDurationSecs };
 }
 
 async function convertTracks(recordingId, participants) {

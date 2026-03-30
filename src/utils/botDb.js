@@ -1050,7 +1050,12 @@ db.exec(`CREATE TABLE IF NOT EXISTS recording_participants (
   file_path TEXT,
   joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   left_at DATETIME,
+  started_at DATETIME,
+  offset_seconds REAL DEFAULT 0,
   UNIQUE(recording_id, discord_id)
 )`);
+
+try { db.exec("ALTER TABLE recording_participants ADD COLUMN started_at DATETIME"); } catch (e) { /* already exists */ }
+try { db.exec("ALTER TABLE recording_participants ADD COLUMN offset_seconds REAL DEFAULT 0"); } catch (e) { /* already exists */ }
 
 export { db };
