@@ -6,6 +6,9 @@ import { spawn } from 'child_process';
 import { db } from '../utils/botDb.js';
 import OpusScript from 'opusscript';
 import googleTTS from 'google-tts-api';
+import ffmpegStatic from 'ffmpeg-static';
+
+const FFMPEG_PATH = ffmpegStatic;
 
 const RECORDINGS_DIR = '/home/vpcommunityorganisation/clawd/recordings';
 
@@ -106,7 +109,7 @@ class RecordingTimeline {
     this.currentBytePos += pcmChunk.length;
   }
 
-  // Subscribe a user to the voice receiver and pipe decoded PCM through the timeline
+  // Subscribe a user to the voice receiver and pipe decoded PCM through ffmpeg for cleanup
   subscribeUser(userId, receiver, channel) {
     if (this.activeStreams.has(userId)) {
       const existing = this.activeStreams.get(userId);
@@ -120,25 +123,46 @@ class RecordingTimeline {
       end: { behavior: EndBehaviorType.AfterInactivity, duration: 300000 }
     });
 
+    // Decode Opus packets → raw PCM via OpusScript
     const decoder = new OpusScript(48000, 2);
 
-    audioStream.on('data', (chunk) => {
+    // Pipe decoded PCM through ffmpeg with async resampling to fix timing jitter artifacts
+    const ffmpegClean = spawn(FFMPEG_PATH, [
+      '-f', 's16le', '-ar', '48000', '-ac', '2', '-i', 'pipe:0',
+      '-af', 'aresample=async=1000:first_pts=0',
+      '-f', 's16le', '-ar', '48000', '-ac', '2', 'pipe:1'
+    ], { stdio: ['pipe', 'pipe', 'ignore'] });
+
+    audioStream.on('data', (opusPacket) => {
       try {
-        const pcm = decoder.decode(chunk);
-        this.writeSpeakerChunk(userId, username, pcm);
+        const pcm = decoder.decode(opusPacket);
+        if (!ffmpegClean.stdin.destroyed) ffmpegClean.stdin.write(pcm);
       } catch {}
     });
 
+    ffmpegClean.stdout.on('data', (cleanPcm) => {
+      // Ensure chunk is aligned to stereo s16le samples (4 bytes per sample-pair)
+      if (cleanPcm.length % 4 !== 0) return;
+      this.writeSpeakerChunk(userId, username, cleanPcm);
+    });
+
+    // When audio stream ends (5min silence), close ffmpeg stdin to flush
     audioStream.on('end', () => {
       console.log(`[Recording] Stream ended for ${username} — will re-subscribe on next speak`);
+      try { if (!ffmpegClean.stdin.destroyed) ffmpegClean.stdin.end(); } catch {}
       this.activeStreams.delete(userId);
     });
     audioStream.on('error', (e) => {
       console.error(`[Recording] Stream error for ${username}:`, e.message);
+      try { if (!ffmpegClean.stdin.destroyed) ffmpegClean.stdin.end(); } catch {}
       this.activeStreams.delete(userId);
     });
 
-    this.activeStreams.set(userId, { audioStream, decoder, username });
+    ffmpegClean.on('error', (e) => {
+      console.error(`[Recording] ffmpeg decoder error for ${username}:`, e.message);
+    });
+
+    this.activeStreams.set(userId, { audioStream, decoder, ffmpegProcess: ffmpegClean, username });
   }
 
   // Fill timeline silence up to current real time (call before closing notice)
@@ -149,10 +173,20 @@ class RecordingTimeline {
   }
 
   async close() {
-    // Destroy active audio streams
+    // End audio streams and close ffmpeg stdin to flush remaining audio
     for (const [, s] of this.activeStreams) {
       try { s.audioStream?.destroy(); } catch {}
+      try { if (!s.ffmpegProcess?.stdin?.destroyed) s.ffmpegProcess.stdin.end(); } catch {}
     }
+
+    // Wait for ffmpeg processes to flush their remaining output
+    await new Promise(r => setTimeout(r, 2000));
+
+    // Kill any remaining ffmpeg processes
+    for (const [, s] of this.activeStreams) {
+      try { s.ffmpegProcess?.kill('SIGTERM'); } catch {}
+    }
+
     // Close individual speaker file streams
     for (const [, speaker] of this.speakerFiles) {
       await new Promise(resolve => {
