@@ -2,7 +2,7 @@ import express from 'express';
 import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, EmbedBuilder, Partials } from 'discord.js';
 import { config } from 'dotenv';
 import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID } from './config.js';
-import { getLogChannel, getGlobalLogChannel } from './utils/botDb.js';
+import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent } from './utils/botDb.js';
 import { sendToWatchedUsers } from './utils/logger.js';
 import { getUserByDiscordId } from './db.js';
 import * as brag from './commands/brag.js';
@@ -1424,8 +1424,11 @@ client.on('messageDelete', async (message) => {
     const guildId = message.guildId;
     const perGuildChannelId = guildId ? getLogChannel(guildId, 'message', 'message_delete') : null;
     const globalChannelId = getGlobalLogChannel('global_message', guildId);
+    const orgwideChannels = getLogChannelsForEvent(guildId || '', 'message', 'message_delete').filter(
+      ch => ch !== perGuildChannelId && ch !== globalChannelId && ch !== deleteChannelId && ch !== FULL_MESSAGE_LOGS_CHANNEL_ID
+    );
 
-    if (!deleteChannelId && !FULL_MESSAGE_LOGS_CHANNEL_ID && !perGuildChannelId && !globalChannelId) return;
+    if (!deleteChannelId && !FULL_MESSAGE_LOGS_CHANNEL_ID && !perGuildChannelId && !globalChannelId && orgwideChannels.length === 0) return;
 
     const content = message.content?.slice(0, 1500) || '*No text content*';
     const attachments = message.attachments.size > 0 ? `\n📎 ${message.attachments.size} attachment(s)` : '';
@@ -1463,6 +1466,11 @@ client.on('messageDelete', async (message) => {
       const globalChannel = await client.channels.fetch(globalChannelId).catch(() => null);
       if (globalChannel) await globalChannel.send({ embeds: [embed] });
     }
+    // Also send to orgwide channels (/orglogs bindings)
+    for (const chId of orgwideChannels) {
+      const ch = await client.channels.fetch(chId).catch(() => null);
+      if (ch) await ch.send({ embeds: [embed] });
+    }
 
     // Also DM watched users (Evan + Dion)
     await sendToWatchedUsers(client, embed);
@@ -1482,8 +1490,11 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
     const guildId = newMessage.guildId;
     const perGuildChannelId = guildId ? getLogChannel(guildId, 'message', 'message_edit') : null;
     const globalChannelId = getGlobalLogChannel('global_message', guildId);
+    const orgwideChannels = getLogChannelsForEvent(guildId || '', 'message', 'message_edit').filter(
+      ch => ch !== perGuildChannelId && ch !== globalChannelId && ch !== editChannelId && ch !== FULL_MESSAGE_LOGS_CHANNEL_ID
+    );
 
-    if (!editChannelId && !FULL_MESSAGE_LOGS_CHANNEL_ID && !perGuildChannelId && !globalChannelId) return;
+    if (!editChannelId && !FULL_MESSAGE_LOGS_CHANNEL_ID && !perGuildChannelId && !globalChannelId && orgwideChannels.length === 0) return;
 
     const oldContent = oldMessage.content?.slice(0, 750) || '*No text content*';
     const newContent = newMessage.content?.slice(0, 750) || '*No text content*';
@@ -1521,6 +1532,11 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
     if (globalChannelId) {
       const globalChannel = await client.channels.fetch(globalChannelId).catch(() => null);
       if (globalChannel) await globalChannel.send({ embeds: [embed] });
+    }
+    // Also send to orgwide channels (/orglogs bindings)
+    for (const chId of orgwideChannels) {
+      const ch = await client.channels.fetch(chId).catch(() => null);
+      if (ch) await ch.send({ embeds: [embed] });
     }
   } catch (e) {
     console.error('[messageUpdate log error]', e.message);

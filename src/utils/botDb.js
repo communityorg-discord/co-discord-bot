@@ -590,13 +590,18 @@ export function getLogChannelsForEvent(sourceGuildId, category, type) {
     }
   }
 
-  // 3. Organisation-wide (/orglogs) — receive events from ALL servers
-  const orgwideRow = db.prepare("SELECT channel_id FROM log_config WHERE guild_id = 'orgwide' AND category = 'orgwide' AND type = ?").get(type);
-  if (orgwideRow?.channel_id && !channels.includes(orgwideRow.channel_id)) channels.push(orgwideRow.channel_id);
+  // 3. Organisation-wide per-type (/orglogs individual types) — log_config with guild_id='orgwide' and real category/type
+  const orgTypeRow = db.prepare("SELECT channel_id FROM log_config WHERE guild_id = 'orgwide' AND category = ? AND type = ?").get(category, type);
+  if (orgTypeRow?.channel_id && !channels.includes(orgTypeRow.channel_id)) channels.push(orgTypeRow.channel_id);
 
-  // Also match org-wide by category name (e.g. 'mod_action' matches moderation events)
-  const orgCatRow = db.prepare("SELECT channel_id FROM log_config WHERE guild_id = 'orgwide' AND category = 'orgwide' AND type = ?").get(category);
-  if (orgCatRow?.channel_id && !channels.includes(orgCatRow.channel_id)) channels.push(orgCatRow.channel_id);
+  // 4. Organisation-wide catch-all (/orglogs catch-all) — global_log_config with guild_id='orgwide'
+  const orgCatchallKey = 'global_' + category;
+  const orgCatchallRow = db.prepare("SELECT channel_id FROM global_log_config WHERE category = ? AND guild_id = 'orgwide'").get(orgCatchallKey);
+  if (orgCatchallRow?.channel_id && !channels.includes(orgCatchallRow.channel_id)) channels.push(orgCatchallRow.channel_id);
+
+  // Legacy: org-wide rows with category='orgwide' (old flat structure)
+  const orgLegacyRow = db.prepare("SELECT channel_id FROM log_config WHERE guild_id = 'orgwide' AND category = 'orgwide' AND type = ?").get(type);
+  if (orgLegacyRow?.channel_id && !channels.includes(orgLegacyRow.channel_id)) channels.push(orgLegacyRow.channel_id);
 
   return channels;
 }
