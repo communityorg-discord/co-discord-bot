@@ -846,6 +846,11 @@ client.on('interactionCreate', async interaction => {
       try { return logspanel.handleSelect(interaction); }
       catch(e) { console.error('[logspanel btn error]', e.message, 'customId:', interaction.customId); throw e; }
     }
+    // Orglogs back button handler
+    if (interaction.customId?.startsWith('orglogs_back')) {
+      try { return orglogs.handleSelect(interaction); }
+      catch(e) { console.error('[orglogs btn error]', e.message, 'customId:', interaction.customId); throw e; }
+    }
 
     // Ticket create button
     if (interaction.customId.startsWith('ticket_create_')) {
