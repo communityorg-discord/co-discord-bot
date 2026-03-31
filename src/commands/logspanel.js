@@ -94,7 +94,7 @@ function buildInfoEmbed(guildId) {
   const config = getLogConfig(guildId);
   const serverLogConfig = {};
   for (const [key, cat] of Object.entries(SERVER_CATEGORIES)) {
-    serverLogConfig[key] = getGlobalLogChannel(key);
+    serverLogConfig[key] = getGlobalLogChannel(key, guildId);
   }
 
   const fields = [];
@@ -238,7 +238,7 @@ export async function handleSelect(interaction) {
     if (value === 'cat_server_logs') {
       const serverBindings = [];
       for (const [key, cat] of Object.entries(SERVER_CATEGORIES)) {
-        const channelId = getGlobalLogChannel(key);
+        const channelId = getGlobalLogChannel(key, interaction.guildId);
         serverBindings.push(cat.emoji + ' ' + cat.label + ': ' + (channelId ? '✅ <#' + channelId + '>' : '❌ Not set'));
       }
       const serverEmbed = new EmbedBuilder()
@@ -372,9 +372,9 @@ export async function handleModal(interaction) {
           components: []
         });
       }
-      setGlobalLogChannel(globalKey, targetChannel.id);
+      setGlobalLogChannel(globalKey, targetChannel.id, interaction.guildId);
     } else {
-      setGlobalLogChannel(globalKey, null);
+      setGlobalLogChannel(globalKey, null, interaction.guildId);
     }
 
     const embed = buildInfoEmbed(interaction.guildId);

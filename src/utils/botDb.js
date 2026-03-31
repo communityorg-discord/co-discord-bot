@@ -107,8 +107,9 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS global_log_config (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    category TEXT NOT NULL UNIQUE,
+    category TEXT NOT NULL,
     channel_id TEXT,
+    guild_id TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -219,6 +220,10 @@ db.exec(`CREATE TABLE IF NOT EXISTS assignments (
   overdue_notified INTEGER DEFAULT 0,
   case_raised INTEGER DEFAULT 0
 )`);
+
+try { db.exec("ALTER TABLE global_log_config ADD COLUMN guild_id TEXT"); } catch (e) { /* exists */ }
+try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_global_log_guild ON global_log_config(category, guild_id)"); } catch (e) { /* exists */ }
+// Drop the old unique constraint on category alone (can't drop in SQLite, but new inserts use guild_id)
 
 try { db.exec("ALTER TABLE assignments ADD COLUMN team_members TEXT DEFAULT '[]'"); } catch (e) { /* exists */ }
 try { db.exec("ALTER TABLE assignments ADD COLUMN team_acknowledgements TEXT DEFAULT '[]'"); } catch (e) { /* exists */ }
@@ -514,17 +519,35 @@ export function isDmExempt(discordId) {
   return !!row;
 }
 
-export function getGlobalLogChannel(category) {
-  const row = db.prepare('SELECT channel_id FROM global_log_config WHERE category = ?').get(category);
+export function getGlobalLogChannel(category, guildId) {
+  // If guildId provided, get per-guild server log channel
+  if (guildId) {
+    const row = db.prepare('SELECT channel_id FROM global_log_config WHERE category = ? AND guild_id = ?').get(category, guildId);
+    return row?.channel_id || null;
+  }
+  // Legacy fallback — no guild_id (old data)
+  const row = db.prepare('SELECT channel_id FROM global_log_config WHERE category = ? AND guild_id IS NULL').get(category);
   return row?.channel_id || null;
 }
 
-export function setGlobalLogChannel(category, channelId) {
-  db.prepare(`
-    INSERT INTO global_log_config (category, channel_id, updated_at)
-    VALUES (?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(category) DO UPDATE SET channel_id = excluded.channel_id, updated_at = CURRENT_TIMESTAMP
-  `).run(category, channelId);
+export function setGlobalLogChannel(category, channelId, guildId) {
+  if (guildId) {
+    // Check if row exists for this guild
+    const existing = db.prepare('SELECT id FROM global_log_config WHERE category = ? AND guild_id = ?').get(category, guildId);
+    if (existing) {
+      db.prepare('UPDATE global_log_config SET channel_id = ?, updated_at = CURRENT_TIMESTAMP WHERE category = ? AND guild_id = ?').run(channelId, category, guildId);
+    } else {
+      db.prepare('INSERT INTO global_log_config (category, channel_id, guild_id, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)').run(category, channelId, guildId);
+    }
+  } else {
+    // Legacy — no guild
+    const existing = db.prepare('SELECT id FROM global_log_config WHERE category = ? AND guild_id IS NULL').get(category);
+    if (existing) {
+      db.prepare('UPDATE global_log_config SET channel_id = ?, updated_at = CURRENT_TIMESTAMP WHERE category = ? AND guild_id IS NULL').run(channelId, category);
+    } else {
+      db.prepare('INSERT INTO global_log_config (category, channel_id, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)').run(category, channelId);
+    }
+  }
 }
 
 export function getLogChannel(guildId, category, type) {
@@ -551,27 +574,33 @@ export function getAllLogConfig(guildId) {
 }
 
 export function getLogChannelsForEvent(sourceGuildId, category, type) {
-  // Returns all channel IDs that should receive this log event
   const channels = [];
 
-  // Server-scope: channels configured for this specific guild
-  const serverRow = db.prepare("SELECT channel_id FROM log_config WHERE guild_id = ? AND category = ? AND type = ? AND (log_scope = 'server' OR log_scope IS NULL)").get(sourceGuildId, category, type);
-  if (serverRow?.channel_id) channels.push(serverRow.channel_id);
-
-  // Organisation-scope: channels configured in ANY guild with scope='organisation'
-  const orgRows = db.prepare("SELECT channel_id FROM log_config WHERE category = ? AND type = ? AND log_scope = 'organisation'").all(category, type);
-  for (const row of orgRows) {
-    if (row.channel_id && !channels.includes(row.channel_id)) channels.push(row.channel_id);
+  // 1. Per-type server binding (log_config) — only THIS guild
+  if (sourceGuildId) {
+    const serverRow = db.prepare("SELECT channel_id FROM log_config WHERE guild_id = ? AND category = ? AND type = ? AND (log_scope = 'server' OR log_scope IS NULL)").get(sourceGuildId, category, type);
+    if (serverRow?.channel_id) channels.push(serverRow.channel_id);
   }
 
-  // Also check orgwide entries (backward compat)
+  // 2. Server-wide catch-all (global_log_config with guild_id) — only THIS guild
+  if (sourceGuildId) {
+    const globalCategory = 'global_' + category;
+    const serverWide = db.prepare("SELECT channel_id FROM global_log_config WHERE category = ? AND guild_id = ?").get(globalCategory, sourceGuildId);
+    if (serverWide?.channel_id && !channels.includes(serverWide.channel_id)) channels.push(serverWide.channel_id);
+    // Legacy rows without guild_id — only use if no per-guild row exists
+    if (!serverWide) {
+      const legacy = db.prepare("SELECT channel_id FROM global_log_config WHERE category = ? AND guild_id IS NULL").get(globalCategory);
+      if (legacy?.channel_id && !channels.includes(legacy.channel_id)) channels.push(legacy.channel_id);
+    }
+  }
+
+  // 3. Organisation-wide (/orglogs) — receive events from ALL servers
   const orgwideRow = db.prepare("SELECT channel_id FROM log_config WHERE guild_id = 'orgwide' AND category = 'orgwide' AND type = ?").get(type);
   if (orgwideRow?.channel_id && !channels.includes(orgwideRow.channel_id)) channels.push(orgwideRow.channel_id);
 
-  // Global log config (backward compat)
-  const globalCategory = 'global_' + category;
-  const globalRow = db.prepare("SELECT channel_id FROM global_log_config WHERE category = ?").get(globalCategory);
-  if (globalRow?.channel_id && !channels.includes(globalRow.channel_id)) channels.push(globalRow.channel_id);
+  // Also match org-wide by category name (e.g. 'mod_action' matches moderation events)
+  const orgCatRow = db.prepare("SELECT channel_id FROM log_config WHERE guild_id = 'orgwide' AND category = 'orgwide' AND type = ?").get(category);
+  if (orgCatRow?.channel_id && !channels.includes(orgCatRow.channel_id)) channels.push(orgCatRow.channel_id);
 
   return channels;
 }

@@ -1418,7 +1418,7 @@ client.on('messageDelete', async (message) => {
     const deleteChannelId = MESSAGE_DELETE_LOG_CHANNEL_ID;
     const guildId = message.guildId;
     const perGuildChannelId = guildId ? getLogChannel(guildId, 'message', 'message_delete') : null;
-    const globalChannelId = getGlobalLogChannel('global_message');
+    const globalChannelId = getGlobalLogChannel('global_message', guildId);
 
     if (!deleteChannelId && !FULL_MESSAGE_LOGS_CHANNEL_ID && !perGuildChannelId && !globalChannelId) return;
 
@@ -1476,7 +1476,7 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
     const editChannelId = MESSAGE_EDIT_LOG_CHANNEL_ID;
     const guildId = newMessage.guildId;
     const perGuildChannelId = guildId ? getLogChannel(guildId, 'message', 'message_edit') : null;
-    const globalChannelId = getGlobalLogChannel('global_message');
+    const globalChannelId = getGlobalLogChannel('global_message', guildId);
 
     if (!editChannelId && !FULL_MESSAGE_LOGS_CHANNEL_ID && !perGuildChannelId && !globalChannelId) return;
 
