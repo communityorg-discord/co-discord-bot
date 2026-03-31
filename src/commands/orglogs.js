@@ -98,9 +98,9 @@ export async function handleModal(interaction) {
   if (channelIdInput) {
     targetChannel = await interaction.guild.channels.fetch(channelIdInput).catch(() => null);
     if (!targetChannel) {
-      return interaction.update({
+      return interaction.reply({
         content: `❌ Channel ID "${channelIdInput}" not found in this server.`,
-        components: []
+        flags: 64
       });
     }
     setLogChannel('orgwide', 'orgwide', typeKey, targetChannel.id);
@@ -111,12 +111,13 @@ export async function handleModal(interaction) {
   const embed = buildOverviewEmbed();
   const row = buildTypeSelect();
 
-  await interaction.update({
+  await interaction.reply({
     content: targetChannel
       ? `✅ ${typeMeta.emoji} **${typeMeta.label}** set to ${targetChannel} — logs from all servers will be sent here.`
       : `✅ ${typeMeta.emoji} **${typeMeta.label}** has been cleared.`,
     embeds: [embed],
-    components: [row]
+    components: [row],
+    flags: 64
   });
 
   await logAction(interaction.client, {

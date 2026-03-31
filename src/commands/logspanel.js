@@ -367,9 +367,9 @@ export async function handleModal(interaction) {
     if (channelIdInput) {
       targetChannel = await interaction.guild.channels.fetch(channelIdInput).catch(() => null);
       if (!targetChannel) {
-        return interaction.update({
+        return interaction.reply({
           content: `❌ Channel ID "${channelIdInput}" not found in this server.`,
-          components: []
+          flags: 64
         });
       }
       setGlobalLogChannel(globalKey, targetChannel.id, interaction.guildId);
@@ -380,12 +380,13 @@ export async function handleModal(interaction) {
     const embed = buildInfoEmbed(interaction.guildId);
     const categoryRow = buildCategorySelect();
 
-    await interaction.update({
+    await interaction.reply({
       content: targetChannel
         ? `✅ ${cat.label} set to ${targetChannel}`
         : `✅ ${cat.label} has been cleared (server logs disabled)`,
       embeds: [embed],
-      components: [categoryRow]
+      components: [categoryRow],
+      flags: 64
     });
 
     await logAction(interaction.client, {
@@ -418,9 +419,9 @@ export async function handleModal(interaction) {
   if (channelIdInput) {
     targetChannel = await interaction.guild.channels.fetch(channelIdInput).catch(() => null);
     if (!targetChannel) {
-      return interaction.update({
+      return interaction.reply({
         content: `❌ Channel ID "${channelIdInput}" not found in this server.`,
-        components: []
+        flags: 64
       });
     }
     setLogChannel(interaction.guildId, categoryKey, typeKey, targetChannel.id, 'server');
@@ -430,12 +431,13 @@ export async function handleModal(interaction) {
   const embed = buildInfoEmbed(interaction.guildId);
   const categoryRow = buildCategorySelect();
 
-  await interaction.update({
+  await interaction.reply({
     content: targetChannel
       ? `✅ ${type.label} set to ${targetChannel}`
       : `✅ ${type.label} has been cleared`,
     embeds: [embed],
-    components: [categoryRow]
+    components: [categoryRow],
+    flags: 64
   });
 
   await logAction(interaction.client, {
