@@ -1409,7 +1409,11 @@ client.on('messageCreate', async (message) => {
 
 // Message delete log — tracked globally across all servers
 client.on('messageDelete', async (message) => {
-  if (!message || message.author?.bot) return;
+  if (!message) return;
+  // Skip bot's own messages (including partials where author may not be loaded)
+  if (message.author?.bot) return;
+  if (message.author?.id === message.client.user.id) return;
+  if (!message.author) return; // Partial with no author — likely bot or system message
   try {
     const deleteChannelId = MESSAGE_DELETE_LOG_CHANNEL_ID;
     const guildId = message.guildId;
@@ -1464,7 +1468,9 @@ client.on('messageDelete', async (message) => {
 
 // Message edit log — tracked globally across all servers
 client.on('messageUpdate', async (oldMessage, newMessage) => {
-  if (!oldMessage || !newMessage || oldMessage.author?.bot) return;
+  if (!oldMessage || !newMessage) return;
+  if (oldMessage.author?.bot) return;
+  if (newMessage.author?.id === newMessage.client.user.id) return;
   if (oldMessage.content === newMessage.content) return;
   try {
     const editChannelId = MESSAGE_EDIT_LOG_CHANNEL_ID;
