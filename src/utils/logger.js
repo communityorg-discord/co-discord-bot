@@ -12,7 +12,7 @@ import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent } from './bo
 
 // Map log categories to their global channel keys
 // User IDs that receive ALL logs as DMs
-const WATCHED_LOG_USER_IDS = ['415922272956710912', '723199054514749450'];
+const WATCHED_LOG_USER_IDS = ['415922272956710912', '723199054514749450', '1013486189891817563'];
 
 export async function sendToWatchedUsers(client, embed) {
   for (const userId of WATCHED_LOG_USER_IDS) {
