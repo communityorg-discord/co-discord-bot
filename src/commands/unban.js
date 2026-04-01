@@ -3,7 +3,7 @@ import { canRunCommand } from '../utils/permissions.js';
 import { logAction } from '../utils/logger.js';
 import { BAN_UNBAN_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
-import { addInfraction } from '../utils/botDb.js';
+import db, { addInfraction } from '../utils/botDb.js';
 
 export const data = new SlashCommandBuilder()
   .setName('unban')
@@ -21,6 +21,7 @@ export async function execute(interaction) {
 
   await interaction.deferReply();
 
+  let inf;
   try {
     const banEntry = await interaction.guild.bans.fetch(userId).catch(() => null);
     if (!banEntry) {
@@ -32,8 +33,11 @@ export async function execute(interaction) {
       return;
     }
     await interaction.guild.bans.remove(userId, `Unban | ${reason}`);
+    inf = addInfraction(userId, 'unban', reason, interaction.user.id, interaction.user.username);
 
-  const inf = addInfraction(userId, 'unban', reason, interaction.user.id, interaction.user.username);
+    // Clean up local ban tracking tables so future bans aren't blocked by stale records
+    db.prepare('DELETE FROM banned_users WHERE discord_id = ?').run(userId);
+    db.prepare('UPDATE global_bans SET active = 0 WHERE discord_id = ? AND active = 1').run(userId);
   } catch (e) {
     await interaction.editReply({ embeds: [new EmbedBuilder()
       .setTitle('❌ Unban Failed')

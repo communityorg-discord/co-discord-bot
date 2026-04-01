@@ -39,6 +39,7 @@ export async function execute(interaction) {
 
   db.prepare('UPDATE global_bans SET active = 0 WHERE discord_id = ? AND active = 1').run(userId);
   db.prepare('UPDATE infractions SET active = 0 WHERE discord_id = ? AND type = ? AND active = 1').run(userId, 'global_ban');
+  db.prepare('DELETE FROM banned_users WHERE discord_id = ?').run(userId);
 
   const inf = addInfraction(userId, 'global_unban', reason, interaction.user.id, interaction.user.username);
 
