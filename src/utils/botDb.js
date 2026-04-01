@@ -531,17 +531,16 @@ export function getGlobalLogChannel(category, guildId) {
 }
 
 export function setGlobalLogChannel(category, channelId, guildId) {
-  // Try to update existing row first (matching guild_id or legacy NULL guild_id)
-  const updated = guildId
-    ? db.prepare('UPDATE global_log_config SET channel_id = ?, guild_id = ?, updated_at = CURRENT_TIMESTAMP WHERE category = ? AND (guild_id = ? OR guild_id IS NULL)').run(channelId, guildId, category, guildId)
-    : db.prepare('UPDATE global_log_config SET channel_id = ?, updated_at = CURRENT_TIMESTAMP WHERE category = ? AND guild_id IS NULL').run(channelId, category);
-
-  if (updated.changes === 0) {
-    // No existing row — insert. Use OR IGNORE to handle legacy UNIQUE(category) constraint
-    db.prepare('INSERT OR IGNORE INTO global_log_config (category, channel_id, guild_id, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)').run(category, channelId, guildId || null);
-    // If INSERT was ignored due to constraint, force update
-    if (guildId) {
-      db.prepare('UPDATE global_log_config SET channel_id = ?, guild_id = ?, updated_at = CURRENT_TIMESTAMP WHERE category = ?').run(channelId, guildId, category);
+  // Each scope (server guild_id, 'orgwide', 'private') gets its own row — never touch other scopes
+  if (guildId) {
+    const updated = db.prepare('UPDATE global_log_config SET channel_id = ?, updated_at = CURRENT_TIMESTAMP WHERE category = ? AND guild_id = ?').run(channelId, category, guildId);
+    if (updated.changes === 0) {
+      db.prepare('INSERT OR IGNORE INTO global_log_config (category, channel_id, guild_id, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)').run(category, channelId, guildId);
+    }
+  } else {
+    const updated = db.prepare('UPDATE global_log_config SET channel_id = ?, updated_at = CURRENT_TIMESTAMP WHERE category = ? AND guild_id IS NULL').run(channelId, category);
+    if (updated.changes === 0) {
+      db.prepare('INSERT OR IGNORE INTO global_log_config (category, channel_id, guild_id, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)').run(category, channelId, null);
     }
   }
 }
