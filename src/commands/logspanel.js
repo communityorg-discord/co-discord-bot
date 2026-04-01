@@ -323,9 +323,9 @@ export async function handleSelect(interaction) {
     if (!value.startsWith(valuePrefix)) return;
 
     const rest = value.slice(valuePrefix.length);
-    const firstUnderscore = rest.indexOf('_');
-    const categoryKey = rest.slice(0, firstUnderscore);
-    const typeKey = rest.slice(firstUnderscore + 1);
+    // Match against known category keys (handles underscored keys like role_management)
+    const categoryKey = Object.keys(CATEGORIES).find(k => rest.startsWith(k + '_'));
+    const typeKey = categoryKey ? rest.slice(categoryKey.length + 1) : null;
 
     const cat = CATEGORIES[categoryKey];
     const type = cat?.types[typeKey];
@@ -405,9 +405,9 @@ export async function handleModal(interaction) {
   if (customId.startsWith('logspanel_channel_global_')) return; // already handled above
 
   const rest = customId.replace('logspanel_channel_', '');
-  const firstUnderscore = rest.indexOf('_');
-  const categoryKey = rest.slice(0, firstUnderscore);
-  const typeKey = rest.slice(firstUnderscore + 1);
+  // Match against known category keys (handles underscored keys like role_management)
+  const categoryKey = Object.keys(CATEGORIES).find(k => rest.startsWith(k + '_'));
+  const typeKey = categoryKey ? rest.slice(categoryKey.length + 1) : null;
 
   const cat = CATEGORIES[categoryKey];
   const type = cat?.types[typeKey];

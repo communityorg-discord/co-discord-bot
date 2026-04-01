@@ -334,9 +334,9 @@ export async function handleSelect(interaction) {
     if (!value.startsWith('type_')) return;
 
     const rest = value.slice('type_'.length);
-    const firstUnderscore = rest.indexOf('_');
-    const categoryKey = rest.slice(0, firstUnderscore);
-    const typeKey = rest.slice(firstUnderscore + 1);
+    // Match against known category keys (handles underscored keys like role_management)
+    const categoryKey = Object.keys(CATEGORIES).find(k => rest.startsWith(k + '_'));
+    const typeKey = categoryKey ? rest.slice(categoryKey.length + 1) : null;
 
     const cat = CATEGORIES[categoryKey];
     const type = cat?.types[typeKey];
@@ -412,9 +412,9 @@ export async function handleModal(interaction) {
   }
 
   // Per-type modal
-  const firstUnderscore = rest.indexOf('_');
-  const categoryKey = rest.slice(0, firstUnderscore);
-  const typeKey = rest.slice(firstUnderscore + 1);
+  // Match against known category keys (handles underscored keys like role_management)
+  const categoryKey = Object.keys(CATEGORIES).find(k => rest.startsWith(k + '_'));
+  const typeKey = categoryKey ? rest.slice(categoryKey.length + 1) : null;
 
   const cat = CATEGORIES[categoryKey];
   const type = cat?.types[typeKey];
