@@ -34,6 +34,7 @@ import * as unverify from './commands/unverify.js';
 import * as authorisationOverride from './commands/authorisation-override.js';
 import * as logspanel from './commands/logspanel.js';
 import * as orglogs from './commands/orglogs.js';
+import * as privatelogs from './commands/privatelogs.js';
 import * as inbox from './commands/inbox.js';
 import * as compose from './commands/compose.js';
 import * as cooldown from './commands/cooldown.js';
@@ -92,7 +93,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -851,6 +852,11 @@ client.on('interactionCreate', async interaction => {
       try { return orglogs.handleSelect(interaction); }
       catch(e) { console.error('[orglogs btn error]', e.message, 'customId:', interaction.customId); throw e; }
     }
+    // Privatelogs back button handler
+    if (interaction.customId?.startsWith('privatelogs_back')) {
+      try { return privatelogs.handleSelect(interaction); }
+      catch(e) { console.error('[privatelogs btn error]', e.message, 'customId:', interaction.customId); throw e; }
+    }
 
     // Ticket create button
     if (interaction.customId.startsWith('ticket_create_')) {
@@ -1115,6 +1121,10 @@ client.on('interactionCreate', async interaction => {
       try { return orglogs.handleSelect(interaction); }
       catch(e) { console.error('[orglogs handleSelect error]', e.message); throw e; }
     }
+    if (interaction.customId?.startsWith('privatelogs_')) {
+      try { return privatelogs.handleSelect(interaction); }
+      catch(e) { console.error('[privatelogs handleSelect error]', e.message); throw e; }
+    }
     // Inbox button/select handlers
     if (interaction.customId?.startsWith('inbox_')) {
       try { return inbox.handleInboxInteraction(interaction); }
@@ -1145,6 +1155,10 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId?.startsWith('orglogs_')) {
       try { return orglogs.handleModal(interaction); }
       catch(e) { console.error('[orglogs handleModal error]', e.message); throw e; }
+    }
+    if (interaction.customId?.startsWith('privatelogs_')) {
+      try { return privatelogs.handleModal(interaction); }
+      catch(e) { console.error('[privatelogs handleModal error]', e.message); throw e; }
     }
     // Inbox modal handler
     if (interaction.customId?.startsWith('inbox_')) {
