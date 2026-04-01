@@ -599,6 +599,15 @@ export function getLogChannelsForEvent(sourceGuildId, category, type) {
   const orgCatchallRow = db.prepare("SELECT channel_id FROM global_log_config WHERE category = ? AND guild_id = 'orgwide'").get(orgCatchallKey);
   if (orgCatchallRow?.channel_id && !channels.includes(orgCatchallRow.channel_id)) channels.push(orgCatchallRow.channel_id);
 
+  // 5. Private per-type (/privatelogs individual types) — log_config with guild_id='private'
+  const privateTypeRow = db.prepare("SELECT channel_id FROM log_config WHERE guild_id = 'private' AND category = ? AND type = ?").get(category, type);
+  if (privateTypeRow?.channel_id && !channels.includes(privateTypeRow.channel_id)) channels.push(privateTypeRow.channel_id);
+
+  // 6. Private catch-all (/privatelogs catch-all) — global_log_config with guild_id='private'
+  const privateCatchallKey = 'global_' + category;
+  const privateCatchallRow = db.prepare("SELECT channel_id FROM global_log_config WHERE category = ? AND guild_id = 'private'").get(privateCatchallKey);
+  if (privateCatchallRow?.channel_id && !channels.includes(privateCatchallRow.channel_id)) channels.push(privateCatchallRow.channel_id);
+
   // Legacy: org-wide rows with category='orgwide' (old flat structure)
   const orgLegacyRow = db.prepare("SELECT channel_id FROM log_config WHERE guild_id = 'orgwide' AND category = 'orgwide' AND type = ?").get(type);
   if (orgLegacyRow?.channel_id && !channels.includes(orgLegacyRow.channel_id)) channels.push(orgLegacyRow.channel_id);

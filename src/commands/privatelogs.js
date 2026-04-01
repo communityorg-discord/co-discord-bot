@@ -2,6 +2,9 @@ import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBu
 import { logAction } from '../utils/logger.js';
 import { setLogChannel, getLogChannel, getAllLogConfig, getGlobalLogChannel, setGlobalLogChannel } from '../utils/botDb.js';
 
+// Private logs use a separate scope key so they don't interfere with /orglogs
+const PRIVATE_SCOPE = 'private';
+
 // Per-type log categories — same structure as logspanel
 const CATEGORIES = {
   moderation: {
@@ -116,13 +119,13 @@ const CATCHALL_CATEGORIES = {
 };
 
 function buildOverviewEmbed() {
-  const config = getAllLogConfig('orgwide');
+  const config = getAllLogConfig(PRIVATE_SCOPE);
   const fields = [];
 
   // Catch-all bindings
   const catchallLines = [];
   for (const [key, cat] of Object.entries(CATCHALL_CATEGORIES)) {
-    const channelId = getGlobalLogChannel(key, 'orgwide');
+    const channelId = getGlobalLogChannel(key, PRIVATE_SCOPE);
     catchallLines.push(`${channelId ? '✅' : '❌'} ${cat.emoji} ${cat.label}${channelId ? `: <#${channelId}>` : ''}`);
   }
   fields.push({ name: '📡 Catch-All Channels', value: catchallLines.join('\n'), inline: false });
@@ -138,11 +141,11 @@ function buildOverviewEmbed() {
   }
 
   return new EmbedBuilder()
-    .setTitle('🏢 Organisation-Wide Log Channels')
-    .setColor(0xf59e0b)
-    .setDescription('These channels receive logs from **every CO server** — not just this one.\nSelect a category below to configure.')
+    .setTitle('🔒 Private Log Channels')
+    .setColor(0x8b5cf6)
+    .setDescription('Private log channels — separate from organisation-wide logs.\nThese do not interfere with /orglogs bindings.\nSelect a category below to configure.')
     .addFields(fields)
-    .setFooter({ text: 'Community Organisation | Use /logspanel for per-server logs' })
+    .setFooter({ text: 'Community Organisation | Use /orglogs for organisation-wide logs' })
     .setTimestamp();
 }
 
@@ -211,7 +214,7 @@ function buildBackButton() {
 
 export const data = new SlashCommandBuilder()
   .setName('privatelogs')
-  .setDescription('Configure organisation-wide log channels (logs from ALL servers)');
+  .setDescription('Configure private log channels (separate from /orglogs)');
 
 export async function execute(interaction) {
   await interaction.deferReply();
@@ -220,7 +223,7 @@ export async function execute(interaction) {
   const row = buildCategorySelect();
 
   await interaction.editReply({
-    content: '🏢 **Organisation Logs** — These channels receive events from **all CO servers**.\nSelect a category to configure:',
+    content: '🔒 **Private Logs** — These channels are separate from /orglogs and do not interfere.\nSelect a category to configure:',
     embeds: [embed],
     components: [row]
   });
@@ -234,7 +237,7 @@ export async function handleSelect(interaction) {
     const embed = buildOverviewEmbed();
     const row = buildCategorySelect();
     await interaction.update({
-      content: '🏢 **Organisation Logs** — These channels receive events from **all CO servers**.\nSelect a category to configure:',
+      content: '🔒 **Private Logs** — These channels are separate from /orglogs and do not interfere.\nSelect a category to configure:',
       embeds: [embed],
       components: [row]
     });
@@ -249,15 +252,15 @@ export async function handleSelect(interaction) {
     if (value === 'cat_catchall') {
       const catchallLines = [];
       for (const [key, cat] of Object.entries(CATCHALL_CATEGORIES)) {
-        const channelId = getGlobalLogChannel(key, 'orgwide');
+        const channelId = getGlobalLogChannel(key, PRIVATE_SCOPE);
         catchallLines.push(`${cat.emoji} ${cat.label}: ${channelId ? `✅ <#${channelId}>` : '❌ Not set'}`);
       }
 
       const embed = new EmbedBuilder()
-        .setTitle('📡 Organisation Catch-All Channels')
-        .setColor(0xf59e0b)
-        .setDescription('Catch-all channels receive **all logs of a type** from **every CO server** in one channel. Individual type bindings take priority when set.\n\n' + catchallLines.join('\n'))
-        .setFooter({ text: 'Community Organisation | Organisation-Wide Logs' })
+        .setTitle('📡 Private Catch-All Channels')
+        .setColor(0x8b5cf6)
+        .setDescription('Private catch-all channels — separate from /orglogs catch-all bindings.\n\n' + catchallLines.join('\n'))
+        .setFooter({ text: 'Community Organisation | Private Logs' })
         .setTimestamp();
 
       const selectRow = buildCatchallSelect();
@@ -276,7 +279,7 @@ export async function handleSelect(interaction) {
     const cat = CATEGORIES[categoryKey];
     if (!cat) return;
 
-    const config = getAllLogConfig('orgwide');
+    const config = getAllLogConfig(PRIVATE_SCOPE);
     const typeRows = [];
     for (const [typeKey, type] of Object.entries(cat.types)) {
       const channelId = config[`${categoryKey}:${typeKey}`];
@@ -284,11 +287,11 @@ export async function handleSelect(interaction) {
     }
 
     const catEmbed = new EmbedBuilder()
-      .setTitle(`🏢 ${cat.emoji} ${cat.label} — Organisation Bindings`)
-      .setColor(0xf59e0b)
-      .setDescription('These apply to logs from **all CO servers**.')
+      .setTitle(`🔒 ${cat.emoji} ${cat.label} — Private Bindings`)
+      .setColor(0x8b5cf6)
+      .setDescription('Private log bindings — separate from /orglogs.')
       .addFields({ name: '​', value: typeRows.join('\n'), inline: false })
-      .setFooter({ text: 'Community Organisation | Organisation-Wide Logs' })
+      .setFooter({ text: 'Community Organisation | Private Logs' })
       .setTimestamp();
 
     const typeRow = buildTypeSelect(categoryKey);
@@ -383,9 +386,9 @@ export async function handleModal(interaction) {
           flags: 64
         });
       }
-      setGlobalLogChannel(globalKey, targetChannel.id, 'orgwide');
+      setGlobalLogChannel(globalKey, targetChannel.id, PRIVATE_SCOPE);
     } else {
-      setGlobalLogChannel(globalKey, null, 'orgwide');
+      setGlobalLogChannel(globalKey, null, PRIVATE_SCOPE);
     }
 
     const embed = buildOverviewEmbed();
@@ -401,11 +404,11 @@ export async function handleModal(interaction) {
     });
 
     await logAction(interaction.client, {
-      action: '🏢 Organisation Catch-All Log Configured',
+      action: '🔒 Private Catch-All Log Configured',
       target: null,
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
-      color: 0xf59e0b,
-      description: `Org-wide catch-all ${cat.label} ${targetChannel ? `set to ${targetChannel}` : 'cleared'} by <@${interaction.user.id}>`,
+      color: 0x8b5cf6,
+      description: `Private catch-all ${cat.label} ${targetChannel ? `set to ${targetChannel}` : 'cleared'} by <@${interaction.user.id}>`,
       guildId: interaction.guildId
     });
     return;
@@ -431,9 +434,9 @@ export async function handleModal(interaction) {
         flags: 64
       });
     }
-    setLogChannel('orgwide', categoryKey, typeKey, targetChannel.id);
+    setLogChannel(PRIVATE_SCOPE, categoryKey, typeKey, targetChannel.id);
   } else {
-    setLogChannel('orgwide', categoryKey, typeKey, null);
+    setLogChannel(PRIVATE_SCOPE, categoryKey, typeKey, null);
   }
 
   const embed = buildOverviewEmbed();
@@ -449,11 +452,11 @@ export async function handleModal(interaction) {
   });
 
   await logAction(interaction.client, {
-    action: '🏢 Organisation Log Channel Configured',
+    action: '🔒 Private Log Channel Configured',
     target: null,
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
-    color: 0xf59e0b,
-    description: `Org-wide ${type.label} ${targetChannel ? `set to ${targetChannel}` : 'cleared'} by <@${interaction.user.id}>`,
+    color: 0x8b5cf6,
+    description: `Private ${type.label} ${targetChannel ? `set to ${targetChannel}` : 'cleared'} by <@${interaction.user.id}>`,
     guildId: interaction.guildId
   });
 }
