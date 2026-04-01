@@ -287,11 +287,18 @@ export async function execute(interaction) {
     const summaryMsg = await channel.send({ embeds: [summaryEmbed] });
     setTimeout(() => summaryMsg.delete().catch(() => {}), 8000);
 
+    // Determine target — if all purged messages belong to one user, show that user
+    const uniqueAuthors = [...new Set(messages.map(m => m.author.id))];
+    const singleAuthor = uniqueAuthors.length === 1 ? messages[0].author : null;
+    const logTarget = singleAuthor
+      ? { discordId: singleAuthor.id, name: getUserByDiscordId(singleAuthor.id)?.display_name || singleAuthor.username }
+      : { discordId: 'MULTIPLE', name: 'Multiple Users' };
+
     // Log to purge-scribe-logs + full-mod-logs
     await logAction(interaction.client, {
       action: '🗑️ Channel Purged',
       moderator: { discordId: interaction.user.id, name: moderatorName },
-      target: targetUser ? { discordId: targetUser.id, name: getUserByDiscordId(targetUser.id)?.display_name || targetUser.username } : { discordId: 'MULTIPLE', name: 'Multiple Users' },
+      target: logTarget,
       reason,
       color: 0xef4444,
       fields: [
