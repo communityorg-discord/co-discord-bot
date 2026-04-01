@@ -440,17 +440,47 @@ client.once('ready', async () => {
     } catch (e) { console.error('[Acting Nomination Cron]', e.message); }
   }, 'Acting Nomination Cron');
 
-  // Process any pending acting assignments at midnight too
+  // Process any pending acting assignments at midnight — apply roles but don't create duplicate DB records
   scheduleAtTime(0, 1, async () => {
     try {
       const { db } = await import('./utils/botDb.js');
-      const { applyActingRoles } = await import('./services/leaveRoles.js');
+      const { POSITIONS } = await import('./utils/positions.js');
       const pending = db.prepare("SELECT * FROM acting_assignments WHERE status = 'pending'").all();
       for (const a of pending) {
-        await applyActingRoles(client, a.acting_discord_id, a.position, a.leave_request_id, a.on_leave_discord_id, a.assigned_by);
-        db.prepare("UPDATE acting_assignments SET status = 'active', started_at = datetime('now') WHERE id = ?").run(a.id);
+        // Check if there's already an active assignment for this person+position
+        const existing = db.prepare("SELECT id FROM acting_assignments WHERE acting_discord_id = ? AND position = ? AND status = 'active'").get(a.acting_discord_id, a.position);
+        if (existing) {
+          console.log(`[Acting Midnight] ${a.acting_discord_id} already active as ${a.position} — skipping`);
+          db.prepare("UPDATE acting_assignments SET status = 'ended', ended_at = datetime('now') WHERE id = ?").run(a.id);
+          continue;
+        }
+
+        // Apply roles directly without creating a new DB record
+        const positionRoles = POSITIONS[a.position] || [];
+        const rolesApplied = {};
+        for (const [guildId, guild] of client.guilds.cache) {
+          try {
+            const member = await guild.members.fetch(a.acting_discord_id).catch(() => null);
+            if (!member) continue;
+            const addedIds = [];
+            for (const roleName of positionRoles) {
+              const role = guild.roles.cache.find(r => r.name === roleName);
+              if (role && !member.roles.cache.has(role.id)) {
+                await member.roles.add(role).catch(() => {});
+                addedIds.push(role.id);
+              }
+            }
+            const shortPos = a.position.split('(')[0].split(',')[0].trim();
+            const baseName = (member.nickname || member.user.username).replace(/ \(Acting.*\)$/, '');
+            await member.setNickname((baseName + ` (Acting ${shortPos})`).slice(0, 32)).catch(() => {});
+            if (addedIds.length) rolesApplied[guildId] = addedIds;
+          } catch {}
+        }
+        db.prepare("UPDATE acting_assignments SET status = 'active', started_at = datetime('now'), roles_applied = ? WHERE id = ?")
+          .run(JSON.stringify(rolesApplied), a.id);
+        console.log(`[Acting Midnight] Activated ${a.acting_discord_id} as ${a.position}`);
       }
-      if (pending.length) console.log(`[Acting Midnight] Activated ${pending.length} pending acting assignments`);
+      if (pending.length) console.log(`[Acting Midnight] Processed ${pending.length} pending assignments`);
     } catch (e) { console.error('[Acting Midnight]', e.message); }
   }, 'Acting Midnight Cron');
 
