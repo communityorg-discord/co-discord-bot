@@ -222,8 +222,29 @@ db.exec(`CREATE TABLE IF NOT EXISTS assignments (
 )`);
 
 try { db.exec("ALTER TABLE global_log_config ADD COLUMN guild_id TEXT"); } catch (e) { /* exists */ }
+
+// Migration: remove legacy UNIQUE constraint on category alone — it prevents multiple guild_id rows per category
+// SQLite can't drop constraints, so recreate the table
+try {
+  const hasOldUnique = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='global_log_config'").get();
+  if (hasOldUnique?.sql?.includes('UNIQUE') && hasOldUnique.sql.includes('category')) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS global_log_config_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category TEXT NOT NULL,
+        channel_id TEXT,
+        guild_id TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT OR IGNORE INTO global_log_config_new (id, category, channel_id, guild_id, updated_at)
+        SELECT id, category, channel_id, guild_id, updated_at FROM global_log_config;
+      DROP TABLE global_log_config;
+      ALTER TABLE global_log_config_new RENAME TO global_log_config;
+    `);
+  }
+} catch (e) { /* already migrated */ }
+
 try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_global_log_guild ON global_log_config(category, guild_id)"); } catch (e) { /* exists */ }
-// Drop the old unique constraint on category alone (can't drop in SQLite, but new inserts use guild_id)
 
 try { db.exec("ALTER TABLE assignments ADD COLUMN team_members TEXT DEFAULT '[]'"); } catch (e) { /* exists */ }
 try { db.exec("ALTER TABLE assignments ADD COLUMN team_acknowledgements TEXT DEFAULT '[]'"); } catch (e) { /* exists */ }
