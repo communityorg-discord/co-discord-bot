@@ -184,7 +184,7 @@ export async function execute(interaction) {
     await logAction(interaction.client, {
       action: `🗑️ ${scope === 'global' ? 'Global' : 'Server'} Purge`,
       moderator: { discordId: interaction.user.id, name: moderatorName },
-      target: { discordId: 'ALL', name: scope === 'global' ? 'All Servers' : interaction.guild.name },
+      target: { discordId: 'MULTIPLE', name: scope === 'global' ? 'All Servers' : interaction.guild.name },
       reason,
       color: 0xef4444,
       fields: [
@@ -291,7 +291,7 @@ export async function execute(interaction) {
     await logAction(interaction.client, {
       action: '🗑️ Channel Purged',
       moderator: { discordId: interaction.user.id, name: moderatorName },
-      target: { discordId: targetUser?.id || 'UNKNOWN', name: targetUser ? (getUserByDiscordId(targetUser.id)?.display_name || targetUser.username) : 'Multiple Users' },
+      target: targetUser ? { discordId: targetUser.id, name: getUserByDiscordId(targetUser.id)?.display_name || targetUser.username } : { discordId: 'MULTIPLE', name: 'Multiple Users' },
       reason,
       color: 0xef4444,
       fields: [
