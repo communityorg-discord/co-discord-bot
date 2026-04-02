@@ -116,7 +116,7 @@ async function checkAuditLogs() {
       .setTitle(log.activityDisplayName)
       .addFields(fields)
       .setFooter({ text: `M365 Activity Log | ${timeStr}` })
-      .setTimestamp(log.activityDateTime);
+      .setTimestamp(new Date(log.activityDateTime));
 
     await postToDiscord(embed);
     posted++;
@@ -160,7 +160,7 @@ async function checkEmailActivity() {
             ...(msg.importance === 'high' ? [{ name: 'Priority', value: 'High', inline: true }] : []),
           )
           .setFooter({ text: `M365 Email Log | ${new Date(msg.receivedDateTime).toLocaleString('en-GB', { timeZone: 'Europe/London' })}` })
-          .setTimestamp(msg.receivedDateTime);
+          .setTimestamp(new Date(msg.receivedDateTime));
 
         await postToDiscord(embed);
         posted++;
@@ -185,7 +185,7 @@ async function checkEmailActivity() {
             { name: 'Type', value: isExternal ? 'External' : 'Internal', inline: true },
           )
           .setFooter({ text: `M365 Email Log | ${new Date(msg.createdDateTime).toLocaleString('en-GB', { timeZone: 'Europe/London' })}` })
-          .setTimestamp(msg.createdDateTime);
+          .setTimestamp(new Date(msg.createdDateTime));
 
         await postToDiscord(embed);
         posted++;
