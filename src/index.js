@@ -89,7 +89,7 @@ function getBragWeekKey(ts = Date.now()) {
 
 const client = new Client({
   partials: [Partials.Channel, Partials.Message],
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildPresences]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildPresences, GatewayIntentBits.GuildInvites]
 });
 
 client.commands = new Collection();
@@ -1467,27 +1467,44 @@ client.on('messageDelete', async (message) => {
       const guild = await client.guilds.fetch(LOG_HUB_GUILD);
       const auditCh = guild.channels.cache.find(c => c.name === 'audit-trail');
       if (auditCh && message.channelId !== auditCh.id) {
-        const who = message.author?.tag || message.author?.id || 'Unknown';
-        const content = message.content?.slice(0, 500) || '*embed/attachment*';
+        const who = message.author?.tag || message.author?.username || message.author?.id || 'Unknown (uncached)';
         const channel = message.channel?.name || message.channelId;
-        // Try to find who deleted it from audit log
-        let deletedBy = 'Unknown';
+
+        // Build content summary — check text, embeds, and attachments
+        let contentSummary = '';
+        if (message.content) contentSummary = message.content.slice(0, 500);
+        if (message.embeds?.length > 0) {
+          const embedTitles = message.embeds.map(e => e.title || e.description?.slice(0, 80) || 'Untitled embed').join(', ');
+          contentSummary += (contentSummary ? '\n' : '') + `[${message.embeds.length} embed(s): ${embedTitles}]`;
+        }
+        if (message.attachments?.size > 0) {
+          contentSummary += (contentSummary ? '\n' : '') + `[${message.attachments.size} attachment(s)]`;
+        }
+        if (!contentSummary) contentSummary = '*Message content not cached — likely a bot embed*';
+
+        // Check audit log for who deleted it — wait briefly for it to populate
+        await new Promise(r => setTimeout(r, 1500));
+        let deletedBy = 'Unknown (self-delete or uncached)';
         try {
-          const auditLogs = await guild.fetchAuditLogs({ type: 72, limit: 1 }); // MESSAGE_DELETE = 72
-          const entry = auditLogs.entries.first();
-          if (entry && entry.target?.id === message.author?.id && Date.now() - entry.createdTimestamp < 5000) {
-            deletedBy = entry.executor?.tag || entry.executor?.id || 'Unknown';
+          const auditLogs = await guild.fetchAuditLogs({ type: 72, limit: 5 });
+          for (const entry of auditLogs.entries.values()) {
+            if (Date.now() - entry.createdTimestamp < 10000 && entry.extra?.channel?.id === message.channelId) {
+              deletedBy = `${entry.executor?.tag || entry.executor?.id} (${entry.executor?.id})`;
+              break;
+            }
           }
         } catch {}
+
         await auditCh.send({ embeds: [new EmbedBuilder()
           .setTitle('Log Deletion Detected')
           .setColor(0xef4444)
           .setDescription(`A message was deleted in **#${channel}**`)
           .addFields(
-            { name: 'Original Author', value: who, inline: true },
-            { name: 'Deleted By', value: deletedBy, inline: true },
+            { name: 'Original Author', value: String(who), inline: true },
+            { name: 'Deleted By', value: String(deletedBy), inline: true },
             { name: 'Channel', value: `#${channel}`, inline: true },
-            { name: 'Content', value: content.slice(0, 1024), inline: false },
+            { name: 'Message ID', value: String(message.id), inline: true },
+            { name: 'Content', value: String(contentSummary).slice(0, 1024), inline: false },
           )
           .setTimestamp()
           .setFooter({ text: 'CO | Log Hub Audit Trail' })
@@ -1559,6 +1576,35 @@ client.on('messageDelete', async (message) => {
     await sendToWatchedUsers(client, embed);
   } catch (e) {
     console.error('[messageDelete log error]', e.message);
+  }
+});
+
+// Private Server — auto-delete any invite not created by the allowed user
+const PRIVATE_SERVER_ID = '1485423682980675729';
+const ALLOWED_INVITER_ID = '1355367209249148928';
+
+client.on('inviteCreate', async (invite) => {
+  if (invite.guild?.id !== PRIVATE_SERVER_ID) return;
+  if (invite.inviterId === ALLOWED_INVITER_ID) return;
+
+  try {
+    await invite.delete('Unauthorised invite — only CO | Ownership can invite to this server');
+    console.log(`[Private Server] Deleted unauthorised invite ${invite.code} by ${invite.inviter?.tag || invite.inviterId}`);
+
+    // DM the person who tried
+    if (invite.inviter) {
+      await invite.inviter.send({
+        embeds: [new EmbedBuilder()
+          .setTitle('Invite Deleted')
+          .setColor(0xef4444)
+          .setDescription('Your invite to **CO | Private Server** was automatically deleted. Only authorised accounts can create invites for this server.')
+          .setFooter({ text: 'Community Organisation' })
+          .setTimestamp()
+        ]
+      }).catch(() => {});
+    }
+  } catch (e) {
+    console.error('[Private Server] Failed to delete invite:', e.message);
   }
 });
 
