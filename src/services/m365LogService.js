@@ -126,14 +126,96 @@ async function checkAuditLogs() {
   return posted;
 }
 
+// ─── EMAIL ACTIVITY ──────────────────────────────────────────────
+// Track emails sent/received by polling each user's mailbox
+let lastEmailPollTime = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+async function checkEmailActivity() {
+  // Get all users with mailboxes
+  const users = await graph('/users?$select=id,displayName,userPrincipalName,mail&$filter=accountEnabled eq true&$top=50');
+  if (!users?.value) return 0;
+
+  let posted = 0;
+  const filter = `receivedDateTime ge ${lastEmailPollTime}`;
+
+  for (const user of users.value) {
+    if (!user.mail) continue;
+
+    // Check received emails
+    const received = await graph(`/users/${user.id}/messages?$filter=${encodeURIComponent(filter)}&$top=10&$select=subject,from,receivedDateTime,isRead,importance&$orderby=receivedDateTime desc`);
+    if (received?.value?.length) {
+      for (const msg of received.value) {
+        const fromAddr = msg.from?.emailAddress?.address || 'Unknown';
+        const fromName = msg.from?.emailAddress?.name || fromAddr;
+        const isExternal = !fromAddr.endsWith('@communityorg.co.uk');
+
+        const embed = new EmbedBuilder()
+          .setColor(isExternal ? 0x0ea5e9 : 0x6b7280)
+          .setAuthor({ name: 'M365 | Email Received' })
+          .setTitle(msg.subject?.slice(0, 100) || '(No subject)')
+          .addFields(
+            { name: 'To', value: user.displayName || user.userPrincipalName, inline: true },
+            { name: 'From', value: `${fromName}\n${fromAddr}`, inline: true },
+            { name: 'Type', value: isExternal ? 'External' : 'Internal', inline: true },
+            ...(msg.importance === 'high' ? [{ name: 'Priority', value: 'High', inline: true }] : []),
+          )
+          .setFooter({ text: `M365 Email Log | ${new Date(msg.receivedDateTime).toLocaleString('en-GB', { timeZone: 'Europe/London' })}` })
+          .setTimestamp(msg.receivedDateTime);
+
+        await postToDiscord(embed);
+        posted++;
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+
+    // Check sent emails (sentItems folder)
+    const sent = await graph(`/users/${user.id}/mailFolders/sentItems/messages?$filter=${encodeURIComponent(`createdDateTime ge ${lastEmailPollTime}`)}&$top=10&$select=subject,toRecipients,createdDateTime,importance&$orderby=createdDateTime desc`);
+    if (sent?.value?.length) {
+      for (const msg of sent.value) {
+        const toList = (msg.toRecipients || []).map(r => r.emailAddress?.address || 'Unknown').join(', ');
+        const isExternal = (msg.toRecipients || []).some(r => !r.emailAddress?.address?.endsWith('@communityorg.co.uk'));
+
+        const embed = new EmbedBuilder()
+          .setColor(isExternal ? 0xf59e0b : 0x22c55e)
+          .setAuthor({ name: 'M365 | Email Sent' })
+          .setTitle(msg.subject?.slice(0, 100) || '(No subject)')
+          .addFields(
+            { name: 'From', value: user.displayName || user.userPrincipalName, inline: true },
+            { name: 'To', value: toList.slice(0, 256) || 'Unknown', inline: true },
+            { name: 'Type', value: isExternal ? 'External' : 'Internal', inline: true },
+          )
+          .setFooter({ text: `M365 Email Log | ${new Date(msg.createdDateTime).toLocaleString('en-GB', { timeZone: 'Europe/London' })}` })
+          .setTimestamp(msg.createdDateTime);
+
+        await postToDiscord(embed);
+        posted++;
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+
+    await new Promise(r => setTimeout(r, 200)); // rate limit between users
+  }
+
+  return posted;
+}
+
 export async function pollM365Logs() {
   try {
-    const posted = await checkAuditLogs();
-    if (posted > 0) console.log(`[M365 Logs] Posted ${posted} audit log entries`);
+    const auditPosted = await checkAuditLogs();
+    if (auditPosted > 0) console.log(`[M365 Logs] Posted ${auditPosted} audit log entries`);
   } catch (e) {
-    console.error('[M365 Logs] Poll error:', e.message);
+    console.error('[M365 Logs] Audit poll error:', e.message);
   }
+
+  try {
+    const emailPosted = await checkEmailActivity();
+    if (emailPosted > 0) console.log(`[M365 Logs] Posted ${emailPosted} email activity entries`);
+  } catch (e) {
+    console.error('[M365 Logs] Email poll error:', e.message);
+  }
+
   lastPollTime = new Date().toISOString();
+  lastEmailPollTime = new Date().toISOString();
 }
 
 export function startM365LogPolling(client) {
