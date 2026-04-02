@@ -1156,4 +1156,31 @@ export function removeAuthOverride(discordId) {
   db.prepare('DELETE FROM auth_overrides WHERE discord_id = ?').run(String(discordId));
 }
 
+// Log Hub message cache — stores every message in the log server for audit trail
+db.exec(`CREATE TABLE IF NOT EXISTS log_hub_messages (
+  message_id TEXT PRIMARY KEY,
+  channel_id TEXT NOT NULL,
+  channel_name TEXT,
+  author_id TEXT,
+  author_tag TEXT,
+  content TEXT,
+  embed_data TEXT,
+  attachment_urls TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
+// Auto-clean messages older than 30 days
+try { db.exec("DELETE FROM log_hub_messages WHERE created_at < datetime('now', '-30 days')"); } catch {}
+
+export function storeLogHubMessage(msg) {
+  db.prepare(`INSERT OR REPLACE INTO log_hub_messages (message_id, channel_id, channel_name, author_id, author_tag, content, embed_data, attachment_urls, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`)
+    .run(msg.id, msg.channelId, msg.channelName || null, msg.authorId || null, msg.authorTag || null,
+      msg.content || null, msg.embedData || null, msg.attachmentUrls || null);
+}
+
+export function getLogHubMessage(messageId) {
+  return db.prepare('SELECT * FROM log_hub_messages WHERE message_id = ?').get(messageId);
+}
+
 export { db };

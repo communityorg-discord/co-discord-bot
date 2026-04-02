@@ -1348,6 +1348,29 @@ client.on('guildMemberRemove', async (member) => {
 
 // AutoMod message handler + counting + BRAG message tracking
 client.on('messageCreate', async (message) => {
+  // Cache every message in the Log Hub for audit trail
+  if (message.guildId === '1485423163817988186') {
+    try {
+      const { storeLogHubMessage } = await import('./utils/botDb.js');
+      const embedData = message.embeds?.length > 0
+        ? JSON.stringify(message.embeds.map(e => ({ title: e.title, description: e.description?.slice(0, 500), fields: e.fields?.map(f => ({ name: f.name, value: f.value?.slice(0, 200) })) })))
+        : null;
+      const attachmentUrls = message.attachments?.size > 0
+        ? JSON.stringify([...message.attachments.values()].map(a => a.url))
+        : null;
+      storeLogHubMessage({
+        id: message.id,
+        channelId: message.channelId,
+        channelName: message.channel?.name,
+        authorId: message.author?.id,
+        authorTag: message.author?.tag || message.author?.username,
+        content: message.content || null,
+        embedData,
+        attachmentUrls,
+      });
+    } catch {}
+  }
+
   // Counting channel handler — runs first so counting messages aren't interfered with
   if (!message.author.bot && message.guild && !message.system) {
     try {
@@ -1467,20 +1490,45 @@ client.on('messageDelete', async (message) => {
       const guild = await client.guilds.fetch(LOG_HUB_GUILD);
       const auditCh = guild.channels.cache.find(c => c.name === 'audit-trail');
       if (auditCh && message.channelId !== auditCh.id) {
-        const who = message.author?.tag || message.author?.username || message.author?.id || 'Unknown (uncached)';
-        const channel = message.channel?.name || message.channelId;
+        // Look up cached content from DB first
+        const { getLogHubMessage } = await import('./utils/botDb.js');
+        const cached = getLogHubMessage(message.id);
 
-        // Build content summary — check text, embeds, and attachments
+        const who = message.author?.tag || cached?.author_tag || message.author?.id || cached?.author_id || 'Unknown';
+        const channel = message.channel?.name || cached?.channel_name || message.channelId;
+
+        // Build content summary from live message + DB cache
         let contentSummary = '';
-        if (message.content) contentSummary = message.content.slice(0, 500);
+        const textContent = message.content || cached?.content;
+        if (textContent) contentSummary = textContent.slice(0, 500);
+
+        // Embeds — try live first, fall back to cached
         if (message.embeds?.length > 0) {
           const embedTitles = message.embeds.map(e => e.title || e.description?.slice(0, 80) || 'Untitled embed').join(', ');
           contentSummary += (contentSummary ? '\n' : '') + `[${message.embeds.length} embed(s): ${embedTitles}]`;
+        } else if (cached?.embed_data) {
+          try {
+            const embeds = JSON.parse(cached.embed_data);
+            const embedSummary = embeds.map(e => {
+              let s = e.title || '';
+              if (e.description) s += (s ? ' — ' : '') + e.description.slice(0, 100);
+              if (e.fields?.length) s += (s ? ' | ' : '') + e.fields.map(f => `${f.name}: ${f.value?.slice(0, 50)}`).join(', ');
+              return s || 'Embed';
+            }).join('\n');
+            contentSummary += (contentSummary ? '\n' : '') + `[Cached embed(s):\n${embedSummary}]`;
+          } catch {}
         }
+
         if (message.attachments?.size > 0) {
           contentSummary += (contentSummary ? '\n' : '') + `[${message.attachments.size} attachment(s)]`;
+        } else if (cached?.attachment_urls) {
+          try {
+            const urls = JSON.parse(cached.attachment_urls);
+            contentSummary += (contentSummary ? '\n' : '') + `[${urls.length} cached attachment(s)]`;
+          } catch {}
         }
-        if (!contentSummary) contentSummary = '*Message content not cached — likely a bot embed*';
+
+        if (!contentSummary) contentSummary = '*No content recovered*';
 
         // Check audit log for who deleted it — wait briefly for it to populate
         await new Promise(r => setTimeout(r, 1500));
