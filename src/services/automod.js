@@ -5,6 +5,7 @@ import { getUserByDiscordId } from '../db.js';
 const INVITE_REGEX = /(discord\.gg|discord\.com\/invite|discordapp\.com\/invite)\/[a-zA-Z0-9]+/gi;
 const SEVERITY_COLORS = { low: 0x3B82F6, medium: 0xF59E0B, high: 0xEF4444, critical: 0x7F1D1D };
 const SEVERITY_EMOJIS = { low: '🔵', medium: '🟡', high: '🔴', critical: '💀' };
+const SUPERUSER_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'];
 
 export class AutoMod {
   constructor() {
@@ -177,6 +178,7 @@ export class AutoMod {
 
   async checkMessage(message) {
     if (!message.guild || message.author.bot) return;
+    if (SUPERUSER_IDS.includes(message.author.id)) return;
     const config = this.getConfig(message.guild.id);
     if (!config.enabled) return;
 
@@ -214,6 +216,7 @@ export class AutoMod {
 
   async checkMemberUpdate(oldMember, newMember) {
     if (!newMember.guild) return;
+    if (SUPERUSER_IDS.includes(newMember.id)) return;
     const config = this.getConfig(newMember.guild.id);
     if (!config.enabled || !config.permission_guard_enabled) return;
     if (this.isImmune(newMember.guild.id, newMember.id, 'user', 'permission_guard')) return;
@@ -257,6 +260,7 @@ export class AutoMod {
     const audit = await channel.guild.fetchAuditLogs({ type: AuditLogEvent.ChannelCreate, limit: 1 }).catch(() => null);
     const entry = audit?.entries.first();
     if (!entry?.executor || entry.executor.bot) return;
+    if (SUPERUSER_IDS.includes(entry.executor.id)) return;
     if (this.isImmune(channel.guild.id, entry.executor.id, 'user', 'channel_creation')) return;
     if (this.hasApproval(channel.guild.id, entry.executor.id, 'create_channel')) return;
 
@@ -277,6 +281,7 @@ export class AutoMod {
     const audit = await role.guild.fetchAuditLogs({ type: AuditLogEvent.RoleCreate, limit: 1 }).catch(() => null);
     const entry = audit?.entries.first();
     if (!entry?.executor || entry.executor.bot) return;
+    if (SUPERUSER_IDS.includes(entry.executor.id)) return;
     if (this.isImmune(role.guild.id, entry.executor.id, 'user', 'role_creation')) return;
     if (this.hasApproval(role.guild.id, entry.executor.id, 'create_role')) return;
 
