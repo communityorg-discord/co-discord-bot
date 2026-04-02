@@ -1459,6 +1459,45 @@ client.on('messageCreate', async (message) => {
 // Message delete log — tracked globally across all servers
 client.on('messageDelete', async (message) => {
   if (!message) return;
+
+  // Log Hub audit — ANY deletion in the log server gets recorded, even bot messages
+  const LOG_HUB_GUILD = '1485423163817988186';
+  if (message.guildId === LOG_HUB_GUILD) {
+    try {
+      const guild = await client.guilds.fetch(LOG_HUB_GUILD);
+      const auditCh = guild.channels.cache.find(c => c.name === 'audit-trail');
+      if (auditCh && message.channelId !== auditCh.id) {
+        const who = message.author?.tag || message.author?.id || 'Unknown';
+        const content = message.content?.slice(0, 500) || '*embed/attachment*';
+        const channel = message.channel?.name || message.channelId;
+        // Try to find who deleted it from audit log
+        let deletedBy = 'Unknown';
+        try {
+          const auditLogs = await guild.fetchAuditLogs({ type: 72, limit: 1 }); // MESSAGE_DELETE = 72
+          const entry = auditLogs.entries.first();
+          if (entry && entry.target?.id === message.author?.id && Date.now() - entry.createdTimestamp < 5000) {
+            deletedBy = entry.executor?.tag || entry.executor?.id || 'Unknown';
+          }
+        } catch {}
+        await auditCh.send({ embeds: [new EmbedBuilder()
+          .setTitle('Log Deletion Detected')
+          .setColor(0xef4444)
+          .setDescription(`A message was deleted in **#${channel}**`)
+          .addFields(
+            { name: 'Original Author', value: who, inline: true },
+            { name: 'Deleted By', value: deletedBy, inline: true },
+            { name: 'Channel', value: `#${channel}`, inline: true },
+            { name: 'Content', value: content.slice(0, 1024), inline: false },
+          )
+          .setTimestamp()
+          .setFooter({ text: 'CO | Log Hub Audit Trail' })
+        ]});
+      }
+    } catch (e) {
+      console.error('[Log Hub Audit]', e.message);
+    }
+  }
+
   // Skip bot's own messages (including partials where author may not be loaded)
   if (message.author?.bot) return;
   if (message.author?.id === message.client.user.id) return;
