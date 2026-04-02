@@ -791,6 +791,9 @@ client.once('ready', async () => {
   // Also run once on startup
   import('./services/recordingService.js').then(m => m.cleanupExpiredRecordings()).catch(() => {});
   console.log('[Recording Cleanup] Started — checking daily');
+
+  // M365 activity log polling
+  import('./services/m365LogService.js').then(m => m.startM365LogPolling(client)).catch(e => console.error('[M365 Logs] Init error:', e.message));
 });
 
 const COMMAND_CHANNEL_ID = '1487636502593798255';
