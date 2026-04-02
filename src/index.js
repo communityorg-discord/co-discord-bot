@@ -1627,32 +1627,46 @@ client.on('messageDelete', async (message) => {
   }
 });
 
-// Private Server — auto-delete any invite not created by the allowed user
-const PRIVATE_SERVER_ID = '1485423682980675729';
-const ALLOWED_INVITER_ID = '1355367209249148928';
+// Internal staff servers — only superusers + bot can create invites
+// Public servers (Communications + International Court) are excluded
+const PUBLIC_SERVERS = [
+  '1358129722931937280', // CO | Communications
+  '1366218589367042048', // CO | International Court
+];
+const SUPERUSER_INVITE_IDS = [
+  '723199054514749450',  // dionm
+  '415922272956710912',  // evans
+  '1013486189891817563', // haydend
+  '1355367209249148928', // CO | Ownership
+  '878775920180228127',  // CO | IAC
+];
 
 client.on('inviteCreate', async (invite) => {
-  if (invite.guild?.id !== PRIVATE_SERVER_ID) return;
-  if (invite.inviterId === ALLOWED_INVITER_ID) return;
+  if (!invite.guild) return;
+  // Allow public servers
+  if (PUBLIC_SERVERS.includes(invite.guild.id)) return;
+  // Allow superusers
+  if (SUPERUSER_INVITE_IDS.includes(invite.inviterId)) return;
+  // Allow the bot itself
+  if (invite.inviterId === client.user.id) return;
 
   try {
-    await invite.delete('Unauthorised invite — only CO | Ownership can invite to this server');
-    console.log(`[Private Server] Deleted unauthorised invite ${invite.code} by ${invite.inviter?.tag || invite.inviterId}`);
+    await invite.delete('Unauthorised — only superusers can create invites for internal servers');
+    console.log(`[Invite Guard] Deleted invite ${invite.code} in ${invite.guild.name} by ${invite.inviter?.tag || invite.inviterId}`);
 
-    // DM the person who tried
     if (invite.inviter) {
       await invite.inviter.send({
         embeds: [new EmbedBuilder()
           .setTitle('Invite Deleted')
           .setColor(0xef4444)
-          .setDescription('Your invite to **CO | Private Server** was automatically deleted. Only authorised accounts can create invites for this server.')
+          .setDescription(`Your invite to **${invite.guild.name}** was automatically deleted. Only superusers can create invites for internal CO servers.`)
           .setFooter({ text: 'Community Organisation' })
           .setTimestamp()
         ]
       }).catch(() => {});
     }
   } catch (e) {
-    console.error('[Private Server] Failed to delete invite:', e.message);
+    console.error('[Invite Guard] Failed:', e.message);
   }
 });
 
