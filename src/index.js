@@ -792,8 +792,11 @@ client.once('ready', async () => {
   import('./services/recordingService.js').then(m => m.cleanupExpiredRecordings()).catch(() => {});
   console.log('[Recording Cleanup] Started — checking daily');
 
-  // M365 activity log polling
-  import('./services/m365LogService.js').then(m => m.startM365LogPolling(client)).catch(e => console.error('[M365 Logs] Init error:', e.message));
+  // M365 activity log polling — disabled, replaced by Graph API webhooks on the portal
+  // The portal receives instant webhook notifications and forwards embeds to Discord via /api/send-channel
+  // Keeping m365LogService.js as fallback if webhooks fail
+  // import('./services/m365LogService.js').then(m => m.startM365LogPolling(client)).catch(e => console.error('[M365 Logs] Init error:', e.message));
+  console.log('[M365 Logs] Polling disabled — using Graph API webhooks via portal');
 });
 
 const COMMAND_CHANNEL_ID = '1487636502593798255';
