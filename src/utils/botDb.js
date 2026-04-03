@@ -223,6 +223,24 @@ db.exec(`CREATE TABLE IF NOT EXISTS assignments (
 
 try { db.exec("ALTER TABLE global_log_config ADD COLUMN guild_id TEXT"); } catch (e) { /* exists */ }
 
+// Weekly command usage tracking
+db.exec(`CREATE TABLE IF NOT EXISTS command_usage (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  discord_id TEXT NOT NULL,
+  week_key TEXT NOT NULL,
+  command_count INTEGER DEFAULT 0,
+  UNIQUE(discord_id, week_key)
+)`);
+
+// Weekly DM sent tracking
+db.exec(`CREATE TABLE IF NOT EXISTS dm_sent_tracking (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  discord_id TEXT NOT NULL,
+  week_key TEXT NOT NULL,
+  dm_count INTEGER DEFAULT 0,
+  UNIQUE(discord_id, week_key)
+)`);
+
 // Voice channel time tracking
 db.exec(`CREATE TABLE IF NOT EXISTS voice_time_tracking (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1191,6 +1209,34 @@ export function storeLogHubMessage(msg) {
 
 export function getLogHubMessage(messageId) {
   return db.prepare('SELECT * FROM log_hub_messages WHERE message_id = ?').get(messageId);
+}
+
+// Command usage helpers
+export function trackCommand(discordId, weekKey) {
+  const existing = db.prepare('SELECT id FROM command_usage WHERE discord_id = ? AND week_key = ?').get(discordId, weekKey);
+  if (existing) {
+    db.prepare('UPDATE command_usage SET command_count = command_count + 1 WHERE id = ?').run(existing.id);
+  } else {
+    db.prepare('INSERT INTO command_usage (discord_id, week_key, command_count) VALUES (?, ?, 1)').run(discordId, weekKey);
+  }
+}
+
+export function getCommandLeaderboard(weekKey) {
+  return db.prepare('SELECT discord_id, command_count FROM command_usage WHERE week_key = ? AND command_count > 0 ORDER BY command_count DESC LIMIT 20').all(weekKey);
+}
+
+// DM sent helpers
+export function trackDMSent(discordId, weekKey) {
+  const existing = db.prepare('SELECT id FROM dm_sent_tracking WHERE discord_id = ? AND week_key = ?').get(discordId, weekKey);
+  if (existing) {
+    db.prepare('UPDATE dm_sent_tracking SET dm_count = dm_count + 1 WHERE id = ?').run(existing.id);
+  } else {
+    db.prepare('INSERT INTO dm_sent_tracking (discord_id, week_key, dm_count) VALUES (?, ?, 1)').run(discordId, weekKey);
+  }
+}
+
+export function getDMLeaderboard(weekKey) {
+  return db.prepare('SELECT discord_id, dm_count FROM dm_sent_tracking WHERE week_key = ? AND dm_count > 0 ORDER BY dm_count DESC LIMIT 20').all(weekKey);
 }
 
 // Voice time tracking helpers

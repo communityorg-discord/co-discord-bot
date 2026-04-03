@@ -124,6 +124,14 @@ export async function execute(interaction) {
 
       await target.send(msgPayload);
 
+      // Track DM for leaderboard
+      try {
+        const { trackDMSent } = await import('../utils/botDb.js');
+        const d = new Date(); const day = d.getDay(); const diff = (day === 0 ? -6 : 1) - day;
+        const wk = new Date(d); wk.setDate(wk.getDate() + diff); wk.setHours(0,0,0,0);
+        trackDMSent(interaction.user.id, wk.toISOString().slice(0,10));
+      } catch {}
+
       await logAction(interaction.client, {
         action: '📩 Direct Message Sent',
         moderator: { discordId: interaction.user.id, name: senderPortalUser?.display_name || interaction.user.username },
@@ -232,6 +240,15 @@ export async function execute(interaction) {
       failedUsers.push(recipient.display_name || recipient.discord_id);
     }
   }
+
+  // Track DMs sent for leaderboard
+  try {
+    const { trackDMSent } = await import('../utils/botDb.js');
+    const d = new Date(); const day = d.getDay(); const diff = (day === 0 ? -6 : 1) - day;
+    const wk = new Date(d); wk.setDate(wk.getDate() + diff); wk.setHours(0,0,0,0);
+    const weekKey = wk.toISOString().slice(0,10);
+    for (let i = 0; i < sent; i++) trackDMSent(interaction.user.id, weekKey);
+  } catch {}
 
   await logAction(interaction.client, {
     action: mass ? '📩 Mass DM Sent' : `📩 Team DM Sent — ${TEAMS[team]}`,

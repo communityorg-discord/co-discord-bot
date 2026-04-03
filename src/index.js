@@ -801,12 +801,260 @@ client.once('ready', async () => {
     }
   }
 
-  // Post immediately on startup, then every 4 hours
+  // ── Commands Used Leaderboard ──
+  async function postCommandLeaderboard() {
+    try {
+      const { db: cfgDb, getCommandLeaderboard } = await import('./utils/botDb.js');
+      const portalDb = (await import('./db.js')).default;
+      const weekKey = getBragWeekKey();
+
+      const rows = getCommandLeaderboard(weekKey);
+      if (rows.length === 0) return;
+
+      const enriched = rows.map(r => {
+        const user = portalDb.prepare("SELECT display_name, full_name FROM users WHERE discord_id = ? AND lower(account_status) = 'active'").get(r.discord_id);
+        return { ...r, name: user?.display_name || user?.full_name || `<@${r.discord_id}>` };
+      }).filter(r => r.name);
+
+      if (enriched.length === 0) return;
+
+      const totalCmds = enriched.reduce((s, r) => s + r.command_count, 0);
+      const lines = enriched.map((r, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `**${i + 1}.**`;
+        return `${medal} ${r.name} — **${r.command_count}** commands`;
+      });
+
+      const embed = new EmbedBuilder()
+        .setColor(0xf59e0b)
+        .setTitle('⚡ Staff Commands Used Leaderboard')
+        .setDescription(lines.join('\n'))
+        .addFields(
+          { name: 'Week', value: weekKey, inline: true },
+          { name: 'Total Commands', value: String(totalCmds), inline: true },
+          { name: 'Users', value: String(enriched.length), inline: true },
+        )
+        .setFooter({ text: 'Staff only | Resets every Monday | Updates every 5 minutes' })
+        .setTimestamp();
+
+      const ch = await client.channels.fetch(LEADERBOARD_CH).catch(() => null);
+      if (!ch) return;
+
+      const stored = cfgDb.prepare("SELECT value FROM bot_config WHERE key = ?").get('cmd_leaderboard_msg_' + weekKey);
+      if (stored) {
+        try { const msg = await ch.messages.fetch(stored.value); await msg.edit({ embeds: [embed] }); return; } catch {}
+      }
+      const msg = await ch.send({ embeds: [embed] });
+      cfgDb.prepare("INSERT OR REPLACE INTO bot_config (key, value) VALUES (?, ?)").run('cmd_leaderboard_msg_' + weekKey, msg.id);
+    } catch (e) {
+      console.error('[Cmd Leaderboard] Failed:', e.message);
+    }
+  }
+
+  // ── DMs Sent Leaderboard ──
+  async function postDMLeaderboard() {
+    try {
+      const { db: cfgDb, getDMLeaderboard } = await import('./utils/botDb.js');
+      const portalDb = (await import('./db.js')).default;
+      const weekKey = getBragWeekKey();
+
+      const rows = getDMLeaderboard(weekKey);
+      if (rows.length === 0) return;
+
+      const enriched = rows.map(r => {
+        const user = portalDb.prepare("SELECT display_name, full_name FROM users WHERE discord_id = ? AND lower(account_status) = 'active'").get(r.discord_id);
+        return { ...r, name: user?.display_name || user?.full_name || `<@${r.discord_id}>` };
+      }).filter(r => r.name);
+
+      if (enriched.length === 0) return;
+
+      const totalDMs = enriched.reduce((s, r) => s + r.dm_count, 0);
+      const lines = enriched.map((r, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `**${i + 1}.**`;
+        return `${medal} ${r.name} — **${r.dm_count}** DMs`;
+      });
+
+      const embed = new EmbedBuilder()
+        .setColor(0xec4899)
+        .setTitle('✉️ Staff DMs Sent Leaderboard')
+        .setDescription(lines.join('\n'))
+        .addFields(
+          { name: 'Week', value: weekKey, inline: true },
+          { name: 'Total DMs', value: String(totalDMs), inline: true },
+          { name: 'Senders', value: String(enriched.length), inline: true },
+        )
+        .setFooter({ text: 'Staff only | Resets every Monday | Updates every 5 minutes' })
+        .setTimestamp();
+
+      const ch = await client.channels.fetch(LEADERBOARD_CH).catch(() => null);
+      if (!ch) return;
+
+      const stored = cfgDb.prepare("SELECT value FROM bot_config WHERE key = ?").get('dm_leaderboard_msg_' + weekKey);
+      if (stored) {
+        try { const msg = await ch.messages.fetch(stored.value); await msg.edit({ embeds: [embed] }); return; } catch {}
+      }
+      const msg = await ch.send({ embeds: [embed] });
+      cfgDb.prepare("INSERT OR REPLACE INTO bot_config (key, value) VALUES (?, ?)").run('dm_leaderboard_msg_' + weekKey, msg.id);
+    } catch (e) {
+      console.error('[DM Leaderboard] Failed:', e.message);
+    }
+  }
+
+  // ── Assignments Completed Leaderboard ──
+  async function postAssignmentLeaderboard() {
+    try {
+      const { db: cfgDb } = await import('./utils/botDb.js');
+      const portalDb = (await import('./db.js')).default;
+      const weekKey = getBragWeekKey();
+
+      const rows = cfgDb.prepare(`
+        SELECT assigned_to as discord_id, COUNT(*) as completed
+        FROM assignments
+        WHERE status = 'complete'
+          AND completed_at >= ?
+          AND assigned_to != 'TEAM'
+        GROUP BY assigned_to
+        ORDER BY completed DESC
+        LIMIT 20
+      `).all(weekKey);
+
+      if (rows.length === 0) return;
+
+      const enriched = rows.map(r => {
+        const user = portalDb.prepare("SELECT display_name, full_name FROM users WHERE discord_id = ? AND lower(account_status) = 'active'").get(r.discord_id);
+        return { ...r, name: user?.display_name || user?.full_name || `<@${r.discord_id}>` };
+      }).filter(r => r.name);
+
+      if (enriched.length === 0) return;
+
+      const total = enriched.reduce((s, r) => s + r.completed, 0);
+      const lines = enriched.map((r, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `**${i + 1}.**`;
+        return `${medal} ${r.name} — **${r.completed}** completed`;
+      });
+
+      const embed = new EmbedBuilder()
+        .setColor(0x06b6d4)
+        .setTitle('📋 Assignments Completed Leaderboard')
+        .setDescription(lines.join('\n'))
+        .addFields(
+          { name: 'Week', value: weekKey, inline: true },
+          { name: 'Total Completed', value: String(total), inline: true },
+          { name: 'Staff', value: String(enriched.length), inline: true },
+        )
+        .setFooter({ text: 'Staff only | Resets every Monday | Updates every 5 minutes' })
+        .setTimestamp();
+
+      const ch = await client.channels.fetch(LEADERBOARD_CH).catch(() => null);
+      if (!ch) return;
+
+      const stored = cfgDb.prepare("SELECT value FROM bot_config WHERE key = ?").get('assign_leaderboard_msg_' + weekKey);
+      if (stored) {
+        try { const msg = await ch.messages.fetch(stored.value); await msg.edit({ embeds: [embed] }); return; } catch {}
+      }
+      const msg = await ch.send({ embeds: [embed] });
+      cfgDb.prepare("INSERT OR REPLACE INTO bot_config (key, value) VALUES (?, ?)").run('assign_leaderboard_msg_' + weekKey, msg.id);
+    } catch (e) {
+      console.error('[Assignment Leaderboard] Failed:', e.message);
+    }
+  }
+
+  // ── Login Streak Leaderboard ──
+  async function postLoginStreakLeaderboard() {
+    try {
+      const { db: cfgDb } = await import('./utils/botDb.js');
+      const portalDb = (await import('./db.js')).default;
+
+      // Calculate consecutive login days per user from login_audit
+      const users = portalDb.prepare(`
+        SELECT u.id, u.display_name, u.full_name, u.discord_id,
+          COUNT(DISTINCT date(la.attempted_at)) as login_days
+        FROM users u
+        INNER JOIN login_audit la ON la.user_id = u.id AND la.success = 1
+        WHERE lower(u.account_status) = 'active'
+          AND la.attempted_at >= date('now', '-30 days')
+        GROUP BY u.id
+        HAVING login_days > 0
+        ORDER BY login_days DESC
+        LIMIT 20
+      `).all();
+
+      if (users.length === 0) return;
+
+      // Calculate actual streaks — consecutive days ending today
+      const streaks = [];
+      for (const u of users) {
+        const days = portalDb.prepare(`
+          SELECT DISTINCT date(attempted_at) as d FROM login_audit
+          WHERE user_id = ? AND success = 1
+          ORDER BY d DESC
+        `).all(u.id).map(r => r.d);
+
+        let streak = 0;
+        const today = new Date().toISOString().slice(0, 10);
+        let checkDate = today;
+        for (const d of days) {
+          if (d === checkDate) {
+            streak++;
+            const prev = new Date(checkDate);
+            prev.setDate(prev.getDate() - 1);
+            checkDate = prev.toISOString().slice(0, 10);
+          } else if (d < checkDate) {
+            break;
+          }
+        }
+        if (streak > 0) streaks.push({ ...u, streak, name: u.display_name || u.full_name });
+      }
+
+      streaks.sort((a, b) => b.streak - a.streak);
+      if (streaks.length === 0) return;
+
+      const lines = streaks.slice(0, 15).map((r, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `**${i + 1}.**`;
+        const fire = r.streak >= 7 ? ' 🔥' : r.streak >= 3 ? ' ⭐' : '';
+        return `${medal} ${r.name} — **${r.streak}** day${r.streak !== 1 ? 's' : ''}${fire}`;
+      });
+
+      const embed = new EmbedBuilder()
+        .setColor(0xef4444)
+        .setTitle('🔥 Login Streak Leaderboard')
+        .setDescription(lines.join('\n'))
+        .addFields(
+          { name: 'Active Streaks', value: String(streaks.length), inline: true },
+          { name: 'Longest', value: `${streaks[0].streak} days`, inline: true },
+          { name: 'Leader', value: streaks[0].name, inline: true },
+        )
+        .setFooter({ text: 'Consecutive days logged into the portal | Updates every 5 minutes' })
+        .setTimestamp();
+
+      const ch = await client.channels.fetch(LEADERBOARD_CH).catch(() => null);
+      if (!ch) return;
+
+      const monthKey = new Date().toISOString().slice(0, 7);
+      const stored = cfgDb.prepare("SELECT value FROM bot_config WHERE key = ?").get('login_leaderboard_msg_' + monthKey);
+      if (stored) {
+        try { const msg = await ch.messages.fetch(stored.value); await msg.edit({ embeds: [embed] }); return; } catch {}
+      }
+      const msg = await ch.send({ embeds: [embed] });
+      cfgDb.prepare("INSERT OR REPLACE INTO bot_config (key, value) VALUES (?, ?)").run('login_leaderboard_msg_' + monthKey, msg.id);
+    } catch (e) {
+      console.error('[Login Streak Leaderboard] Failed:', e.message);
+    }
+  }
+
+  // Post all leaderboards on startup, then every 5 minutes
   await postMessageLeaderboard();
   await postVoiceLeaderboard();
+  await postCommandLeaderboard();
+  await postDMLeaderboard();
+  await postAssignmentLeaderboard();
+  await postLoginStreakLeaderboard();
   setInterval(postMessageLeaderboard, 5 * 60 * 1000);
   setInterval(postVoiceLeaderboard, 5 * 60 * 1000);
-  console.log('[Leaderboard] Started — updating every 5 minutes');
+  setInterval(postCommandLeaderboard, 5 * 60 * 1000);
+  setInterval(postDMLeaderboard, 5 * 60 * 1000);
+  setInterval(postAssignmentLeaderboard, 5 * 60 * 1000);
+  setInterval(postLoginStreakLeaderboard, 5 * 60 * 1000);
+  console.log('[Leaderboard] Started — 6 boards updating every 5 minutes');
 
   // Reminder cron — every 60 seconds
   setInterval(async () => {
@@ -887,6 +1135,13 @@ client.on('interactionCreate', async interaction => {
 
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
+
+    // Track command usage for leaderboard
+    try {
+      const { trackCommand } = await import('./utils/botDb.js');
+      trackCommand(interaction.user.id, getBragWeekKey());
+    } catch {}
+
     let commandError = null;
     try {
       await command.execute(interaction);
