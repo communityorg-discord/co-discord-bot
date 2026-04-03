@@ -67,6 +67,9 @@ import * as counting from './commands/counting.js';
 import * as forceVerify from './commands/forceVerify.js';
 import * as gnick from './commands/gnick.js';
 import * as record from './commands/record.js';
+import * as poll from './commands/poll.js';
+import { handleVoteButton as pollVoteButton } from './commands/poll.js';
+import * as scheduleDm from './commands/schedule-dm.js';
 import { handleButton as officeButton, handleSelect as officeSelect, handleModal as officeModal, handleWaitingRoomJoin, enforceOfficeRestrictions, getOfficeByChannel, getWaitingRoomOffice, processExpiredKeys, refreshOfficePanels } from './services/officeManager.js';
 
 config();
@@ -93,7 +96,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -1115,6 +1118,176 @@ client.once('ready', async () => {
   // Keeping m365LogService.js as fallback if webhooks fail
   // import('./services/m365LogService.js').then(m => m.startM365LogPolling(client)).catch(e => console.error('[M365 Logs] Init error:', e.message));
   console.log('[M365 Logs] Polling disabled — using Graph API webhooks via portal');
+
+  // ── Poll ending cron — check every 60 seconds ──
+  setInterval(async () => {
+    try {
+      const { default: pollDb } = await import('./utils/botDb.js');
+      const { buildPollEmbed, buildPollButtons } = await import('./commands/poll.js');
+      const expired = pollDb.prepare("SELECT * FROM polls WHERE ended = 0 AND ends_at <= datetime('now')").all();
+      for (const poll of expired) {
+        try {
+          const options = JSON.parse(poll.options);
+          const votes = JSON.parse(poll.votes || '{}');
+          pollDb.prepare('UPDATE polls SET ended = 1 WHERE id = ?').run(poll.id);
+
+          const embed = buildPollEmbed(poll, options, votes, true);
+          embed.addFields({ name: 'Created by', value: `<@${poll.creator_id}>`, inline: true });
+          const buttons = buildPollButtons(poll.id, options, true);
+
+          const channel = await client.channels.fetch(poll.channel_id).catch(() => null);
+          if (channel) {
+            const msg = await channel.messages.fetch(poll.message_id).catch(() => null);
+            if (msg) {
+              await msg.edit({ embeds: [embed], components: buttons });
+            }
+
+            // Announce winner
+            const totalVotes = Object.values(votes).reduce((sum, arr) => sum + arr.length, 0);
+            if (totalVotes > 0) {
+              let maxVotes = 0;
+              for (const arr of Object.values(votes)) {
+                if (arr.length > maxVotes) maxVotes = arr.length;
+              }
+              const winners = options.filter((_, i) => (votes[String(i)] || []).length === maxVotes);
+              await channel.send({
+                embeds: [new EmbedBuilder()
+                  .setTitle('📊 Poll Results')
+                  .setColor(0x22C55E)
+                  .setDescription(`**${poll.question}**\n\nWinner: **${winners.join(', ')}** with ${maxVotes} vote${maxVotes !== 1 ? 's' : ''} (${totalVotes} total)`)
+                  .setTimestamp()
+                ]
+              });
+            }
+          }
+        } catch (e) {
+          console.error('[Poll End] Error for poll', poll.id, e.message);
+        }
+      }
+      if (expired.length > 0) console.log(`[Poll Cron] Ended ${expired.length} poll(s)`);
+    } catch (e) { console.error('[Poll Cron]', e.message); }
+  }, 60000);
+  console.log('[Poll Cron] Started — checking every 60s');
+
+  // ── Scheduled DM cron — check every 60 seconds ──
+  setInterval(async () => {
+    try {
+      const { default: dmDb } = await import('./utils/botDb.js');
+      const due = dmDb.prepare("SELECT * FROM scheduled_dms WHERE sent = 0 AND send_at <= datetime('now')").all();
+      for (const scheduled of due) {
+        try {
+          const recipient = await client.users.fetch(scheduled.recipient_id).catch(() => null);
+          if (recipient) {
+            const senderPortal = getUserByDiscordId(scheduled.sender_id);
+            const senderName = senderPortal?.display_name || 'A staff member';
+
+            const embed = new EmbedBuilder()
+              .setTitle(scheduled.subject ? `📨 ${scheduled.subject}` : '📨 Scheduled Message')
+              .setColor(0x5865F2)
+              .setDescription(scheduled.message)
+              .addFields({ name: 'From', value: `${senderName} (<@${scheduled.sender_id}>)`, inline: true })
+              .setFooter({ text: 'Community Organisation | Scheduled DM' })
+              .setTimestamp();
+
+            await recipient.send({ embeds: [embed] });
+          }
+        } catch (e) {
+          console.error('[Scheduled DM] Send error:', e.message);
+        }
+        dmDb.prepare('UPDATE scheduled_dms SET sent = 1 WHERE id = ?').run(scheduled.id);
+      }
+      if (due.length > 0) console.log(`[Scheduled DM] Sent ${due.length} DM(s)`);
+    } catch (e) { console.error('[Scheduled DM Cron]', e.message); }
+  }, 60000);
+  console.log('[Scheduled DM Cron] Started — checking every 60s');
+
+  // ── Weekly moderation stats — Monday 9AM ──
+  scheduleAtTime(9, 0, async () => {
+    // Only run on Mondays
+    if (new Date().getDay() !== 1) return;
+    try {
+      const { default: modDb } = await import('./utils/botDb.js');
+      const portalDb = (await import('./db.js')).default;
+      const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      const infractions = modDb.prepare("SELECT COUNT(*) as c FROM infractions WHERE created_at >= ?").get(oneWeekAgo)?.c || 0;
+      const bans = modDb.prepare("SELECT COUNT(*) as c FROM banned_users WHERE banned_at >= ?").get(oneWeekAgo)?.c || 0;
+      const suspensions = modDb.prepare("SELECT COUNT(*) as c FROM suspensions WHERE suspended_at >= ?").get(oneWeekAgo)?.c || 0;
+      const globalBans = modDb.prepare("SELECT COUNT(*) as c FROM global_bans WHERE banned_at >= ?").get(oneWeekAgo)?.c || 0;
+
+      let casesOpened = 0, casesClosed = 0;
+      try {
+        casesOpened = portalDb.prepare("SELECT COUNT(*) as c FROM cases WHERE created_at >= ?").get(oneWeekAgo)?.c || 0;
+        casesClosed = portalDb.prepare("SELECT COUNT(*) as c FROM cases WHERE closed_at IS NOT NULL AND closed_at >= ?").get(oneWeekAgo)?.c || 0;
+      } catch {}
+
+      const assignmentsCompleted = modDb.prepare("SELECT COUNT(*) as c FROM assignments WHERE status = 'complete' AND completed_at >= ?").get(oneWeekAgo)?.c || 0;
+
+      let staffVerified = 0;
+      try {
+        staffVerified = modDb.prepare("SELECT COUNT(*) as c FROM verified_members WHERE verified_at >= ?").get(oneWeekAgo)?.c || 0;
+      } catch {}
+
+      const embed = new EmbedBuilder()
+        .setTitle('📊 Weekly Moderation Summary')
+        .setColor(0x5865F2)
+        .setDescription(`Summary for the past 7 days (ending <t:${Math.floor(Date.now() / 1000)}:D>)`)
+        .addFields(
+          { name: '⚠️ Infractions Issued', value: String(infractions), inline: true },
+          { name: '🔨 Bans', value: String(bans), inline: true },
+          { name: '🌐 Global Bans', value: String(globalBans), inline: true },
+          { name: '🔴 Suspensions', value: String(suspensions), inline: true },
+          { name: '📋 Cases Opened', value: String(casesOpened), inline: true },
+          { name: '✅ Cases Closed', value: String(casesClosed), inline: true },
+          { name: '📌 Assignments Completed', value: String(assignmentsCompleted), inline: true },
+          { name: '✔️ Staff Verified', value: String(staffVerified), inline: true },
+        )
+        .setFooter({ text: 'Community Organisation | Weekly Report' })
+        .setTimestamp();
+
+      // Post to leaderboard channel
+      const ch = await client.channels.fetch(LEADERBOARD_CH).catch(() => null);
+      if (ch) await ch.send({ embeds: [embed] });
+
+      console.log('[Weekly Mod Stats] Posted summary');
+    } catch (e) { console.error('[Weekly Mod Stats]', e.message); }
+  }, 'Weekly Mod Stats');
+
+  // ── Portal health monitoring — every 5 minutes ──
+  let portalDown = false;
+  setInterval(async () => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch('http://localhost:3016/api/health', { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!res.ok) throw new Error(`Status ${res.status}`);
+      if (portalDown) {
+        portalDown = false;
+        console.log('[Health] Portal recovered');
+        const embed = new EmbedBuilder()
+          .setTitle('✅ Portal Recovered')
+          .setColor(0x22C55E)
+          .setDescription('The CO Staff Portal (`localhost:3016`) is back online.')
+          .setTimestamp()
+          .setFooter({ text: 'Community Organisation | Health Monitor' });
+        await sendToWatchedUsers(client, embed);
+      }
+    } catch (e) {
+      if (!portalDown) {
+        portalDown = true;
+        console.error('[Health] Portal is DOWN:', e.message);
+        const embed = new EmbedBuilder()
+          .setTitle('🔴 Portal DOWN')
+          .setColor(0xEF4444)
+          .setDescription(`The CO Staff Portal (\`localhost:3016\`) is not responding.\n\n**Error:** ${e.message}`)
+          .setTimestamp()
+          .setFooter({ text: 'Community Organisation | Health Monitor' });
+        await sendToWatchedUsers(client, embed);
+      }
+    }
+  }, 5 * 60 * 1000);
+  console.log('[Health Monitor] Started — checking portal every 5 minutes');
 });
 
 const COMMAND_CHANNEL_ID = '1487636502593798255';
@@ -1396,6 +1569,12 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId?.startsWith('inbox_')) {
       try { return inbox.handleInboxInteraction(interaction); }
       catch(e) { console.error('[inbox error]', e.message, 'customId:', interaction.customId); throw e; }
+    }
+
+    // Poll vote button handlers
+    if (interaction.customId?.startsWith('poll_vote_')) {
+      try { return pollVoteButton(interaction); }
+      catch(e) { console.error('[poll vote error]', e.message, 'customId:', interaction.customId); throw e; }
     }
 
     // Office button handlers
