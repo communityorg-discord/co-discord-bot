@@ -1195,13 +1195,14 @@ export function getLogHubMessage(messageId) {
 
 // Voice time tracking helpers
 export function voiceJoin(discordId, weekKey) {
+  const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
   const existing = db.prepare('SELECT * FROM voice_time_tracking WHERE discord_id = ? AND week_key = ?').get(discordId, weekKey);
   if (existing) {
     if (!existing.session_start) {
-      db.prepare('UPDATE voice_time_tracking SET session_start = datetime("now") WHERE id = ?').run(existing.id);
+      db.prepare('UPDATE voice_time_tracking SET session_start = ? WHERE id = ?').run(now, existing.id);
     }
   } else {
-    db.prepare('INSERT INTO voice_time_tracking (discord_id, week_key, total_seconds, session_start) VALUES (?, ?, 0, datetime("now"))').run(discordId, weekKey);
+    db.prepare('INSERT INTO voice_time_tracking (discord_id, week_key, total_seconds, session_start) VALUES (?, ?, 0, ?)').run(discordId, weekKey, now);
   }
 }
 
@@ -1214,11 +1215,12 @@ export function voiceLeave(discordId, weekKey) {
 }
 
 export function flushActiveSessions(weekKey) {
+  const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
   const active = db.prepare('SELECT * FROM voice_time_tracking WHERE week_key = ? AND session_start IS NOT NULL').all(weekKey);
   for (const row of active) {
     const start = new Date(row.session_start + 'Z').getTime();
     const elapsed = Math.max(0, Math.round((Date.now() - start) / 1000));
-    db.prepare('UPDATE voice_time_tracking SET total_seconds = total_seconds + ?, session_start = datetime("now") WHERE id = ?').run(elapsed, row.id);
+    db.prepare('UPDATE voice_time_tracking SET total_seconds = total_seconds + ?, session_start = ? WHERE id = ?').run(elapsed, now, row.id);
   }
 }
 

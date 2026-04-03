@@ -703,7 +703,7 @@ client.once('ready', async () => {
           { name: 'Total Staff Messages', value: String(totalAll), inline: true },
           { name: 'Active Staff', value: `${rows.length}/${totalStaff?.c || '?'} tracked`, inline: true },
         )
-        .setFooter({ text: 'Staff only | Resets every Monday | Updates every 4 hours' })
+        .setFooter({ text: 'Staff only | Resets every Monday | Updates every 5 minutes' })
         .setTimestamp();
 
       const ch = await client.channels.fetch(LEADERBOARD_CH).catch(() => null);
@@ -776,7 +776,7 @@ client.once('ready', async () => {
           { name: 'Total VC Time', value: fmtTime(totalSecs), inline: true },
           { name: 'Participants', value: String(enriched.length), inline: true },
         )
-        .setFooter({ text: 'Staff only | Resets every Monday | Updates every 4 hours' })
+        .setFooter({ text: 'Staff only | Resets every Monday | Updates every 5 minutes' })
         .setTimestamp();
 
       const ch = await client.channels.fetch(LEADERBOARD_CH).catch(() => null);
@@ -804,9 +804,9 @@ client.once('ready', async () => {
   // Post immediately on startup, then every 4 hours
   await postMessageLeaderboard();
   await postVoiceLeaderboard();
-  setInterval(postMessageLeaderboard, 4 * 60 * 60 * 1000);
-  setInterval(postVoiceLeaderboard, 4 * 60 * 60 * 1000);
-  console.log('[Leaderboard] Started — updating every 4 hours');
+  setInterval(postMessageLeaderboard, 5 * 60 * 1000);
+  setInterval(postVoiceLeaderboard, 5 * 60 * 1000);
+  console.log('[Leaderboard] Started — updating every 5 minutes');
 
   // Reminder cron — every 60 seconds
   setInterval(async () => {
