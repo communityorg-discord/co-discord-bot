@@ -733,9 +733,79 @@ client.once('ready', async () => {
     }
   }
 
+  // ── Voice Channel Leaderboard ──
+  async function postVoiceLeaderboard() {
+    try {
+      const { db: cfgDb, getVoiceLeaderboard, flushActiveSessions } = await import('./utils/botDb.js');
+      const portalDb = (await import('./db.js')).default;
+      const weekKey = getBragWeekKey();
+
+      // Flush active sessions so totals are current
+      flushActiveSessions(weekKey);
+
+      const rows = getVoiceLeaderboard(weekKey);
+      if (rows.length === 0) return;
+
+      // Enrich with portal display names
+      const enriched = rows.map(r => {
+        const user = portalDb.prepare("SELECT display_name, full_name, position FROM users WHERE discord_id = ? AND lower(account_status) = 'active'").get(r.discord_id);
+        return { ...r, name: user?.display_name || user?.full_name || `<@${r.discord_id}>`, position: user?.position };
+      }).filter(r => r.name);
+
+      if (enriched.length === 0) return;
+
+      function fmtTime(secs) {
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        if (h > 0) return `${h}h ${m}m`;
+        return `${m}m`;
+      }
+
+      const totalSecs = enriched.reduce((s, r) => s + r.total_seconds, 0);
+      const lines = enriched.map((r, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `**${i + 1}.**`;
+        return `${medal} ${r.name} — **${fmtTime(r.total_seconds)}**`;
+      });
+
+      const embed = new EmbedBuilder()
+        .setColor(0x22c55e)
+        .setTitle('🎙️ Staff Voice Channel Leaderboard')
+        .setDescription(lines.join('\n'))
+        .addFields(
+          { name: 'Week', value: weekKey, inline: true },
+          { name: 'Total VC Time', value: fmtTime(totalSecs), inline: true },
+          { name: 'Participants', value: String(enriched.length), inline: true },
+        )
+        .setFooter({ text: 'Staff only | Resets every Monday | Updates every 4 hours' })
+        .setTimestamp();
+
+      const ch = await client.channels.fetch(LEADERBOARD_CH).catch(() => null);
+      if (!ch) return;
+
+      const stored = cfgDb.prepare("SELECT value FROM bot_config WHERE key = ?").get('vc_leaderboard_msg_' + weekKey);
+
+      if (stored) {
+        try {
+          const msg = await ch.messages.fetch(stored.value);
+          await msg.edit({ embeds: [embed] });
+          console.log('[VC Leaderboard] Updated for week ' + weekKey);
+          return;
+        } catch {}
+      }
+
+      const msg = await ch.send({ embeds: [embed] });
+      cfgDb.prepare("INSERT OR REPLACE INTO bot_config (key, value) VALUES (?, ?)").run('vc_leaderboard_msg_' + weekKey, msg.id);
+      console.log('[VC Leaderboard] Created new for week ' + weekKey);
+    } catch (e) {
+      console.error('[VC Leaderboard] Failed:', e.message);
+    }
+  }
+
   // Post immediately on startup, then every 4 hours
   await postMessageLeaderboard();
+  await postVoiceLeaderboard();
   setInterval(postMessageLeaderboard, 4 * 60 * 60 * 1000);
+  setInterval(postVoiceLeaderboard, 4 * 60 * 60 * 1000);
   console.log('[Leaderboard] Started — updating every 4 hours');
 
   // Reminder cron — every 60 seconds
@@ -1882,6 +1952,26 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 
 // ============ VOICE OFFICE RESTRICTIONS ============
 client.on('voiceStateUpdate', async (oldState, newState) => {
+  // Voice time tracking for leaderboard
+  try {
+    const userId = newState.member?.id || oldState.member?.id;
+    if (userId && !(newState.member?.user?.bot || oldState.member?.user?.bot)) {
+      const { voiceJoin, voiceLeave } = await import('./utils/botDb.js');
+      const joined = !oldState.channelId && newState.channelId;
+      const left = oldState.channelId && !newState.channelId;
+      const moved = oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId;
+
+      if (joined || moved) {
+        voiceJoin(userId, getBragWeekKey());
+      }
+      if (left) {
+        voiceLeave(userId, getBragWeekKey());
+      }
+    }
+  } catch (e) {
+    console.error('[VoiceTrack] Error:', e.message);
+  }
+
   try {
     // Only care about channel joins (not leaves or same-channel updates)
     if (!newState.channelId || newState.channelId === oldState.channelId) return;

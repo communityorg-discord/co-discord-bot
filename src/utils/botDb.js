@@ -223,6 +223,16 @@ db.exec(`CREATE TABLE IF NOT EXISTS assignments (
 
 try { db.exec("ALTER TABLE global_log_config ADD COLUMN guild_id TEXT"); } catch (e) { /* exists */ }
 
+// Voice channel time tracking
+db.exec(`CREATE TABLE IF NOT EXISTS voice_time_tracking (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  discord_id TEXT NOT NULL,
+  week_key TEXT NOT NULL,
+  total_seconds INTEGER DEFAULT 0,
+  session_start DATETIME,
+  UNIQUE(discord_id, week_key)
+)`);
+
 // Migration: remove legacy UNIQUE constraint on category alone — it prevents multiple guild_id rows per category
 // SQLite can't drop constraints, so recreate the table
 try {
@@ -1181,6 +1191,39 @@ export function storeLogHubMessage(msg) {
 
 export function getLogHubMessage(messageId) {
   return db.prepare('SELECT * FROM log_hub_messages WHERE message_id = ?').get(messageId);
+}
+
+// Voice time tracking helpers
+export function voiceJoin(discordId, weekKey) {
+  const existing = db.prepare('SELECT * FROM voice_time_tracking WHERE discord_id = ? AND week_key = ?').get(discordId, weekKey);
+  if (existing) {
+    if (!existing.session_start) {
+      db.prepare('UPDATE voice_time_tracking SET session_start = datetime("now") WHERE id = ?').run(existing.id);
+    }
+  } else {
+    db.prepare('INSERT INTO voice_time_tracking (discord_id, week_key, total_seconds, session_start) VALUES (?, ?, 0, datetime("now"))').run(discordId, weekKey);
+  }
+}
+
+export function voiceLeave(discordId, weekKey) {
+  const row = db.prepare('SELECT * FROM voice_time_tracking WHERE discord_id = ? AND week_key = ? AND session_start IS NOT NULL').get(discordId, weekKey);
+  if (!row) return;
+  const start = new Date(row.session_start + 'Z').getTime();
+  const elapsed = Math.max(0, Math.round((Date.now() - start) / 1000));
+  db.prepare('UPDATE voice_time_tracking SET total_seconds = total_seconds + ?, session_start = NULL WHERE id = ?').run(elapsed, row.id);
+}
+
+export function flushActiveSessions(weekKey) {
+  const active = db.prepare('SELECT * FROM voice_time_tracking WHERE week_key = ? AND session_start IS NOT NULL').all(weekKey);
+  for (const row of active) {
+    const start = new Date(row.session_start + 'Z').getTime();
+    const elapsed = Math.max(0, Math.round((Date.now() - start) / 1000));
+    db.prepare('UPDATE voice_time_tracking SET total_seconds = total_seconds + ?, session_start = datetime("now") WHERE id = ?').run(elapsed, row.id);
+  }
+}
+
+export function getVoiceLeaderboard(weekKey) {
+  return db.prepare('SELECT discord_id, total_seconds FROM voice_time_tracking WHERE week_key = ? AND total_seconds > 0 ORDER BY total_seconds DESC LIMIT 20').all(weekKey);
 }
 
 export { db };
