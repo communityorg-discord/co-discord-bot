@@ -82,7 +82,6 @@ export async function execute(interaction) {
 
 export async function handleTicketOptionsButton(interaction) {
   if (!interaction.isButton() || !interaction.customId.startsWith('ticketopts_')) return;
-  await interaction.deferReply({ ephemeral: true });
 
   const { isSuperuser } = await import('../utils/permissions.js');
   const { getTicketChannelByChannelId, reopenTicket, unclaimTicket } = await import('../utils/botDb.js');
@@ -92,14 +91,35 @@ export async function handleTicketOptionsButton(interaction) {
   const channelId = parts.slice(2).join('_');
   const guild = interaction.guild;
 
-  if (!guild) return interaction.editReply({ content: '❌ Not in a server.' });
+  if (!guild) return interaction.reply({ content: '❌ Not in a server.', flags: 64 });
 
   const ticket = getTicketChannelByChannelId(channelId);
-  if (!ticket) return interaction.editReply({ content: '❌ Ticket not found in database.' });
+  if (!ticket) return interaction.reply({ content: '❌ Ticket not found in database.', flags: 64 });
 
   const isClaimer = ticket.claimed_by === interaction.user.id;
   const isSuper = await isSuperuser(interaction.user.id);
   const auth = await canRunCommand(interaction.user.id, 5);
+
+  // rename uses showModal() which auto-acknowledges — do NOT defer
+  if (action === 'rename') {
+    const modal = new ModalBuilder()
+      .setCustomId(`ticketopts_renamemodal_${channelId}`)
+      .setTitle('Rename Ticket Channel')
+      .addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('new_name')
+            .setLabel('New channel name')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true)
+            .setMaxLength(100)
+        )
+      );
+    return interaction.showModal(modal);
+  }
+
+  // All other actions need a deferred reply
+  await interaction.deferReply({ ephemeral: true });
 
   if (action === 'close') {
     if (!auth.allowed && !isClaimer) return interaction.editReply({ content: `❌ ${auth.reason}` });
@@ -126,23 +146,6 @@ export async function handleTicketOptionsButton(interaction) {
       await ticketChannel.permissionOverwrites.edit(ticket.user_id, { SendMessages: true }).catch(() => {});
     }
     return interaction.editReply({ content: '🔓 Ticket unclaimed. User can now reply again.' });
-  }
-
-  if (action === 'rename') {
-    const modal = new ModalBuilder()
-      .setCustomId(`ticketopts_renamemodal_${channelId}`)
-      .setTitle('Rename Ticket Channel')
-      .addComponents(
-        new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId('new_name')
-            .setLabel('New channel name')
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true)
-            .setMaxLength(100)
-        )
-      );
-    return interaction.showModal(modal);
   }
 
   if (action === 'reopen') {
