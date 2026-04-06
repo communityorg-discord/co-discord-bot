@@ -36,7 +36,8 @@ export async function execute(interaction) {
     new ButtonBuilder()
       .setCustomId(`ticketopts_delete_${channelId}`)
       .setLabel('🗑️ Delete Channel')
-      .setStyle(ButtonStyle.Danger),
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(ticket.status !== 'closed'),
     new ButtonBuilder()
       .setCustomId(`ticketopts_rename_${channelId}`)
       .setLabel('✏️ Rename')
