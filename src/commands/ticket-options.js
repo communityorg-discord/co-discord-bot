@@ -142,7 +142,7 @@ export async function handleTicketOptionsButton(interaction) {
             .setMaxLength(100)
         )
       );
-    await interaction.editReply({ content: '✏️ Opening rename dialog...' });
+    await interaction.editReply({ content: '✏️ Opening rename dialog...', flags: 64 });
     return interaction.showModal(modal);
   }
 
