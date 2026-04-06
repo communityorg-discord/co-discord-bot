@@ -765,13 +765,29 @@ client.once('ready', async () => {
             body: JSON.stringify({ discord_id: winner.discord_id, points: award.award_points, award_name: award.award_name, week_key: prevWeekKey })
           }).catch(e => console.error('[Awards] Shop award failed:', e.message));
 
-          // DM winner
+          // DM winner with rich embed
           try {
             const user = await client.users.fetch(winner.discord_id);
+            const achievementMap = {
+              'Most Messages Sent': `You sent the most messages this week with **${winner.value}** points worth.`,
+              'Most Hours in Voice Channels': `You spent the most time in voice channels this week — **${winner.value}** pts worth.`,
+              'Most Tasks Completed': `You completed the most tasks this week with **${winner.value}** approved claims.`,
+              'Longest Single Voice Session': `Your longest voice session was **${winner.value}** minutes.`,
+              'Biggest Improvement': `Your points improved by **${winner.value}** from last week.`,
+              'Most Event Participation': `You spent **${winner.value}** minutes in meeting channels this week.`,
+              'Highest Quality Score': `Your quality score was **${winner.value}** points from tasks and feedback.`,
+            };
+            const achievementText = achievementMap[award.award_name] || `Your achievement value: **${winner.value}**.`;
             await user.send({ embeds: [new EmbedBuilder()
               .setColor(0xC9A84C)
-              .setTitle(`🏆 Weekly Award — ${award.award_name}`)
-              .setDescription(`Congratulations **${winner.display_name}**! You won this week's **${award.award_name}** award and earned **${award.award_points}** shop points.`)
+              .setTitle('🏆 Weekly Award')
+              .setDescription(`Congratulations **${winner.display_name}**! You have won this week's **${award.award_name}** award.`)
+              .addFields(
+                { name: 'Award', value: award.award_name, inline: true },
+                { name: 'Shop Points Earned', value: `**+${award.award_points} pts**`, inline: true },
+                { name: 'Your Achievement', value: achievementText, inline: false },
+              )
+              .setFooter({ text: 'Shop opens on the 30th of each month. Visit the portal to browse perks.' })
               .setTimestamp()
             ]});
           } catch {}
@@ -817,6 +833,28 @@ client.once('ready', async () => {
     console.log(`[Activity] Monday grade DMs scheduled in ${Math.round(delay / 60000)}m`);
   }
 
+  const GRADE_COLOURS = { green: 0x1A6B3C, amber: 0xC9A84C, red: 0x8B1A1A, black: 0x2C2C2C, exempt: 0x3498DB };
+  const GRADE_EMOJIS = { green: '🟢', amber: '🟡', red: '🔴', black: '⚫', exempt: '🔵' };
+  const GRADE_MESSAGES = {
+    green: 'Well done — you hit your Green target this week.',
+    amber: "Close — you were within range but didn't reach Green.",
+    red: 'You fell significantly short of your target this week.',
+    black: 'No qualifying activity was recorded this week.',
+    exempt: 'You are exempt from activity requirements this week.',
+  };
+  const CAT_ICONS = {
+    messages: '💬', welcome: '👋', daily_activity: '✅', available: '🟢',
+    meeting: '🏛️', weekly_bonus: '⭐', voice: '🎙️', task_small: '📋',
+    task_medium: '📁', task_large: '🗂️', co_work: '⚙️', user_satisfaction: '😊',
+    feedback: '💬', suggestion: '💡', bug_report: '🐛', deduction: '⚠️',
+  };
+  const CAT_LABELS = {
+    messages: 'Messages', welcome: 'Welcome', daily_activity: 'Daily Activity', available: 'Available',
+    meeting: 'Meeting', weekly_bonus: 'Weekly Bonus', voice: 'Voice Channel', task_small: 'Small Task',
+    task_medium: 'Medium Task', task_large: 'Large Task', co_work: 'CO Work', user_satisfaction: 'User Satisfaction',
+    feedback: 'Feedback', suggestion: 'Suggestion', bug_report: 'Bug Report',
+  };
+
   async function sendGradeDMs() {
     try {
       const prevWeekKey = getBragWeekKey(Date.now() - 7 * 86400000);
@@ -826,30 +864,45 @@ client.once('ready', async () => {
       const data = await res.json();
       if (!data.grades?.length) return;
 
-      const gradeColors = { green: 0x1A6B3C, amber: 0xC9A84C, red: 0x8B1A1A, black: 0x2C2C2C, exempt: 0x3498DB };
       let sent = 0;
 
       for (const g of data.grades) {
         if (!g.discord_id || g.grade === 'exempt') continue;
         try {
           const user = await client.users.fetch(g.discord_id);
-          const color = gradeColors[g.grade] || 0x2C2C2C;
-          const name = g.display_name || g.full_name || g.username;
+          const grade = g.grade || 'black';
+          const emoji = GRADE_EMOJIS[grade] || '⚫';
+
+          // Fetch breakdown for this user
+          let breakdownText = 'No activity recorded this week.';
+          try {
+            const bRes = await fetch(`http://localhost:3016/api/activity/grades/week-bot/${prevWeekKey}`, {
+              headers: { 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET }
+            });
+            // We already have the data — use activity_point_records breakdown via a separate call if needed
+            // For now build from what we have
+          } catch {}
+          // Simple breakdown placeholder — the portal doesn't return per-category in grades/week-bot
+          breakdownText = `Total: **${g.total_points}** pts across **${g.categories_met}** categories.`;
+
+          const fields = [
+            { name: 'Grade', value: `**${grade.toUpperCase()}**`, inline: true },
+            { name: 'Total Points', value: `**${g.total_points}** / ${g.green_target} pts`, inline: true },
+            { name: 'Categories Met', value: `${g.categories_met} / 3`, inline: true },
+            { name: '📊 Breakdown', value: breakdownText, inline: false },
+          ];
+
+          if (grade === 'black' || grade === 'red') {
+            fields.push({ name: '⚠️ Action Required', value: 'Please contact your supervisor or DMSPC if you have questions about this grade.', inline: false });
+          }
 
           const embed = new EmbedBuilder()
-            .setTitle(`Your Activity Points Grade — Week of ${prevWeekKey}`)
-            .setColor(color)
-            .addFields(
-              { name: 'Overall Grade', value: g.grade.toUpperCase(), inline: true },
-              { name: 'Total Points', value: `${g.total_points} pts (target: ${g.green_target})`, inline: true },
-              { name: 'Categories Met', value: `${g.categories_met} / 3`, inline: true },
-            );
-
-          if (g.grade === 'black' || g.grade === 'red') {
-            embed.setFooter({ text: 'This grade may result in disciplinary action. Contact your supervisor or DMSPC if you have questions.' });
-          } else {
-            embed.setFooter({ text: 'Shop opens on the 30th — check your monthly balance in the portal.' });
-          }
+            .setTitle(`${emoji} Your Weekly Grade — ${prevWeekKey}`)
+            .setDescription(GRADE_MESSAGES[grade] || '')
+            .setColor(GRADE_COLOURS[grade] || 0x2C2C2C)
+            .addFields(fields)
+            .setFooter({ text: grade === 'green' ? 'Keep it up! Shop opens on the 30th.' : 'Visit the portal to review your activity and submit any outstanding claims.' })
+            .setTimestamp();
 
           await user.send({ embeds: [embed] });
           sent++;
