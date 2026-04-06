@@ -1483,6 +1483,78 @@ client.on('interactionCreate', async interaction => {
       }
     }
 
+    // Shop approval/decline button handlers
+    if (interaction.customId.startsWith('shop_approve_') || interaction.customId.startsWith('shop_decline_')) {
+      const isApprove = interaction.customId.startsWith('shop_approve_');
+      const redemptionId = interaction.customId.replace(/^shop_(approve|decline)_/, '');
+
+      await interaction.deferUpdate();
+
+      try {
+        // Check if the user is an EOB member
+        const staffRes = await fetch(`http://localhost:3016/api/staff/by-discord/${interaction.user.id}`, {
+          headers: { 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET },
+        });
+        const staffData = await staffRes.json();
+        const isEob = staffData?.department === 'Executive Operations Board' || (staffData?.auth_level >= 99);
+
+        if (!isEob) {
+          await interaction.followUp({ content: '❌ You do not have permission to action shop redemptions.', ephemeral: true });
+          return;
+        }
+
+        // Call portal to approve/decline
+        const portalRes = await fetch(`http://localhost:3016/api/activity/shop/redemptions/${redemptionId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET },
+          body: JSON.stringify({
+            action: isApprove ? 'approve' : 'decline',
+            approved_by_discord_id: interaction.user.id,
+          }),
+        });
+        const portalData = await portalRes.json();
+
+        if (!portalRes.ok) {
+          await interaction.followUp({ content: `❌ ${portalData.error || 'Action failed'}`, ephemeral: true });
+          return;
+        }
+
+        const actionerName = interaction.user.globalName || interaction.user.username;
+        const actionLabel = isApprove ? `✅ Approved by ${actionerName}` : `❌ Declined by ${actionerName}`;
+
+        // Disable buttons on ALL sent DMs for this redemption
+        const botMessageIds = portalData.bot_message_ids || [];
+        for (const entry of botMessageIds) {
+          try {
+            const dmUser = await client.users.fetch(entry.discord_id);
+            const dmChannel = await dmUser.createDM();
+            const dmMsg = await dmChannel.messages.fetch(entry.message_id);
+            if (dmMsg) {
+              const disabledRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('shop_done_approve').setLabel(actionLabel).setStyle(2).setDisabled(true),
+              );
+              await dmMsg.edit({ components: [disabledRow] });
+            }
+          } catch (e) {
+            // DM may have been deleted or user has DMs closed — non-fatal
+          }
+        }
+
+        // Also disable buttons on the message the user just clicked
+        try {
+          const disabledRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('shop_done_action').setLabel(actionLabel).setStyle(2).setDisabled(true),
+          );
+          await interaction.editReply({ components: [disabledRow] });
+        } catch (e) { /* non-fatal */ }
+
+      } catch (e) {
+        console.error('[Shop Button]', e.message);
+        try { await interaction.followUp({ content: `❌ Error: ${e.message}`, ephemeral: true }); } catch {}
+      }
+      return;
+    }
+
     // DM exempt button handlers
     if (interaction.customId === 'dm_exempt_add') {
       // Fetch guild members for select menu
@@ -2910,6 +2982,52 @@ webhookApp.post('/api/send-dm', async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error('[DM API]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// POST /api/shop-approval-dm — send shop redemption approval DM with buttons
+webhookApp.post('/api/shop-approval-dm', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { discord_id, redemption_id, staff_display_name, perk_name, perk_cost, month_key, shop_closes_at } = req.body;
+  if (!discord_id || !redemption_id) return res.status(400).json({ error: 'discord_id and redemption_id required' });
+  try {
+    const user = await client.users.fetch(String(discord_id));
+    const shopCloseFormatted = new Date(shop_closes_at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+
+    const embed = new EmbedBuilder()
+      .setTitle('CO Shop — Approval Required')
+      .setColor(0xC9A84C)
+      .addFields(
+        { name: 'Staff Member', value: staff_display_name || 'Unknown', inline: true },
+        { name: 'Perk Requested', value: perk_name || 'Unknown', inline: true },
+        { name: 'Cost', value: `${perk_cost} pts`, inline: true },
+        { name: 'Shop Closes', value: shopCloseFormatted, inline: true },
+      )
+      .setFooter({ text: 'Only one EOB member needs to action this. Buttons will disable once actioned.' })
+      .setTimestamp();
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`shop_approve_${redemption_id}`).setLabel('Approve').setStyle(3), // Success = 3
+      new ButtonBuilder().setCustomId(`shop_decline_${redemption_id}`).setLabel('Decline').setStyle(4), // Danger = 4
+    );
+
+    const msg = await user.send({ embeds: [embed], components: [row] });
+
+    // Store message ID on portal
+    try {
+      await fetch(`http://localhost:3016/api/activity/shop/redemptions/${redemption_id}/bot-message`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET },
+        body: JSON.stringify({ discord_id: String(discord_id), message_id: String(msg.id) }),
+      });
+    } catch (e) {
+      console.error('[Shop DM] Failed to store message ID:', e.message);
+    }
+
+    res.json({ ok: true, message_id: msg.id });
+  } catch (e) {
+    console.error('[Shop DM]', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
