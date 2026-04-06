@@ -52,7 +52,8 @@ export async function execute(interaction) {
     new ButtonBuilder()
       .setCustomId(`ticketopts_reopen_${channelId}`)
       .setLabel('🔓 Reopen')
-      .setStyle(ButtonStyle.Success),
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(ticket.status !== 'closed'),
   );
 
   const embed = new EmbedBuilder()
