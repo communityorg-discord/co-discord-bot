@@ -91,8 +91,8 @@ function getBragWeekKey(ts = Date.now()) {
 }
 
 const client = new Client({
-  partials: [Partials.Channel, Partials.Message],
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildPresences, GatewayIntentBits.GuildInvites]
+  partials: [Partials.Channel, Partials.Message, Partials.Reaction],
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildPresences, GatewayIntentBits.GuildInvites, GatewayIntentBits.GuildMessageReactions]
 });
 
 client.commands = new Collection();
@@ -487,7 +487,7 @@ client.once('ready', async () => {
     } catch (e) { console.error('[Acting Midnight]', e.message); }
   }, 'Acting Midnight Cron');
 
-  // Sunday 10AM — BRAG submission reminder
+  // Sunday 10AM — Activity points reminder (replaces BRAG reminder)
   function scheduleSundayCron() {
     const now = new Date();
     let next = new Date(now);
@@ -558,116 +558,311 @@ client.once('ready', async () => {
 
   scheduleSundayCron();
 
-  // BRAG message count sync — push deltas to portal every minute
-  const BRAG_LOG_CH = '1487643487460659280';
+  // ========== ACTIVITY POINTS SYNC (replaces BRAG sync) ==========
+  const ACTIVITY_LOG_CH = '1487643487460659280';
 
-  async function syncBragCounts() {
+  // In-memory tracking sets
+  const dailyActiveUsers = new Set();
+  const voiceSessions = new Map(); // discord_id → { channel_id, channel_name, joined_at }
+  const meetingAttendance = new Map(); // discord_id → { channel_name, joined_at }
+  const weeklyReactions = new Map(); // discord_id (author) → count
+  const welcomeTracker = new Map(); // discord_id → count this week
+
+  // Staff cache — refreshed every 30 minutes
+  let staffCache = new Map(); // discord_id → { id, display_name, position }
+  async function refreshStaffCache() {
+    try {
+      const res = await fetch('http://localhost:3016/api/staff?limit=500', {
+        headers: { 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET }
+      });
+      const data = await res.json();
+      const list = data.staff || data.data || [];
+      const m = new Map();
+      for (const s of list) { if (s.discord_id) m.set(String(s.discord_id), s); }
+      staffCache = m;
+      console.log(`[Activity] Staff cache refreshed: ${m.size} members`);
+    } catch (e) { console.error('[Activity] Staff cache refresh failed:', e.message); }
+  }
+  await refreshStaffCache();
+  setInterval(refreshStaffCache, 30 * 60 * 1000);
+
+  // Sync message counts to activity points portal — every 60 seconds
+  async function syncActivityMessages() {
     try {
       const { db: botDatabase } = await import('./utils/botDb.js');
       const weekKey = getBragWeekKey();
 
-      // Get total stats for the log
-      const totalStats = botDatabase.prepare(`
-        SELECT COUNT(DISTINCT discord_id) as users, COALESCE(SUM(message_count), 0) as total
-        FROM brag_message_counts WHERE week_key = ?
-      `).get(weekKey);
-
-      // Get all counts for current week grouped by discord_id, only where there are unsent deltas
       const counts = botDatabase.prepare(`
-        SELECT discord_id, SUM(message_count) as total_count, SUM(last_synced_count) as total_synced, MAX(last_message_id) as last_message_id
-        FROM brag_message_counts
-        WHERE week_key = ?
-        GROUP BY discord_id
-        HAVING SUM(message_count) > SUM(last_synced_count)
+        SELECT discord_id, SUM(message_count) as total_count, SUM(last_synced_count) as total_synced
+        FROM brag_message_counts WHERE week_key = ?
+        GROUP BY discord_id HAVING SUM(message_count) > SUM(last_synced_count)
       `).all(weekKey);
 
-      // Post log even if no deltas
-      const logChannel = await client.channels.fetch(BRAG_LOG_CH).catch(() => null);
+      if (counts.length === 0) return;
 
-      if (counts.length === 0) {
-        if (logChannel) {
-          await logChannel.send({
-            embeds: [new EmbedBuilder()
-              .setColor(0x808080)
-              .setTitle('📊 BRAG Sync — No Changes')
-              .setDescription(`Week: \`${weekKey}\` | Tracking **${totalStats?.users || 0}** users | **${totalStats?.total || 0}** total messages`)
-              .setTimestamp()
-            ]
-          }).catch(() => {});
-        }
-        return;
-      }
-
-      const countsObj = {};
-      const lastIdsObj = {};
+      const records = [];
       for (const row of counts) {
         const delta = row.total_count - row.total_synced;
-        if (delta > 0) {
-          countsObj[row.discord_id] = delta;
-          lastIdsObj[row.discord_id] = row.last_message_id;
-        }
+        if (delta > 0) records.push({ discord_id: row.discord_id, category: 'messages', points: row.total_count });
       }
 
-      if (Object.keys(countsObj).length === 0) return;
+      // Also sync welcome points
+      for (const [discordId, count] of welcomeTracker) {
+        if (count > 0) records.push({ discord_id: discordId, category: 'welcome', points: count * 3 });
+      }
 
-      const res = await fetch('http://localhost:3016/api/brag/sync', {
+      if (records.length === 0) return;
+
+      const res = await fetch('http://localhost:3016/api/activity/sync/bulk', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-bot-secret': process.env.BOT_WEBHOOK_SECRET
-        },
-        body: JSON.stringify({
-          counts: countsObj,
-          lastIds: lastIdsObj,
-          weekKey,
-          syncType: 'scheduled_sync'
-        })
+        headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET },
+        body: JSON.stringify({ weekKey, records })
       });
-
       const data = await res.json();
-      console.log(`[BRAG Sync] Synced ${Object.keys(countsObj).length} users for week ${weekKey} — ${data.imported} imported`);
+      console.log(`[Activity Sync] ${data.synced} synced, ${data.skipped} skipped for week ${weekKey}`);
 
-      // Update last_synced_count to match current message_count so we don't re-send
-      botDatabase.prepare(`
-        UPDATE brag_message_counts SET last_synced_count = message_count WHERE week_key = ?
-      `).run(weekKey);
-
-      // Post sync log
-      if (logChannel) {
-        const userLines = Object.entries(countsObj).map(([id, delta]) => `<@${id}> +${delta}`).join('\n');
-        await logChannel.send({
-          embeds: [new EmbedBuilder()
-            .setColor(0x22C55E)
-            .setTitle('📊 BRAG Sync — Pushed to Portal')
-            .addFields(
-              { name: 'Week', value: weekKey, inline: true },
-              { name: 'Users Synced', value: `${Object.keys(countsObj).length}`, inline: true },
-              { name: 'Portal Imported', value: `${data.imported}`, inline: true },
-              { name: 'Total Tracking', value: `**${totalStats?.users || 0}** users | **${totalStats?.total || 0}** msgs`, inline: false },
-              { name: 'Deltas', value: userLines.slice(0, 1024) || 'None', inline: false },
-            )
-            .setTimestamp()
-          ]
-        }).catch(() => {});
-      }
+      botDatabase.prepare('UPDATE brag_message_counts SET last_synced_count = message_count WHERE week_key = ?').run(weekKey);
     } catch (e) {
-      console.error('[BRAG Sync] Failed:', e.message);
+      console.error('[Activity Sync] Failed:', e.message);
     }
   }
 
-  // Sync on startup
-  const bragDb = (await import('./utils/botDb.js')).db;
-  const bragWeek = getBragWeekKey();
-  const bragStats = bragDb.prepare(`
-    SELECT COUNT(DISTINCT discord_id) as users, COALESCE(SUM(message_count), 0) as total
-    FROM brag_message_counts WHERE week_key = ?
-  `).get(bragWeek);
-  console.log(`[BRAG] Week ${bragWeek}: tracking ${bragStats?.users || 0} users, ${bragStats?.total || 0} total messages`);
-  await syncBragCounts();
+  await syncActivityMessages();
+  setInterval(syncActivityMessages, 60 * 1000);
+  console.log('[Activity Sync] Started — syncing to portal every 60 seconds');
 
-  // Schedule every 1 minute
-  setInterval(syncBragCounts, 60 * 1000);
-  console.log('[BRAG Sync] Started — syncing to portal every 60 seconds');
+  // Daily activity + availability sync — 23:30 every day
+  function scheduleDailyActivitySync() {
+    const now = new Date();
+    let next = new Date(now);
+    next.setHours(23, 30, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    const delay = next - now;
+    setTimeout(async () => {
+      await syncDailyActivity();
+      setInterval(syncDailyActivity, 24 * 60 * 60 * 1000);
+    }, delay);
+    console.log(`[Activity] Daily sync scheduled in ${Math.round(delay / 60000)}m`);
+  }
+
+  async function syncDailyActivity() {
+    try {
+      const weekKey = getBragWeekKey();
+      const records = [];
+
+      for (const discordId of dailyActiveUsers) {
+        if (!staffCache.has(discordId)) continue;
+        records.push({ discord_id: discordId, category: 'daily_activity', points: 5 });
+      }
+
+      // Check availability via presence for active users
+      const STAFF_HQ = '1357119461957570570';
+      const guild = client.guilds.cache.get(STAFF_HQ);
+      if (guild) {
+        for (const discordId of dailyActiveUsers) {
+          if (!staffCache.has(discordId)) continue;
+          try {
+            const member = guild.members.cache.get(discordId);
+            const status = member?.presence?.status;
+            if (status && status !== 'offline') {
+              records.push({ discord_id: discordId, category: 'available', points: 5 });
+            }
+          } catch {}
+        }
+      }
+
+      if (records.length > 0) {
+        const res = await fetch('http://localhost:3016/api/activity/sync/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET },
+          body: JSON.stringify({ weekKey, records })
+        });
+        const data = await res.json();
+        console.log(`[Activity Daily] Synced ${data.synced} daily activity records`);
+      }
+
+      dailyActiveUsers.clear();
+    } catch (e) {
+      console.error('[Activity Daily] Sync failed:', e.message);
+    }
+  }
+
+  scheduleDailyActivitySync();
+
+  // Weekly bonus — Sunday 23:55
+  function scheduleWeeklyBonus() {
+    const now = new Date();
+    let next = new Date(now);
+    const daysUntilSunday = (7 - now.getDay()) % 7;
+    next.setDate(now.getDate() + (daysUntilSunday === 0 && (now.getHours() > 23 || (now.getHours() === 23 && now.getMinutes() >= 55)) ? 7 : daysUntilSunday));
+    next.setHours(23, 55, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 7);
+    const delay = next - now;
+    setTimeout(async () => {
+      await checkWeeklyBonus();
+      setInterval(checkWeeklyBonus, 7 * 24 * 60 * 60 * 1000);
+    }, delay);
+    console.log(`[Activity] Weekly bonus scheduled in ${Math.round(delay / 60000)}m`);
+  }
+
+  async function checkWeeklyBonus() {
+    try {
+      const weekKey = getBragWeekKey();
+      const res = await fetch(`http://localhost:3016/api/activity/weekly-activity-check?weekKey=${weekKey}`, {
+        headers: { 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET }
+      });
+      const data = await res.json();
+      if (!data.discord_ids?.length) { console.log('[Activity] Weekly bonus: no users qualified'); return; }
+
+      const records = data.discord_ids.map(id => ({ discord_id: id, category: 'weekly_bonus', points: 30 }));
+      await fetch('http://localhost:3016/api/activity/sync/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET },
+        body: JSON.stringify({ weekKey, records })
+      });
+      console.log(`[Activity] Weekly bonus awarded to ${data.discord_ids.length} users`);
+    } catch (e) {
+      console.error('[Activity] Weekly bonus failed:', e.message);
+    }
+  }
+
+  scheduleWeeklyBonus();
+
+  // Tuesday 09:00 — weekly awards
+  function scheduleTuesdayAwards() {
+    const now = new Date();
+    let next = new Date(now);
+    const daysUntilTuesday = (2 - now.getDay() + 7) % 7 || 7;
+    next.setDate(now.getDate() + (now.getDay() === 2 && now.getHours() < 9 ? 0 : daysUntilTuesday));
+    next.setHours(9, 0, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 7);
+    const delay = next - now;
+    setTimeout(async () => {
+      await processWeeklyAwards();
+      setInterval(processWeeklyAwards, 7 * 24 * 60 * 60 * 1000);
+    }, delay);
+    console.log(`[Activity] Tuesday awards scheduled in ${Math.round(delay / 60000)}m`);
+  }
+
+  const AWARDS_CHANNEL = '1366851210933567508';
+
+  async function processWeeklyAwards() {
+    try {
+      const prevWeekKey = getBragWeekKey(Date.now() - 7 * 86400000);
+      const res = await fetch(`http://localhost:3016/api/activity/awards/calculate?weekKey=${prevWeekKey}`, {
+        headers: { 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET }
+      });
+      const data = await res.json();
+      if (!data.awards?.length) { console.log('[Awards] No awards this week'); return; }
+
+      const fields = [];
+      for (const award of data.awards) {
+        for (const winner of award.winners) {
+          // Award shop points
+          await fetch('http://localhost:3016/api/activity/shop/award', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET },
+            body: JSON.stringify({ discord_id: winner.discord_id, points: award.award_points, award_name: award.award_name, week_key: prevWeekKey })
+          }).catch(e => console.error('[Awards] Shop award failed:', e.message));
+
+          // DM winner
+          try {
+            const user = await client.users.fetch(winner.discord_id);
+            await user.send({ embeds: [new EmbedBuilder()
+              .setColor(0xC9A84C)
+              .setTitle(`🏆 Weekly Award — ${award.award_name}`)
+              .setDescription(`Congratulations **${winner.display_name}**! You won this week's **${award.award_name}** award and earned **${award.award_points}** shop points.`)
+              .setTimestamp()
+            ]});
+          } catch {}
+          await new Promise(r => setTimeout(r, 300));
+        }
+        const winnerNames = award.winners.map(w => w.display_name).join(', ');
+        fields.push({ name: award.award_name, value: `${winnerNames} — ${award.winners[0]?.value || 0} — ${award.award_points} pts awarded`, inline: false });
+      }
+
+      // Summary embed
+      try {
+        const ch = await client.channels.fetch(AWARDS_CHANNEL);
+        await ch.send({ embeds: [new EmbedBuilder()
+          .setColor(0xC9A84C)
+          .setTitle(`🏆 CO Weekly Awards — Week of ${prevWeekKey}`)
+          .addFields(fields.slice(0, 25))
+          .setFooter({ text: 'Points added to monthly shop balances. Shop opens on the 30th.' })
+          .setTimestamp()
+        ]});
+      } catch (e) { console.error('[Awards] Summary post failed:', e.message); }
+
+      console.log(`[Awards] Processed ${data.awards.length} award categories for week ${prevWeekKey}`);
+    } catch (e) {
+      console.error('[Awards] Processing failed:', e.message);
+    }
+  }
+
+  scheduleTuesdayAwards();
+
+  // Monday 00:05 — grade DMs (after Sunday 23:59 grade calc)
+  function scheduleMondayGradeDMs() {
+    const now = new Date();
+    let next = new Date(now);
+    const daysUntilMonday = (1 - now.getDay() + 7) % 7 || 7;
+    next.setDate(now.getDate() + (now.getDay() === 1 && now.getHours() === 0 && now.getMinutes() < 5 ? 0 : daysUntilMonday));
+    next.setHours(0, 5, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 7);
+    const delay = next - now;
+    setTimeout(async () => {
+      await sendGradeDMs();
+      setInterval(sendGradeDMs, 7 * 24 * 60 * 60 * 1000);
+    }, delay);
+    console.log(`[Activity] Monday grade DMs scheduled in ${Math.round(delay / 60000)}m`);
+  }
+
+  async function sendGradeDMs() {
+    try {
+      const prevWeekKey = getBragWeekKey(Date.now() - 7 * 86400000);
+      const res = await fetch(`http://localhost:3016/api/activity/grades/week-bot/${prevWeekKey}`, {
+        headers: { 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET }
+      });
+      const data = await res.json();
+      if (!data.grades?.length) return;
+
+      const gradeColors = { green: 0x1A6B3C, amber: 0xC9A84C, red: 0x8B1A1A, black: 0x2C2C2C, exempt: 0x3498DB };
+      let sent = 0;
+
+      for (const g of data.grades) {
+        if (!g.discord_id || g.grade === 'exempt') continue;
+        try {
+          const user = await client.users.fetch(g.discord_id);
+          const color = gradeColors[g.grade] || 0x2C2C2C;
+          const name = g.display_name || g.full_name || g.username;
+
+          const embed = new EmbedBuilder()
+            .setTitle(`Your Activity Points Grade — Week of ${prevWeekKey}`)
+            .setColor(color)
+            .addFields(
+              { name: 'Overall Grade', value: g.grade.toUpperCase(), inline: true },
+              { name: 'Total Points', value: `${g.total_points} pts (target: ${g.green_target})`, inline: true },
+              { name: 'Categories Met', value: `${g.categories_met} / 3`, inline: true },
+            );
+
+          if (g.grade === 'black' || g.grade === 'red') {
+            embed.setFooter({ text: 'This grade may result in disciplinary action. Contact your supervisor or DMSPC if you have questions.' });
+          } else {
+            embed.setFooter({ text: 'Shop opens on the 30th — check your monthly balance in the portal.' });
+          }
+
+          await user.send({ embeds: [embed] });
+          sent++;
+          await new Promise(r => setTimeout(r, 400));
+        } catch {}
+      }
+      console.log(`[Activity] Grade DMs sent to ${sent} users for week ${prevWeekKey}`);
+    } catch (e) {
+      console.error('[Activity] Grade DMs failed:', e.message);
+    }
+  }
+
+  scheduleMondayGradeDMs();
 
   // Message count leaderboard — edits same embed, new one each Monday
   const LEADERBOARD_CH = '1487667463129661471';
@@ -2037,12 +2232,12 @@ client.on('messageCreate', async (message) => {
 
   try { await automod.checkMessage(message); } catch (e) { console.error('[AutoMod messageCreate]', e.message); }
 
-  // BRAG message counting — only track staff members (users in the portal)
+  // Activity message counting — only track staff members
   if (!message.author.bot && message.guild && !message.system) {
     try {
       const { getUserByDiscordId: getUser } = await import('./db.js');
       const staffUser = getUser(message.author.id);
-      if (!staffUser) return; // Not a staff member — don't track
+      if (!staffUser) return;
 
       const { db: botDatabase } = await import('./utils/botDb.js');
       const weekKey = getBragWeekKey();
@@ -2055,8 +2250,21 @@ client.on('messageCreate', async (message) => {
           last_message_id = excluded.last_message_id,
           last_updated = datetime('now')
       `).run(message.author.id, message.guild.id, message.guild.name, weekKey, message.id);
+
+      // Track daily activity
+      dailyActiveUsers.add(message.author.id);
+
+      // Welcome message detection
+      const chName = (message.channel.name || '').toLowerCase();
+      if ((chName.includes('general') || chName.includes('welcome')) && message.mentions.users.size > 0) {
+        const content = message.content.toLowerCase();
+        if (/welcome|glad to have|hello|hey|hi there/.test(content)) {
+          const current = welcomeTracker.get(message.author.id) || 0;
+          welcomeTracker.set(message.author.id, current + message.mentions.users.size);
+        }
+      }
     } catch (e) {
-      // Silent fail — don't break message flow for counting
+      // Silent fail
     }
   }
 });
@@ -2458,7 +2666,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 
 // ============ VOICE OFFICE RESTRICTIONS ============
 client.on('voiceStateUpdate', async (oldState, newState) => {
-  // Voice time tracking for leaderboard
+  // Voice time tracking for leaderboard + activity points
   try {
     const userId = newState.member?.id || oldState.member?.id;
     if (userId && !(newState.member?.user?.bot || oldState.member?.user?.bot)) {
@@ -2469,9 +2677,53 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 
       if (joined || moved) {
         voiceJoin(userId, getBragWeekKey());
+        dailyActiveUsers.add(userId);
+        // Record voice session start
+        voiceSessions.set(userId, {
+          channel_id: newState.channelId,
+          channel_name: newState.channel?.name || '',
+          joined_at: Date.now(),
+        });
+        // Meeting channel tracking
+        const MEETING_CHANNELS = ['Office Room 1', 'Office Room 2', 'Theatre', 'Conference Room 1'];
+        const chName = newState.channel?.name || '';
+        if (MEETING_CHANNELS.some(mc => chName.includes(mc))) {
+          meetingAttendance.set(userId, { channel_name: chName, joined_at: Date.now() });
+        }
       }
-      if (left) {
+      if (left || moved) {
         voiceLeave(userId, getBragWeekKey());
+        // Log voice session to portal
+        const session = voiceSessions.get(userId);
+        if (session) {
+          const durationMs = Date.now() - session.joined_at;
+          const durationMinutes = Math.round(durationMs / 60000);
+          if (durationMinutes >= 1) {
+            fetch('http://localhost:3016/api/activity/voice-log', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET },
+              body: JSON.stringify({
+                discord_id: userId, channel_id: session.channel_id, channel_name: session.channel_name,
+                joined_at: new Date(session.joined_at).toISOString(), left_at: new Date().toISOString(),
+                duration_minutes: durationMinutes, week_key: getBragWeekKey(),
+              })
+            }).catch(e => console.error('[VoiceLog] POST failed:', e.message));
+          }
+          voiceSessions.delete(userId);
+        }
+        // Meeting attendance — check if qualified (10+ min)
+        const meeting = meetingAttendance.get(userId);
+        if (meeting) {
+          const meetDuration = Math.round((Date.now() - meeting.joined_at) / 60000);
+          if (meetDuration >= 10) {
+            fetch('http://localhost:3016/api/activity/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET },
+              body: JSON.stringify({ weekKey: getBragWeekKey(), userId: userId, category: 'meeting', points: 10 })
+            }).catch(e => console.error('[Meeting] Sync failed:', e.message));
+          }
+          meetingAttendance.delete(userId);
+        }
       }
     }
   } catch (e) {
@@ -2516,6 +2768,29 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     }
   } catch (e) {
     console.error('[voiceStateUpdate leave refresh error]', e.message);
+  }
+});
+
+// ============ REACTION TRACKING (for weekly awards) ============
+client.on('messageReactionAdd', async (reaction, user) => {
+  try {
+    if (user.bot) return;
+    const positiveEmojis = ['👍', '✅', '❤️', '🙌'];
+    const emoji = reaction.emoji.name;
+    if (!positiveEmojis.includes(emoji)) return;
+
+    // Fetch partial message if needed
+    if (reaction.partial) { try { await reaction.fetch(); } catch { return; } }
+    const author = reaction.message.author;
+    if (!author || author.bot || author.id === user.id) return; // Ignore bots and self-reactions
+
+    // Only count if both are CO staff
+    if (!staffCache.has(author.id) || !staffCache.has(user.id)) return;
+
+    const current = weeklyReactions.get(author.id) || 0;
+    weeklyReactions.set(author.id, current + 1);
+  } catch (e) {
+    // Silent fail
   }
 });
 
