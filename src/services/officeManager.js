@@ -292,11 +292,10 @@ export async function applyRestriction(guild, office) {
   if (!vc) return;
 
   if (office.is_restricted) {
-    // Set channel topic
+    // Set channel topic — enforcement handled by enforceOfficeRestrictions (bot kicks users)
     await vc.setTopic('This channel is restricted 🔒').catch(() => {});
-    // Deny @everyone — NO ONE gets in, not even superusers or owner
-    await vc.permissionOverwrites.edit(guild.roles.everyone.id, { Connect: false }).catch(e => console.error('[Office] Deny @everyone:', e.message));
-    // Clear any existing overwrites for superusers/owner/keys/allowlist
+    // Remove all permission overwrites — bot manages access via enforceOfficeRestrictions
+    await vc.permissionOverwrites.delete(guild.roles.everyone.id).catch(() => {});
     for (const suId of SUPERUSER_IDS) {
       await vc.permissionOverwrites.delete(suId).catch(() => {});
     }
