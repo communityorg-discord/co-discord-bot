@@ -513,8 +513,6 @@ export async function enforceOfficeRestrictions(client, voiceState, office) {
   }
 
   if (office.is_restricted) {
-    if (onAllowlist) return;
-
     await member.voice.disconnect('[Office] Restricted office').catch(() => {});
 
     const wrField = office.waiting_room_channel_id
