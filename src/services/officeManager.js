@@ -480,15 +480,7 @@ export async function enforceOfficeRestrictions(client, voiceState, office) {
   // Owner always has access
   if (member.id === office.owner_discord_id) return;
 
-  // Check office key — if they have a key role, let them in (unless owner-only)
-  if (!office.is_owner_only) {
-    const memberRoles = member.roles.cache.map(r => r.id);
-    const keys = getActiveKeys(office.id);
-    const hasKey = keys.some(k => memberRoles.includes(k.role_id));
-    if (hasKey) return;
-  }
-
-  // Check allowlist (supports both user and role entries)
+  // Check allowlist (supports both user and role entries) — only applies to non-restricted offices
   const onAllowlist = isOnAllowlist(office.id, member);
 
   if (office.is_owner_only) {
@@ -513,6 +505,7 @@ export async function enforceOfficeRestrictions(client, voiceState, office) {
   }
 
   if (office.is_restricted) {
+    // Restricted: kick everyone (only superusers and owner above have access)
     await member.voice.disconnect('[Office] Restricted office').catch(() => {});
 
     const wrField = office.waiting_room_channel_id
@@ -537,7 +530,14 @@ export async function enforceOfficeRestrictions(client, voiceState, office) {
       logType: 'moderation.office',
       guildId: guild.id
     });
+    return;
   }
+
+  // Office is open — check keys and allowlist
+  const memberRoles = member.roles.cache.map(r => r.id);
+  const keys = getActiveKeys(office.id);
+  const hasKey = keys.some(k => memberRoles.includes(k.role_id));
+  if (hasKey || onAllowlist) return; // Has key or allowlist = allowed
 }
 
 // ── Interaction Handlers ────────────────────────────────────────────────────
