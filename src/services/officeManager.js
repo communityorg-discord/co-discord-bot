@@ -291,41 +291,66 @@ export async function applyRestriction(guild, office) {
   const vc = guild.channels.cache.get(office.channel_id);
   if (!vc) return;
 
-  if (office.is_restricted || office.is_owner_only) {
+  if (office.is_restricted) {
     // Set channel topic
     await vc.setTopic('This channel is restricted 🔒').catch(() => {});
-
-    // Deny @everyone Connect
+    // Deny @everyone — NO ONE gets in, not even superusers or owner
     await vc.permissionOverwrites.edit(guild.roles.everyone.id, { Connect: false }).catch(e => console.error('[Office] Deny @everyone:', e.message));
-
-    // Re-apply key role overwrites
+    // Clear any existing overwrites for superusers/owner/keys/allowlist
+    for (const suId of SUPERUSER_IDS) {
+      await vc.permissionOverwrites.delete(suId).catch(() => {});
+    }
+    if (office.owner_discord_id) {
+      await vc.permissionOverwrites.delete(office.owner_discord_id).catch(() => {});
+    }
     const keys = getActiveKeys(office.id);
     for (const key of keys) {
-      if (!office.is_owner_only) {
-        await vc.permissionOverwrites.edit(key.role_id, { Connect: true }).catch(() => {});
-      }
+      await vc.permissionOverwrites.delete(key.role_id).catch(() => {});
     }
+    const allowlist = getAllowlist(office.id);
+    for (const entry of allowlist) {
+      await vc.permissionOverwrites.delete(entry.discord_id).catch(() => {});
+    }
+    return;
+  }
 
-    // Re-apply allowlist overwrites (users and roles)
+  if (office.is_owner_only) {
+    // Set channel topic
+    await vc.setTopic('This channel is restricted 🔒').catch(() => {});
+    // Deny @everyone
+    await vc.permissionOverwrites.edit(guild.roles.everyone.id, { Connect: false }).catch(e => console.error('[Office] Deny @everyone:', e.message));
+    // Owner gets access
+    if (office.owner_discord_id) {
+      await vc.permissionOverwrites.edit(office.owner_discord_id, { Connect: true }).catch(() => {});
+    }
+    // Superusers get access
+    for (const suId of SUPERUSER_IDS) {
+      await vc.permissionOverwrites.edit(suId, { Connect: true }).catch(() => {});
+    }
+    // Allowlist gets access
     const allowlist = getAllowlist(office.id);
     for (const entry of allowlist) {
       await vc.permissionOverwrites.edit(entry.discord_id, { Connect: true }).catch(() => {});
     }
+    return;
+  }
 
-    // Superusers always get access
-    for (const suId of SUPERUSER_IDS) {
-      await vc.permissionOverwrites.edit(suId, { Connect: true }).catch(() => {});
-    }
-
-    // Owner always gets access
-    if (office.owner_discord_id) {
-      await vc.permissionOverwrites.edit(office.owner_discord_id, { Connect: true }).catch(() => {});
-    }
-  } else {
-    // Clear channel topic
-    await vc.setTopic('').catch(() => {});
-    // Remove @everyone Connect deny
-    await vc.permissionOverwrites.delete(guild.roles.everyone.id).catch(() => {});
+  // Open office — clear all overwrites
+  await vc.setTopic('').catch(() => {});
+  await vc.permissionOverwrites.delete(guild.roles.everyone.id).catch(() => {});
+  for (const suId of SUPERUSER_IDS) {
+    await vc.permissionOverwrites.delete(suId).catch(() => {});
+  }
+  if (office.owner_discord_id) {
+    await vc.permissionOverwrites.delete(office.owner_discord_id).catch(() => {});
+  }
+  const keys = getActiveKeys(office.id);
+  for (const key of keys) {
+    await vc.permissionOverwrites.delete(key.role_id).catch(() => {});
+  }
+  const allowlist = getAllowlist(office.id);
+  for (const entry of allowlist) {
+    await vc.permissionOverwrites.delete(entry.discord_id).catch(() => {});
   }
 }
 
@@ -474,38 +499,11 @@ export async function enforceOfficeRestrictions(client, voiceState, office) {
   const member = voiceState.member;
   const guild = voiceState.guild;
 
-  // Superusers always have access to any office
-  if (SUPERUSER_IDS.includes(member.id)) return;
-
-  // Owner always has access
-  if (member.id === office.owner_discord_id) return;
-
-  // Check allowlist (supports both user and role entries) — only applies to non-restricted offices
+  // Check allowlist
   const onAllowlist = isOnAllowlist(office.id, member);
 
-  if (office.is_owner_only) {
-    if (!onAllowlist) {
-      await member.voice.disconnect('[Office] Owner-only office \u2014 not on allowlist').catch(() => {});
-      await member.send({
-        embeds: [new EmbedBuilder().setColor(0xEF4444).setTitle('\u{1F512} Access Denied').setDescription(`**${office.channel_name}** is an owner-only office. You are not on the access list.`)]
-      }).catch(() => {});
-
-      await logAction(client, {
-        action: '\u{1F512} Office Access Denied',
-        moderator: { discordId: 'SYSTEM', name: 'Office System' },
-        target: { discordId: member.id, name: member.user.tag },
-        reason: `Owner-only office: ${office.channel_name}`,
-        color: 0xEF4444,
-        logType: 'moderation.office',
-        guildId: guild.id
-      });
-      return;
-    }
-    return; // On allowlist
-  }
-
   if (office.is_restricted) {
-    // Restricted: kick everyone (only superusers and owner above have access)
+    // Restricted: kick everyone — no exceptions
     await member.voice.disconnect('[Office] Restricted office').catch(() => {});
 
     const wrField = office.waiting_room_channel_id
@@ -533,7 +531,37 @@ export async function enforceOfficeRestrictions(client, voiceState, office) {
     return;
   }
 
-  // Office is open — check keys and allowlist
+  if (office.is_owner_only) {
+    // Owner always has access
+    if (member.id === office.owner_discord_id) return;
+    // Superusers always have access
+    if (SUPERUSER_IDS.includes(member.id)) return;
+    // Check allowlist
+    if (!onAllowlist) {
+      await member.voice.disconnect('[Office] Owner-only office \u2014 not on allowlist').catch(() => {});
+      await member.send({
+        embeds: [new EmbedBuilder().setColor(0xEF4444).setTitle('\u{1F512} Access Denied').setDescription(`**${office.channel_name}** is an owner-only office. You are not on the access list.`)]
+      }).catch(() => {});
+
+      await logAction(client, {
+        action: '\u{1F512} Office Access Denied',
+        moderator: { discordId: 'SYSTEM', name: 'Office System' },
+        target: { discordId: member.id, name: member.user.tag },
+        reason: `Owner-only office: ${office.channel_name}`,
+        color: 0xEF4444,
+        logType: 'moderation.office',
+        guildId: guild.id
+      });
+      return;
+    }
+    return; // On allowlist
+  }
+
+  // Office is open — owner and superusers always have access
+  if (member.id === office.owner_discord_id) return;
+  if (SUPERUSER_IDS.includes(member.id)) return;
+
+  // Check keys and allowlist
   const memberRoles = member.roles.cache.map(r => r.id);
   const keys = getActiveKeys(office.id);
   const hasKey = keys.some(k => memberRoles.includes(k.role_id));
