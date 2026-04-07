@@ -975,7 +975,7 @@ async function toggleSetting(interaction, client, officeId, field) {
     guildId: guild.id
   });
 
-  return showSettingsPanel(interaction, officeId);
+  return showSettingsPanel(interaction, officeId, true);
 }
 
 async function showKeysPanel(interaction, officeId, isFollowUp = false) {
