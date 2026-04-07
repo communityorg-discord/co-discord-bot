@@ -944,8 +944,10 @@ async function showSettingsPanel(interaction, officeId, isFollowUp = false) {
 }
 
 async function toggleSetting(interaction, client, officeId, field) {
+  await interaction.deferUpdate({ ephemeral: true });
+
   const office = getOffice(officeId);
-  if (!office) return interaction.reply({ content: '\u274C Office not found.', ephemeral: true });
+  if (!office) return interaction.editReply({ content: '\u274C Office not found.', ephemeral: true });
 
   const newVal = office[field] ? 0 : 1;
   const updateFields = { [field]: newVal };
