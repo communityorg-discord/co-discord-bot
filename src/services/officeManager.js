@@ -292,6 +292,9 @@ export async function applyRestriction(guild, office) {
   if (!vc) return;
 
   if (office.is_restricted || office.is_owner_only) {
+    // Set channel topic
+    await vc.setTopic('This channel is restricted 🔒').catch(() => {});
+
     // Deny @everyone Connect
     await vc.permissionOverwrites.edit(guild.roles.everyone.id, { Connect: false }).catch(e => console.error('[Office] Deny @everyone:', e.message));
 
@@ -319,6 +322,8 @@ export async function applyRestriction(guild, office) {
       await vc.permissionOverwrites.edit(office.owner_discord_id, { Connect: true }).catch(() => {});
     }
   } else {
+    // Clear channel topic
+    await vc.setTopic('').catch(() => {});
     // Remove @everyone Connect deny
     await vc.permissionOverwrites.delete(guild.roles.everyone.id).catch(() => {});
   }
