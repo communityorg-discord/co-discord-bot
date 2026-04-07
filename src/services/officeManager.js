@@ -289,12 +289,15 @@ export async function refreshOfficePanels(client, guildId) {
 
 export async function applyRestriction(guild, office) {
   const vc = guild.channels.cache.get(office.channel_id);
-  if (!vc) return;
+  console.log(`[Office applyRestriction] channel=${office.channel_id} is_restricted=${office.is_restricted} is_owner_only=${office.is_owner_only} vc_found=${!!vc}`);
+  if (!vc) {
+    console.error(`[Office] VC not found in cache: ${office.channel_id}`);
+    return;
+  }
 
   if (office.is_restricted) {
-    // Set channel topic — enforcement handled by enforceOfficeRestrictions (bot kicks users)
-    await vc.setTopic('This channel is restricted 🔒').catch(() => {});
-    // Remove all permission overwrites — bot manages access via enforceOfficeRestrictions
+    console.log(`[Office] Setting restricted topic for ${office.channel_name}`);
+    await vc.setTopic('This channel is restricted 🔒').catch(e => console.error('[Office] setTopic error:', e.message));
     await vc.permissionOverwrites.delete(guild.roles.everyone.id).catch(() => {});
     for (const suId of SUPERUSER_IDS) {
       await vc.permissionOverwrites.delete(suId).catch(() => {});
