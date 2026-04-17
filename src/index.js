@@ -3286,6 +3286,50 @@ webhookApp.post('/webhook', async (req, res) => {
   }
 });
 
+// POST /webhook/appeal-verify — public /appeal flow
+// Body: { discord_id, code }. Header: x-bot-secret.
+// Confirms guild membership of International Court, then DMs the code.
+const INTL_COURT_GUILD = '1366218589367042048';
+webhookApp.post('/webhook/appeal-verify', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { discord_id, code } = req.body || {};
+  if (!discord_id || !code) return res.status(400).json({ ok: false, error: 'discord_id and code required' });
+  try {
+    const guild = client.guilds.cache.get(INTL_COURT_GUILD);
+    if (!guild) {
+      console.warn('[appeal-verify] Guild not cached:', INTL_COURT_GUILD);
+      return res.status(502).json({ ok: false, reason: 'guild_unavailable' });
+    }
+    let member = guild.members.cache.get(String(discord_id));
+    if (!member) {
+      try { member = await guild.members.fetch({ user: String(discord_id), force: false }); }
+      catch { member = null; }
+    }
+    if (!member) {
+      return res.json({ ok: false, reason: 'not_in_server' });
+    }
+
+    let user;
+    try { user = await client.users.fetch(String(discord_id)); }
+    catch (e) {
+      console.error('[appeal-verify] user fetch failed:', e.message);
+      return res.status(502).json({ ok: false, reason: 'user_fetch_failed' });
+    }
+    try {
+      await user.send({
+        content: `**Appeal Verification Code:** \`${code}\`\n\nEnter this code on the appeal form to continue. It expires in 10 minutes.\n\nIf you did not request this, ignore this message.`,
+      });
+    } catch (e) {
+      console.warn('[appeal-verify] DM blocked:', e.message);
+      return res.json({ ok: false, reason: 'dm_blocked' });
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[appeal-verify] fatal:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // POST /api/send-dm — unified DM endpoint for portal
 webhookApp.post('/api/send-dm', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
