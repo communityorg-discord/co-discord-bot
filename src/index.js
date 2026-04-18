@@ -3372,6 +3372,61 @@ webhookApp.post('/webhook/gdpr-deliver', async (req, res) => {
   }
 });
 
+// POST /webhook/gdpr-iac-notify — Phase G8 processor awareness pings
+// Body: { processor_discord_id, request_number, event, detail? }
+// Events: 'subject_verified' | 'zip_downloaded'
+// Non-urgent, low-colour embed. Silent on DM failure — caller never waits.
+const GDPR_IAC_EVENTS = {
+  subject_verified: {
+    title: 'GDPR bundle accessed',
+    description: (n) => `The subject of ${n} just verified their access code and opened their bundle. No action required \u2014 this is for your awareness.`,
+  },
+  zip_downloaded: {
+    title: 'GDPR full bundle downloaded',
+    description: (n) => `The subject of ${n} just downloaded the full ZIP bundle. Logged in the audit trail.`,
+  },
+};
+webhookApp.post('/webhook/gdpr-iac-notify', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { processor_discord_id, request_number, event, detail } = req.body || {};
+  if (!processor_discord_id || !request_number || !event) {
+    return res.status(400).json({ ok: false, reason: 'missing_fields' });
+  }
+  const meta = GDPR_IAC_EVENTS[event];
+  if (!meta) return res.status(400).json({ ok: false, reason: 'unknown_event' });
+  try {
+    let user;
+    try { user = await client.users.fetch(String(processor_discord_id)); }
+    catch (e) {
+      console.warn('[gdpr-iac-notify] user fetch failed:', e.message);
+      return res.json({ ok: false, reason: 'user_fetch_failed' });
+    }
+    try {
+      await user.send({
+        embeds: [{
+          color: 0x64748b, // slate — non-urgent
+          title: meta.title,
+          description: meta.description(request_number),
+          fields: [
+            { name: 'Request', value: '`' + request_number + '`', inline: true },
+            ...(detail ? [{ name: 'Detail', value: String(detail).slice(0, 500), inline: false }] : []),
+          ],
+          footer: { text: 'CO \u00b7 GDPR processor awareness' },
+          timestamp: new Date().toISOString(),
+        }],
+      });
+    } catch (e) {
+      // Processor's DMs might be closed — log but don't escalate
+      console.warn('[gdpr-iac-notify] DM failed:', e.message);
+      return res.json({ ok: false, reason: 'dm_blocked' });
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[gdpr-iac-notify] fatal:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // POST /api/send-dm — unified DM endpoint for portal
 webhookApp.post('/api/send-dm', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
