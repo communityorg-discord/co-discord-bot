@@ -3330,6 +3330,48 @@ webhookApp.post('/webhook/appeal-verify', async (req, res) => {
   }
 });
 
+// POST /webhook/gdpr-deliver — Phase G4 subject access code / bundle delivery
+// Body: { discord_id, body, request_number?, regenerated? }. Header: x-bot-secret.
+// No guild-membership requirement — subjects may have left the server and still
+// have a statutory right to access their data.
+webhookApp.post('/webhook/gdpr-deliver', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { discord_id, body, request_number, regenerated } = req.body || {};
+  if (!discord_id || !body) return res.status(400).json({ ok: false, reason: 'missing_fields' });
+  try {
+    let user;
+    try { user = await client.users.fetch(String(discord_id)); }
+    catch (e) {
+      console.error('[gdpr-deliver] user fetch failed:', e.message);
+      return res.status(502).json({ ok: false, reason: 'user_fetch_failed' });
+    }
+    try {
+      await user.send({
+        embeds: [{
+          color: 0x8b5cf6,
+          title: regenerated ? 'GDPR Access Code — Reissued' : 'GDPR Data Access — Your Bundle is Ready',
+          description: regenerated
+            ? 'A new access code has been issued for your GDPR request. The previous code no longer works.'
+            : 'Your GDPR data access bundle is ready to download. Keep this code private — anyone with it (and your Discord ID) can access the data.',
+          fields: [
+            ...(request_number ? [{ name: 'Request', value: '`' + request_number + '`', inline: true }] : []),
+            { name: 'Details', value: '```\n' + body + '\n```', inline: false },
+          ],
+          footer: { text: 'Community Organisation · GDPR Portal' },
+          timestamp: new Date().toISOString(),
+        }],
+      });
+    } catch (e) {
+      console.warn('[gdpr-deliver] DM blocked:', e.message);
+      return res.json({ ok: false, reason: 'dm_blocked' });
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[gdpr-deliver] fatal:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // POST /api/send-dm — unified DM endpoint for portal
 webhookApp.post('/api/send-dm', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
