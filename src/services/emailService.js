@@ -321,7 +321,26 @@ const BREVO_SENDER = {
  * @param {string} senderCoEmail - The sender's CO email address (from portal DB)
  */
 export async function sendEmailViaBrevo(options, senderCoEmail, fromEmail = null) {
-  const { to, cc, subject, body, inReplyTo, references, senderName } = options;
+  const { to, cc, subject, body, inReplyTo, references, senderName, isReply, originalSubject } = options;
+
+  // Phase G10 — wrap every outgoing email in the shared CO-branded layout.
+  // Inbox replies use a "re:" heading and keep the footer neutral so the
+  // recipient understands this is a real reply (not an automated pager).
+  const { wrapEmail } = await import('../lib/emailLayout.js');
+  const senderDisplay = senderName || (senderCoEmail ? senderCoEmail.split('@')[0] : 'Community Organisation');
+  const heading = isReply
+    ? `Re: ${String(originalSubject || subject).replace(/^(re:\s*)+/i, '')}`
+    : subject;
+  const { html, text } = wrapEmail({
+    preheader: subject,
+    heading,
+    intro: '',
+    body: [{ type: 'raw_html', html: `<div style="white-space:pre-wrap;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;font-size:15px;line-height:1.55;color:#222222;">${String(body || '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</div>` }],
+    footerNote: isReply
+      ? 'This is a real reply — you can respond directly to this email and it will reach the sender.'
+      : 'Sent from the CO Staff Portal.',
+    signature: { name: senderDisplay, role: null, team: 'Community Organisation' },
+  });
 
   const payload = {
     sender: {
@@ -337,7 +356,8 @@ export async function sendEmailViaBrevo(options, senderCoEmail, fromEmail = null
         : String(cc).split(',').map(e => ({ email: e.trim() })).filter(e => e.email)
     } : {}),
     subject,
-    htmlContent: `<html><body style="font-family: Arial, sans-serif;"><pre style="white-space: pre-wrap;">${body.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre></body></html>`,
+    htmlContent: html,
+    textContent: text,
     ...(inReplyTo ? { replyTo: { email: senderCoEmail, name: senderName || senderCoEmail.split('@')[0] } } : {}),
     ...(references ? { headers: { references } } : {}),
   };
@@ -367,7 +387,9 @@ export async function sendReply(inbox, options, discordUserId) {
   const senderName = displayName
     ? `${displayName} via ${inbox?.name || 'CO'}`
     : (inbox?.name || 'CO');
-  return sendEmailViaBrevo({ ...options, senderName }, coEmail, fromEmail);
+  // Mark as reply so the shared layout switches the footer to "you can reply
+  // directly to this email" instead of the automated-message default.
+  return sendEmailViaBrevo({ ...options, senderName, isReply: true, originalSubject: options.subject }, coEmail, fromEmail);
 }
 
 /**
