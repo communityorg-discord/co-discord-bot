@@ -1,4 +1,5 @@
 import express from 'express';
+import multer from 'multer';
 import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, EmbedBuilder, Partials } from 'discord.js';
 import { config } from 'dotenv';
 import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID } from './config.js';
@@ -2851,6 +2852,12 @@ client.on('messageReactionAdd', async (reaction, user) => {
 const webhookApp = express();
 webhookApp.use(express.json());
 
+// Multer in memory — used by the /webhook/dm-with-attachment endpoint.
+const uploadDmAttachment = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 }, // Discord DM attachment hard-cap is 25MB for non-Nitro recipients
+});
+
 function verifyBotSecret(req, res) {
   const secret = req.headers['x-bot-secret'];
   if (!secret || !process.env.BOT_WEBHOOK_SECRET || secret !== process.env.BOT_WEBHOOK_SECRET) {
@@ -2859,6 +2866,81 @@ function verifyBotSecret(req, res) {
   }
   return true;
 }
+
+// POST /webhook/notify — generic text DM to a Discord user
+// Body: { discord_id, body, title? }. Header: x-bot-secret.
+webhookApp.post('/webhook/notify', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { discord_id, body, title } = req.body || {};
+  if (!discord_id || !body) return res.status(400).json({ ok: false, reason: 'missing_fields' });
+  try {
+    let user;
+    try { user = await client.users.fetch(String(discord_id)); }
+    catch (e) { return res.json({ ok: false, reason: 'user_fetch_failed', error: e.message }); }
+    try {
+      if (title) {
+        await user.send({
+          embeds: [{
+            color: 0xc9a84c,
+            title,
+            description: body,
+            footer: { text: 'Community Organisation · Staff Portal' },
+            timestamp: new Date().toISOString(),
+          }],
+        });
+      } else {
+        await user.send({ content: body });
+      }
+      res.json({ ok: true });
+    } catch (e) {
+      res.json({ ok: false, reason: e.code === 50007 ? 'dm_blocked' : 'send_failed', error: e.message });
+    }
+  } catch (e) {
+    console.error('[webhook/notify] fatal:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// POST /webhook/dm-with-attachment — DM a user with a file attached
+// Multipart form: { discord_id, body, file, title? }. Header: x-bot-secret.
+webhookApp.post('/webhook/dm-with-attachment', uploadDmAttachment.single('file'), async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const discord_id = req.body?.discord_id;
+  const body = req.body?.body;
+  const title = req.body?.title;
+  const file = req.file;
+  if (!discord_id || !body || !file) {
+    return res.status(400).json({ ok: false, reason: 'missing_fields' });
+  }
+  try {
+    let user;
+    try { user = await client.users.fetch(String(discord_id)); }
+    catch (e) { return res.json({ ok: false, reason: 'user_fetch_failed', error: e.message }); }
+    const attachment = { attachment: file.buffer, name: file.originalname || 'attachment' };
+    try {
+      if (title) {
+        await user.send({
+          embeds: [{
+            color: 0xc9a84c,
+            title,
+            description: body,
+            footer: { text: 'Community Organisation · Staff Portal' },
+            timestamp: new Date().toISOString(),
+          }],
+          files: [attachment],
+        });
+      } else {
+        await user.send({ content: body, files: [attachment] });
+      }
+      res.json({ ok: true });
+    } catch (e) {
+      res.json({ ok: false, reason: e.code === 50007 ? 'dm_blocked' : 'send_failed', error: e.message });
+    }
+  } catch (e) {
+    console.error('[webhook/dm-with-attachment] fatal:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
 
 // POST /bot/suspend
 webhookApp.post('/bot/suspend', async (req, res) => {
