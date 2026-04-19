@@ -2901,6 +2901,73 @@ webhookApp.post('/webhook/notify', async (req, res) => {
   }
 });
 
+// POST /webhook/welcome-new-staff — announce a new joiner and assign
+// their position roles. Fired when their onboarding hits 5/5.
+// Body: { discord_id, display_name, position?, department? }. Header: x-bot-secret.
+// Uses env WELCOME_CHANNEL_ID for the announcement channel and the
+// POSITIONS map (src/utils/positions.js) for role resolution.
+webhookApp.post('/webhook/welcome-new-staff', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { discord_id, display_name, position, department } = req.body || {};
+  if (!discord_id || !display_name) {
+    return res.status(400).json({ ok: false, reason: 'missing_fields' });
+  }
+  const { POSITIONS } = await import('./utils/positions.js');
+  let rolesAdded = 0;
+  let channelPosted = false;
+  try {
+    // Channel announcement
+    const welcomeChannelId = process.env.WELCOME_CHANNEL_ID || null;
+    if (welcomeChannelId) {
+      try {
+        const ch = await client.channels.fetch(welcomeChannelId);
+        if (ch && ch.isTextBased()) {
+          const fields = [];
+          if (position) fields.push({ name: 'Role', value: position, inline: true });
+          if (department) fields.push({ name: 'Department', value: department, inline: true });
+          await ch.send({
+            content: `<@${discord_id}>`,
+            embeds: [{
+              color: 0xc9a84c,
+              title: `Please welcome ${display_name}`,
+              description: `${display_name} has completed their onboarding and is now a fully paid-up member of Community Organisation. Say hello!`,
+              fields,
+              footer: { text: 'Community Organisation · Staff Portal' },
+              timestamp: new Date().toISOString(),
+            }],
+          });
+          channelPosted = true;
+        }
+      } catch (e) { console.warn('[welcome] channel post failed:', e.message); }
+    }
+
+    // Role assignment across all guilds the bot is in
+    if (position) {
+      const positionRoles = POSITIONS[position] || [];
+      if (positionRoles.length > 0) {
+        for (const [, guild] of client.guilds.cache) {
+          let member;
+          try { member = await guild.members.fetch(String(discord_id)); }
+          catch { continue; }
+          if (!member) continue;
+          for (const roleName of positionRoles) {
+            const role = guild.roles.cache.find(r => r.name === roleName);
+            if (role && !member.roles.cache.has(role.id)) {
+              try { await member.roles.add(role, 'Onboarding completed'); rolesAdded++; }
+              catch (e) { console.warn(`[welcome] role add failed in ${guild.name} (${roleName}):`, e.message); }
+            }
+          }
+        }
+      }
+    }
+
+    res.json({ ok: true, roles_added: rolesAdded, channel_posted: channelPosted });
+  } catch (e) {
+    console.error('[welcome-new-staff] fatal:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // POST /webhook/dm-with-attachment — DM a user with a file attached
 // Multipart form: { discord_id, body, file, title? }. Header: x-bot-secret.
 webhookApp.post('/webhook/dm-with-attachment', uploadDmAttachment.single('file'), async (req, res) => {
