@@ -8,7 +8,7 @@
       "id": "audit_vault",
       "name": "Audit Vault",
       "emoji": "🔐",
-      "description": "Internal Audit and Compliance Inbox",
+      "description": "Standards and Compliance Sub-Committee Inbox",
       "smtp": {
         "host": "smtp-mail.outlook.com",
         "port": 587,

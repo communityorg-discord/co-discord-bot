@@ -3258,7 +3258,7 @@ webhookApp.post('/webhook', async (req, res) => {
               { name: 'User', value: `<@${rvId}> (${rvId})`, inline: false },
               { name: 'New Position', value: rvPos, inline: false },
               { name: 'Nickname', value: rvNick || '(pending approver input)', inline: false },
-              { name: 'Reason', value: 'IAC Force Transfer — requires re-verification with new position roles', inline: false },
+              { name: 'Reason', value: 'SCSC Force Transfer — requires re-verification with new position roles', inline: false },
             )
             .setTimestamp();
 
@@ -3317,7 +3317,17 @@ webhookApp.post('/webhook/appeal-verify', async (req, res) => {
     }
     try {
       await user.send({
-        content: `**Appeal Verification Code:** \`${code}\`\n\nEnter this code on the appeal form to continue. It expires in 10 minutes.\n\nIf you did not request this, ignore this message.`,
+        embeds: [{
+          color: 0x6366f1, // indigo-500
+          title: 'Appeal Portal — Verification',
+          description: 'Use this one-time code to continue your appeal submission. If you didn\'t request this, ignore this DM.',
+          fields: [
+            { name: 'Your code', value: '```\n' + code + '\n```', inline: false },
+            { name: 'Expires in', value: '10 minutes', inline: true },
+          ],
+          footer: { text: 'Community Organisation · Appeal Portal' },
+          timestamp: new Date().toISOString(),
+        }],
       });
     } catch (e) {
       console.warn('[appeal-verify] DM blocked:', e.message);
@@ -3373,9 +3383,6 @@ webhookApp.post('/webhook/gdpr-deliver', async (req, res) => {
 });
 
 // POST /webhook/gdpr-iac-notify — Phase G8 processor awareness pings
-// Body: { processor_discord_id, request_number, event, detail? }
-// Events: 'subject_verified' | 'zip_downloaded'
-// Non-urgent, low-colour embed. Silent on DM failure — caller never waits.
 const GDPR_IAC_EVENTS = {
   subject_verified: {
     title: 'GDPR bundle accessed',
@@ -3404,7 +3411,7 @@ webhookApp.post('/webhook/gdpr-iac-notify', async (req, res) => {
     try {
       await user.send({
         embeds: [{
-          color: 0x64748b, // slate — non-urgent
+          color: 0x64748b,
           title: meta.title,
           description: meta.description(request_number),
           fields: [
@@ -3416,13 +3423,50 @@ webhookApp.post('/webhook/gdpr-iac-notify', async (req, res) => {
         }],
       });
     } catch (e) {
-      // Processor's DMs might be closed — log but don't escalate
       console.warn('[gdpr-iac-notify] DM failed:', e.message);
       return res.json({ ok: false, reason: 'dm_blocked' });
     }
     res.json({ ok: true });
   } catch (e) {
     console.error('[gdpr-iac-notify] fatal:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// POST /webhook/testing-verify — internal /testing bug-report flow
+// Body: { discord_id, code }. Header: x-bot-secret.
+webhookApp.post('/webhook/testing-verify', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { discord_id, code } = req.body || {};
+  if (!discord_id || !code) return res.status(400).json({ ok: false, error: 'discord_id and code required' });
+  try {
+    let user;
+    try { user = await client.users.fetch(String(discord_id)); }
+    catch (e) {
+      console.error('[testing-verify] user fetch failed:', e.message);
+      return res.status(502).json({ ok: false, reason: 'user_fetch_failed' });
+    }
+    try {
+      await user.send({
+        embeds: [{
+          color: 0xe11d48, // rose-600
+          title: 'Testing Portal — Verification',
+          description: 'Use this one-time code to unlock the bug-report form. If you didn\'t request this, ignore this DM.',
+          fields: [
+            { name: 'Your code', value: '```\n' + code + '\n```', inline: false },
+            { name: 'Expires in', value: '10 minutes', inline: true },
+          ],
+          footer: { text: 'Community Organisation · Testing Portal' },
+          timestamp: new Date().toISOString(),
+        }],
+      });
+    } catch (e) {
+      console.warn('[testing-verify] DM blocked:', e.message);
+      return res.json({ ok: false, reason: 'dm_blocked' });
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[testing-verify] fatal:', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });

@@ -17,7 +17,7 @@
  *     cta:        { label: 'Open portal', url: 'https://...', variant: 'primary' },
  *     metaTable:  [['Ref', 'CASE-1'], ['Deadline', '12 May 2026']],
  *     footerNote: 'Automated message — please do not reply directly.',
- *     signature:  { name: 'Dion M.', role: 'Data Protection Lead', team: 'Internal Advisory Council' },
+ *     signature:  { name: 'Dion M.', role: 'Data Protection Lead', team: 'Standards and Compliance Sub-Committee' },
  *   });
  *   await sendMail({ to, subject, html, text });
  *

@@ -155,7 +155,7 @@ async function generateMemoPdfFallback(data) {
     return new Promise((resolve) => {
       doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), filename: `${data.memo_number}.pdf` }));
 
-      doc.fontSize(18).font('Helvetica-Bold').text(`IAC Memo — ${data.memo_number}`, { align: 'center' });
+      doc.fontSize(18).font('Helvetica-Bold').text(`SCSC Memo — ${data.memo_number}`, { align: 'center' });
       doc.moveDown(0.5);
       const dateStr = new Date(data.created_at).toLocaleDateString('en-GB');
       doc.fontSize(11).font('Helvetica').text(`${dateStr} — ${data.title}`);
@@ -169,7 +169,7 @@ async function generateMemoPdfFallback(data) {
       doc.font('Helvetica').fontSize(10).text(`Issued by: ${data.issued_by}`);
       doc.text(`Urgency: ${data.urgency || 'Medium'}`);
       doc.moveDown(1);
-      doc.fontSize(8).fillColor('#666').text('Internal Audit and Compliance Team | Community Organisation', { align: 'center' });
+      doc.fontSize(8).fillColor('#666').text('Standards and Compliance Sub-Committee | Community Organisation', { align: 'center' });
       doc.end();
     });
   } catch (e) {
@@ -245,7 +245,7 @@ export async function postDirectiveEmbed(client, data) {
       { name: 'Issued By', value: `${data.issued_by_sg} (SG) & ${data.issued_by_dsg} (DSG)`, inline: true },
       { name: 'Issued At', value: `<t:${Math.floor(new Date(data.issued_at).getTime() / 1000)}:F>`, inline: true },
       { name: 'Status', value: '🟢 **ACTIVE**', inline: true },
-      { name: 'Dispute Window', value: 'IAC have 2 hours to dispute from time of issue', inline: false },
+      { name: 'Dispute Window', value: 'SCSC have 2 hours to dispute from time of issue', inline: false },
     )
     .setFooter({ text: `Directive ${data.directive_number} | Immediately binding on all staff` })
     .setTimestamp(new Date(data.issued_at));
@@ -319,15 +319,15 @@ export async function postMemoEmbed(client, data) {
 
   const embed = new EmbedBuilder()
     .setColor(URGENCY_COLORS[data.urgency] || URGENCY_COLORS.Medium)
-    .setTitle(`📄 IAC Memo — ${data.memo_number}`)
+    .setTitle(`📄 SCSC Memo — ${data.memo_number}`)
     .setDescription(`**${data.title}**`)
     .addFields(
       { name: 'Details', value: (data.description || 'No details provided').slice(0, 1000), inline: false },
       { name: 'Urgency', value: data.urgency || 'Medium', inline: true },
-      { name: 'Issued By', value: data.issued_by || 'IAC', inline: true },
+      { name: 'Issued By', value: data.issued_by || 'SCSC', inline: true },
       { name: 'Status', value: '🟢 **ACTIVE**', inline: true },
     )
-    .setFooter({ text: `Memo ${data.memo_number} | Internal Audit and Compliance Team` })
+    .setFooter({ text: `Memo ${data.memo_number} | Standards and Compliance Sub-Committee` })
     .setTimestamp(new Date(data.created_at));
 
   if (data.action_required) embed.addFields({ name: '⚠️ Action Required', value: data.action_required, inline: false });
@@ -349,10 +349,10 @@ export async function postMemoEmbed(client, data) {
       await user.send({
         embeds: [new EmbedBuilder()
           .setColor(URGENCY_COLORS[data.urgency] || URGENCY_COLORS.Medium)
-          .setTitle(`📄 IAC Memo Issued — ${data.memo_number}`)
-          .setDescription(`An IAC Memo has been issued that affects you directly.\n\n**${data.title}**\n\n${(data.description || '').slice(0, 500)}`)
+          .setTitle(`📄 SCSC Memo Issued — ${data.memo_number}`)
+          .setDescription(`A SCSC Memo has been issued that affects you directly.\n\n**${data.title}**\n\n${(data.description || '').slice(0, 500)}`)
           .addFields(data.action_required ? [{ name: '⚠️ Action Required', value: data.action_required }] : [])
-          .setFooter({ text: 'Internal Audit and Compliance Team' })
+          .setFooter({ text: 'Standards and Compliance Sub-Committee' })
           .setTimestamp()
         ],
         files: pdf ? [new AttachmentBuilder(pdf.buffer, { name: pdf.filename })] : []
