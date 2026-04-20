@@ -41,10 +41,31 @@ export function getStaffByName(query) {
 export function getRecentCases(userId) {
   return db.prepare(`
     SELECT case_number, case_type, status, stage, subject, created_at
-    FROM cases 
+    FROM cases
     WHERE raised_by = ? OR assigned_to = ?
     ORDER BY created_at DESC LIMIT 5
   `).all(userId, userId);
+}
+
+// ─── Help Desk ────────────────────────────────────────────────
+
+export function getHelpdeskTicketByRef(ref) {
+  return db.prepare(`
+    SELECT t.*, u.username AS submitter_username,
+           COALESCE(u.display_name, u.full_name) AS submitter_name
+    FROM helpdesk_tickets t
+    LEFT JOIN users u ON u.id = t.user_id
+    WHERE t.ticket_ref = ? COLLATE NOCASE
+  `).get(ref);
+}
+
+export function getRecentHelpdeskTickets(userId, { limit = 5 } = {}) {
+  return db.prepare(`
+    SELECT ticket_ref, type, title, status, priority, created_at, escalated, sla_breached
+    FROM helpdesk_tickets
+    WHERE user_id = ? OR assigned_to = ?
+    ORDER BY created_at DESC LIMIT ?
+  `).all(userId, userId, limit);
 }
 
 // Map team names to abbreviations used in position titles like "Under Secretary-General (IC)"

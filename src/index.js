@@ -10,6 +10,7 @@ import * as brag from './commands/brag.js';
 import * as leave from './commands/leave.js';
 import * as staff from './commands/staff.js';
 import * as cases from './commands/cases.js';
+import * as helpdeskCmd from './commands/helpdesk.js';
 import * as nid from './commands/nid.js';
 import * as suspend from './commands/suspend.js';
 import * as unsuspend from './commands/unsuspend.js';
@@ -97,7 +98,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
