@@ -2901,6 +2901,37 @@ webhookApp.post('/webhook/notify', async (req, res) => {
   }
 });
 
+// GET /webhook/check-guild-member?discord_id=…&guild_id=…
+// Returns whether the user is a member of the given guild. Used by the
+// portal's Add New Staff wizard to verify the Discord ID belongs to the
+// CO | Communications server (1358129722931937280) before creating the
+// staff record.
+webhookApp.get('/webhook/check-guild-member', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const discord_id = String(req.query.discord_id || '').trim();
+  const guild_id = String(req.query.guild_id || '1358129722931937280').trim();
+  if (!discord_id || !/^[0-9]{17,20}$/.test(discord_id)) {
+    return res.status(400).json({ ok: false, reason: 'bad_discord_id' });
+  }
+  try {
+    const guild = client.guilds.cache.get(guild_id) || await client.guilds.fetch(guild_id).catch(() => null);
+    if (!guild) return res.json({ ok: false, reason: 'guild_not_found', in_guild: false });
+    const member = await guild.members.fetch(discord_id).catch(() => null);
+    if (!member) return res.json({ ok: true, in_guild: false, guild_name: guild.name });
+    res.json({
+      ok: true,
+      in_guild: true,
+      guild_name: guild.name,
+      username: member.user?.username || null,
+      global_name: member.user?.globalName || null,
+      display_name: member.displayName || null,
+    });
+  } catch (e) {
+    console.error('[check-guild-member] fatal:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // POST /webhook/welcome-new-staff — announce a new joiner and assign
 // their position roles. Fired when their onboarding hits 5/5.
 // Body: { discord_id, display_name, position?, department? }. Header: x-bot-secret.
