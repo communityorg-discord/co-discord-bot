@@ -3386,18 +3386,26 @@ webhookApp.post('/bot/disciplinary', async (req, res) => {
         break;
       }
       case 'reinstate': {
+        // Iterate client.guilds.cache (every guild the bot is in)
+        // rather than ALL_SERVER_IDS, which depends on env vars and is
+        // empty here. Also add Verified + CO Staff alongside the
+        // position-derived role list so a reinstated user ends up with
+        // their full baseline role set.
         if (newPosition && POSITIONS[newPosition]) {
-          for (const gid of ALL_SERVER_IDS) {
+          const roleNames = [...POSITIONS[newPosition], 'Verified', 'CO Staff'];
+          for (const [, guild] of client.guilds.cache) {
             try {
-              const guild = await client.guilds.fetch(gid).catch(() => null);
-              if (!guild) continue;
               const member = await guild.members.fetch(discordId).catch(() => null);
               if (!member) continue;
-              for (const roleName of POSITIONS[newPosition]) {
+              let added = 0;
+              for (const roleName of roleNames) {
                 const role = guild.roles.cache.find(r => r.name === roleName);
-                if (role && !member.roles.cache.has(role.id)) await member.roles.add(role).catch(() => {});
+                if (role && !member.roles.cache.has(role.id)) {
+                  await member.roles.add(role, `Reinstate — ${caseRef || 'portal'}`).catch(() => {});
+                  added++;
+                }
               }
-              results.servers.push(guild.name);
+              results.servers.push(`${guild.name} (+${added})`);
             } catch (e) { results.errors.push(e.message); }
           }
         }
