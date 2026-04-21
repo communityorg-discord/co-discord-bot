@@ -63,6 +63,28 @@ const GLOBAL_CHANNEL_MAP = {
  * @param {string} [opts.logType] - Log type key e.g. 'moderation.ban_unban' — used for per-guild AND global category lookup
  * @param {string} [opts.guildId] - Guild ID for per-guild config lookup
  */
+// Render a { discordId, name } pair as a Discord mention only when the
+// id is a real snowflake. Non-numeric ids like 'PORTAL' / 'SYSTEM' /
+// 'MULTIPLE' were being emitted as literal "<@PORTAL>" which Discord
+// can't resolve and displays as raw text. Also avoids the "<@id> (id)"
+// double-print when the name fell back to the id itself.
+function formatActor(actor, fallback = 'System') {
+  if (!actor) return 'N/A';
+  if (typeof actor === 'string') return actor;
+  const id = actor.discordId ?? actor;
+  const name = actor.name || '';
+  const isSnowflake = typeof id === 'string' && /^\d{15,20}$/.test(id);
+  if (isSnowflake) {
+    return name && name !== id ? `<@${id}> (${name})` : `<@${id}>`;
+  }
+  // Pseudo-ids like 'PORTAL', 'SYSTEM', 'MULTIPLE', 'AUTOMATED'
+  if (id && typeof id === 'string') {
+    const label = id.charAt(0).toUpperCase() + id.slice(1).toLowerCase();
+    return name || label;
+  }
+  return name || fallback;
+}
+
 export async function logAction(client, {
   action, moderator, target, reason,
   color = 0x5865F2, fields = [],
@@ -73,8 +95,8 @@ export async function logAction(client, {
     .setTitle(`📋 ${action}`)
     .setColor(color)
     .addFields(
-      { name: 'Target', value: (target && target !== null) ? (target.discordId === 'MULTIPLE' ? target.name : `<@${target.discordId || target}> ${target.name ? `(${target.name})` : ''}`) : 'N/A', inline: true },
-      { name: 'Moderator', value: (moderator && moderator !== null) ? `<@${moderator.discordId || moderator}> ${moderator.name ? `(${moderator.name})` : ''}` : 'N/A', inline: true },
+      { name: 'Target', value: formatActor(target), inline: true },
+      { name: 'Moderator', value: formatActor(moderator), inline: true },
       { name: 'Reason', value: reason || 'No reason provided', inline: false },
       ...fields
     )
@@ -146,8 +168,8 @@ export async function logRoleAction(client, {
     .setTitle(`🎭 ${action}`)
     .setColor(color)
     .addFields(
-      ...(target ? [{ name: 'Target', value: typeof target === 'string' ? target : `<@${target.discordId || target}>`, inline: true }] : []),
-      ...(moderator ? [{ name: 'Moderator', value: `<@${moderator.discordId || moderator}>`, inline: true }] : []),
+      ...(target ? [{ name: 'Target', value: formatActor(target), inline: true }] : []),
+      ...(moderator ? [{ name: 'Moderator', value: formatActor(moderator), inline: true }] : []),
       ...fields
     )
     .setTimestamp()
