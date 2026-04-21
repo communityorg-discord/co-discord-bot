@@ -3086,7 +3086,7 @@ webhookApp.post('/webhook/dm-with-attachment', uploadDmAttachment.single('file')
 // background so the portal PUT doesn't proxy-timeout at 60s.
 webhookApp.post('/bot/suspend', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
-  const { discordId, reason, duration, moderatorId, moderatorName, targetName } = req.body;
+  const { discordId, reason, duration, moderatorId, moderatorName, targetName, source } = req.body;
   if (!discordId) return res.status(400).json({ ok: false, error: 'discordId required' });
 
   // Ack the caller; everything below runs in the background.
@@ -3153,7 +3153,7 @@ webhookApp.post('/bot/suspend', async (req, res) => {
         { name: '⏱️ Duration', value: durationDisplay, inline: true },
         { name: '📅 Expires', value: expiresDisplay, inline: true },
         { name: '👤 Actioned By', value: moderatorName || 'Portal', inline: true },
-        { name: '🌐 Source', value: 'CO Staff Portal — Case Management', inline: true },
+        { name: '🌐 Source', value: source ? `CO Staff Portal — ${source}` : 'CO Staff Portal', inline: true },
       ]
     });
 
@@ -3197,7 +3197,7 @@ webhookApp.post('/bot/suspend', async (req, res) => {
 // takes 15-30s and was causing the portal's reverse proxy to return 502.
 webhookApp.post('/bot/unsuspend', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
-  const { discordId, moderatorName, targetName } = req.body;
+  const { discordId, moderatorName, targetName, source } = req.body;
   if (!discordId) return res.status(400).json({ ok: false, error: 'discordId required' });
 
   // Acknowledge the caller straight away so the portal PUT can return.
@@ -3231,7 +3231,7 @@ webhookApp.post('/bot/unsuspend', async (req, res) => {
         target: { discordId, name: targetName || discordId },
         reason: 'Lifted via CO Staff Portal',
         color: 0x22C55E,
-        fields: [{ name: '🌐 Source', value: 'CO Staff Portal — Case Management', inline: true }]
+        fields: [{ name: '🌐 Source', value: source ? `CO Staff Portal — ${source}` : 'CO Staff Portal', inline: true }]
       });
     } catch (e) {
       console.error('[BOT WEBHOOK /unsuspend async]', e.message, e.stack);
