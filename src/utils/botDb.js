@@ -216,10 +216,12 @@ for (const col of [
   `message_id TEXT`,
   `verified_official INTEGER DEFAULT 0`,
   `is_probation INTEGER DEFAULT 0`,
-  `approved_by TEXT`,
-  `approved_at DATETIME`,
-  `denied_reason TEXT`,
-  `denied_at DATETIME`,
+  // Review columns actually used by verify.js modal handlers:
+  //   status='approved': SET reviewed_by, requested_nickname, updated_at
+  //   status='denied':   SET reviewed_by, deny_reason, updated_at
+  `reviewed_by TEXT`,
+  `updated_at DATETIME`,
+  `deny_reason TEXT`,
   `auth_level_override INTEGER`,
 ]) {
   try { db.exec(`ALTER TABLE verification_queue ADD COLUMN ${col}`); } catch (e) { /* exists */ }
