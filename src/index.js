@@ -1556,6 +1556,33 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply({ content: `❌ Bot commands can only be used in <#${COMMAND_CHANNEL_ID}>.`, ephemeral: true });
     }
 
+    // Maintenance gate — during an active bot-maintenance window, only superusers may run commands
+    try {
+      const portalDb = (await import('./db.js')).default;
+      const maint = portalDb.prepare(
+        `SELECT * FROM system_maintenance
+         WHERE service = 'bot' AND status = 'scheduled'
+           AND datetime(starts_at) <= datetime('now')
+           AND datetime(ends_at)   >  datetime('now')
+         ORDER BY starts_at DESC LIMIT 1`
+      ).get();
+      if (maint && !COMMAND_SUPERUSERS.includes(interaction.user.id)) {
+        const embed = new EmbedBuilder()
+          .setTitle('🛠️ Bot Maintenance In Progress')
+          .setColor(0xC9A84C)
+          .setDescription(maint.description || 'The CO Discord Bot is undergoing scheduled maintenance. Commands are restricted to superusers until the window closes.')
+          .addFields(
+            { name: 'Window', value: `<t:${Math.floor(new Date(maint.starts_at + 'Z').getTime()/1000)}:f> → <t:${Math.floor(new Date(maint.ends_at + 'Z').getTime()/1000)}:f>`, inline: false },
+            { name: 'Status', value: 'See portal.communityorg.co.uk/status', inline: false },
+          )
+          .setFooter({ text: 'Community Organisation | CO Discord Bot' })
+          .setTimestamp();
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+      }
+    } catch (e) {
+      // If the maintenance table doesn't exist yet (portal not yet migrated), proceed as normal
+    }
+
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
 
