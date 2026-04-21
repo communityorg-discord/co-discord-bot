@@ -10,6 +10,8 @@ import * as brag from './commands/brag.js';
 import * as leave from './commands/leave.js';
 import * as staff from './commands/staff.js';
 import * as cases from './commands/cases.js';
+import * as caseLookup from './commands/case-lookup.js';
+import * as aps from './commands/aps.js';
 import * as helpdeskCmd from './commands/helpdesk.js';
 import * as nid from './commands/nid.js';
 import * as suspend from './commands/suspend.js';
@@ -98,7 +100,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -1761,6 +1763,43 @@ client.on('interactionCreate', async interaction => {
     }
 
     // Shop approval/decline button handlers
+    // Case acknowledgement button — DM'd to a party (subject / assignee /
+    // line manager / raiser). Clicks POST back to portal to log an ack.
+    if (interaction.customId.startsWith('case_ack_')) {
+      await interaction.deferUpdate();
+      const rest = interaction.customId.replace('case_ack_', '');
+      const firstUnderscore = rest.indexOf('_');
+      const caseId = firstUnderscore >= 0 ? rest.slice(0, firstUnderscore) : rest;
+      const ackRole = firstUnderscore >= 0 ? rest.slice(firstUnderscore + 1) : 'party';
+      try {
+        const r = await fetch(`http://localhost:3016/api/cases/${caseId}/bot/ack-callback`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET },
+          body: JSON.stringify({ discord_id: interaction.user.id, ack_role: ackRole }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || 'Failed');
+        // Disable the buttons on the original DM
+        try {
+          const disabled = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('case_acked').setLabel(`✅ Acknowledged`).setStyle(3).setDisabled(true),
+            new ButtonBuilder().setCustomId('case_view_noop').setLabel('Open case').setStyle(2).setDisabled(true),
+          );
+          await interaction.message.edit({ components: [disabled] });
+        } catch (e) {}
+        await interaction.followUp({ content: `✅ Acknowledgement recorded on **${data.case_number || 'the case'}**. Thanks.`, ephemeral: true });
+      } catch (e) {
+        await interaction.followUp({ content: `❌ Couldn't record acknowledgement: ${e.message}`, ephemeral: true });
+      }
+      return;
+    }
+    if (interaction.customId.startsWith('case_view_')) {
+      const caseId = interaction.customId.replace('case_view_', '');
+      const base = process.env.PORTAL_URL || 'https://portal.communityorg.co.uk';
+      await interaction.reply({ content: `Open case → ${base}/management/cases/${caseId}`, ephemeral: true });
+      return;
+    }
+
     if (interaction.customId.startsWith('shop_approve_') || interaction.customId.startsWith('shop_decline_')) {
       const isApprove = interaction.customId.startsWith('shop_approve_');
       const redemptionId = interaction.customId.replace(/^shop_(approve|decline)_/, '');
@@ -3780,6 +3819,30 @@ webhookApp.post('/api/shop-approval-dm', async (req, res) => {
     res.json({ ok: true, message_id: msg.id });
   } catch (e) {
     console.error('[Shop DM]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// POST /api/case-ack-dm — send a case DM with an "Acknowledge" button.
+// When the recipient clicks the button, the handler POSTs back to the
+// portal's /api/cases/:id/bot/ack-callback so the case timeline gets a
+// real acknowledgement entry.
+webhookApp.post('/api/case-ack-dm', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { discord_id, case_id, case_number, embed, ack_role } = req.body;
+  if (!discord_id || !case_id) return res.status(400).json({ error: 'discord_id and case_id required' });
+  try {
+    const user = await client.users.fetch(String(discord_id));
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`case_ack_${case_id}_${ack_role || 'party'}`).setLabel('Acknowledge').setStyle(3),
+      new ButtonBuilder().setCustomId(`case_view_${case_id}`).setLabel('Open case').setStyle(2),
+    );
+    const payload = { components: [row] };
+    if (embed) payload.embeds = [typeof embed === 'string' ? JSON.parse(embed) : embed];
+    const msg = await user.send(payload);
+    res.json({ ok: true, message_id: msg.id });
+  } catch (e) {
+    console.error('[case-ack-dm]', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
