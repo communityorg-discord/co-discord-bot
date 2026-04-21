@@ -2895,6 +2895,17 @@ function verifyBotSecret(req, res) {
   return true;
 }
 
+// GET /api/health — lightweight readiness probe (no auth) for status page
+webhookApp.get('/api/health', (_req, res) => {
+  const ready = !!(client && client.isReady && client.isReady());
+  res.status(ready ? 200 : 503).json({
+    ok: ready,
+    uptime: process.uptime(),
+    guilds: client?.guilds?.cache?.size ?? 0,
+    ping: client?.ws?.ping ?? null,
+  });
+});
+
 // POST /webhook/notify — generic text DM to a Discord user
 // Body: { discord_id, body, title? }. Header: x-bot-secret.
 webhookApp.post('/webhook/notify', async (req, res) => {
