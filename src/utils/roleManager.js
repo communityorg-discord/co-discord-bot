@@ -118,6 +118,36 @@ async function getOrCreateRole(guild, roleName) {
   }
 }
 
+// Try to add/remove ONE role at a time so a single "Missing Permissions"
+// (role above the bot in hierarchy) doesn't fail the whole batch via
+// Discord's all-or-nothing bulk edit. Returns { ok: [...names], failed: [{name, reason}] }.
+async function addRolesIndividually(member, roles, reasonTag) {
+  const ok = [], failed = [];
+  for (const [, role] of roles) {
+    try {
+      if (member.roles.cache.has(role.id)) { ok.push(role.name); continue; }
+      await member.roles.add(role, reasonTag);
+      ok.push(role.name);
+    } catch (e) {
+      failed.push({ name: role.name, reason: e.message });
+    }
+  }
+  return { ok, failed };
+}
+async function removeRolesIndividually(member, roles, reasonTag) {
+  const ok = [], failed = [];
+  for (const [, role] of roles) {
+    try {
+      if (!member.roles.cache.has(role.id)) { ok.push(role.name); continue; }
+      await member.roles.remove(role, reasonTag);
+      ok.push(role.name);
+    } catch (e) {
+      failed.push({ name: role.name, reason: e.message });
+    }
+  }
+  return { ok, failed };
+}
+
 // Suspend: snapshot the member's current role set per guild, then strip
 // every removable role and add Suspended. The snapshot lets unsuspend
 // restore exactly what was taken away (including ad-hoc committee /
@@ -131,9 +161,7 @@ export async function suspendAcrossGuilds(client, discordId) {
       if (!member) continue;
 
       // Snapshot every role the member currently holds except @everyone
-      // and managed (bot-owned / integration) roles — Discord won't let
-      // us re-add managed roles, so excluding them now avoids noisy
-      // re-add failures on unsuspend.
+      // and managed (bot-owned / integration) roles.
       const currentRoles = member.roles.cache.filter(r => r.id !== guild.id && !r.managed);
       const snapshotIds = currentRoles.map(r => r.id);
       try {
@@ -142,16 +170,21 @@ export async function suspendAcrossGuilds(client, discordId) {
         console.warn('[Suspend] Snapshot error in', guild.name, e.message);
       }
 
-      // Strip every removable role in one call
-      if (currentRoles.size > 0) {
-        await member.roles.remove(currentRoles).catch(e => console.warn('[Suspend] Remove error in', guild.name, e.message));
+      // Remove one-at-a-time so one permission-denied role doesn't block
+      // the rest. Discord's bulk edit is all-or-nothing.
+      const removed = await removeRolesIndividually(member, currentRoles, 'Suspension');
+      if (removed.failed.length) {
+        console.warn('[Suspend]', guild.name, 'could NOT remove:', removed.failed.map(f => f.name).join(', '));
       }
 
       // Add Suspended role (create if missing)
       const suspendedRole = await getOrCreateRole(guild, 'Suspended');
-      if (suspendedRole) await member.roles.add(suspendedRole).catch(e => console.warn('[Suspend] Add error in', guild.name, e.message));
+      if (suspendedRole) {
+        try { await member.roles.add(suspendedRole, 'Suspension'); }
+        catch (e) { console.warn('[Suspend] Could not add Suspended role in', guild.name, e.message); }
+      }
 
-      console.log('[Suspend] Applied in', guild.name, '— snapshotted', snapshotIds.length, 'role(s)');
+      console.log(`[Suspend] ${guild.name} — snapshot ${snapshotIds.length}, removed ${removed.ok.length}/${currentRoles.size}, blocked ${removed.failed.length}`);
     } catch (e) {
       console.error('[Suspend] Error in', guild.name, e.message);
     }
@@ -159,9 +192,9 @@ export async function suspendAcrossGuilds(client, discordId) {
 }
 
 // Unsuspend: remove Suspended, then restore the exact role set captured
-// when we suspended. Falls back to the verified-position role list if no
-// snapshot exists (users suspended before this change, or whose snapshot
-// row was cleared manually).
+// when we suspended. Roles are restored individually so a single
+// above-hierarchy role doesn't block the whole batch. Falls back to the
+// verified-position role list if no snapshot exists.
 export async function unsuspendAcrossGuilds(client, discordId, botDb) {
   const { POSITIONS } = await import('./positions.js');
   const { getStoredRoles, deleteStoredRoles } = await import('./botDb.js');
@@ -173,32 +206,40 @@ export async function unsuspendAcrossGuilds(client, discordId, botDb) {
       const member = await guild.members.fetch(discordId).catch(() => null);
       if (!member) continue;
 
-      // Remove Suspended role first so the re-added roles take effect
+      // Remove Suspended role first
       const suspendedRole = guild.roles.cache.find(r => r.name === 'Suspended');
-      if (suspendedRole) await member.roles.remove(suspendedRole).catch(() => {});
+      if (suspendedRole && member.roles.cache.has(suspendedRole.id)) {
+        try { await member.roles.remove(suspendedRole, 'Reactivation'); }
+        catch (e) { console.warn('[Unsuspend] Could not remove Suspended in', guild.name, e.message); }
+      }
 
       const snapshot = getStoredRoles(discordId, guildId, 'suspension');
       if (snapshot) {
         let roleIds = [];
         try { roleIds = JSON.parse(snapshot.roles || '[]'); } catch {}
-        // Filter down to roles that still exist in the guild and
-        // aren't managed (managed roles can't be manually assigned).
         const toAdd = guild.roles.cache.filter(r => roleIds.includes(r.id) && !r.managed && r.id !== guild.id);
-        if (toAdd.size > 0) {
-          await member.roles.add(toAdd).catch(e => console.warn('[Unsuspend] Add error in', guild.name, e.message));
+        const added = await addRolesIndividually(member, toAdd, 'Reactivation — restore snapshot');
+
+        if (snapshot.nickname) {
+          try { await member.setNickname(snapshot.nickname, 'Reactivation'); } catch {}
         }
-        if (snapshot.nickname) await member.setNickname(snapshot.nickname).catch(() => {});
         try { deleteStoredRoles(snapshot.id); } catch {}
-        console.log('[Unsuspend] Restored', toAdd.size, 'of', roleIds.length, 'snapshotted role(s) in', guild.name);
+
+        const label = added.failed.length
+          ? `[Unsuspend] ${guild.name} — restored ${added.ok.length}/${roleIds.length}, BLOCKED ${added.failed.length}: ${added.failed.map(f => `${f.name} (${f.reason})`).join(' | ')}`
+          : `[Unsuspend] ${guild.name} — restored ${added.ok.length}/${roleIds.length} snapshotted role(s)`;
+        if (added.failed.length) console.warn(label); else console.log(label);
       } else if (verified) {
-        // Fallback — no snapshot, use position-derived roles
         const roleNames = [...(POSITIONS[verified.position] || []), 'Verified', 'CO Staff'];
         const toAdd = guild.roles.cache.filter(r => roleNames.includes(r.name));
-        if (toAdd.size > 0) await member.roles.add(toAdd).catch(e => console.warn('[Unsuspend] Add error in', guild.name, e.message));
-        await member.setNickname(verified.nickname || null).catch(() => {});
-        console.log('[Unsuspend] Fallback position-roles applied in', guild.name);
+        const added = await addRolesIndividually(member, toAdd, 'Reactivation — position fallback');
+        try { await member.setNickname(verified.nickname || null, 'Reactivation').catch(() => {}); } catch {}
+        const label = added.failed.length
+          ? `[Unsuspend] ${guild.name} (fallback) — added ${added.ok.length}, BLOCKED ${added.failed.length}: ${added.failed.map(f => f.name).join(', ')}`
+          : `[Unsuspend] ${guild.name} (fallback) — added ${added.ok.length} position role(s)`;
+        if (added.failed.length) console.warn(label); else console.log(label);
       } else {
-        console.log('[Unsuspend] No snapshot and no verified record for', discordId, 'in', guild.name);
+        console.warn('[Unsuspend] No snapshot and no verified record for', discordId, 'in', guild.name);
       }
     } catch (e) {
       console.error('[Unsuspend] Error in', guild.name, e.message);
