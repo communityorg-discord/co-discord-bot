@@ -137,10 +137,15 @@ db.exec(`
   );
 
 
-  CREATE TABLE IF NOT EXISTS log_config (id INTEGER PRIMARY KEY, guild_id TEXT, channel_id TEXT, event_type TEXT);
+  CREATE TABLE IF NOT EXISTS log_config (id INTEGER PRIMARY KEY, guild_id TEXT, category TEXT, type TEXT, channel_id TEXT, log_scope TEXT DEFAULT 'server', updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(guild_id, category, type));
   CREATE TABLE IF NOT EXISTS bot_config (id INTEGER PRIMARY KEY, key TEXT UNIQUE, value TEXT);
   CREATE TABLE IF NOT EXISTS verified_members (discord_id TEXT PRIMARY KEY, portal_user_id INTEGER, position TEXT NOT NULL, employee_number TEXT, nickname TEXT, auth_level INTEGER, verified_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
   CREATE TABLE IF NOT EXISTS verification_queue (id INTEGER PRIMARY KEY, discord_id TEXT, portal_id INTEGER, requested_at DATETIME DEFAULT CURRENT_TIMESTAMP, status TEXT DEFAULT 'pending');
+
+  -- verification_queue columns that drift away from the minimal schema —
+  -- mirror of what src/commands/verify.js actually INSERTs/UPDATEs. SQLite
+  -- ignores the ADD COLUMN inside a single exec() if it already exists?
+  -- No — it throws. We retry individually below.
   CREATE TABLE IF NOT EXISTS banned_users (id INTEGER PRIMARY KEY, discord_id TEXT, reason TEXT, banned_by TEXT, banned_at DATETIME DEFAULT CURRENT_TIMESTAMP, unban_at DATETIME, active INTEGER DEFAULT 1);
   CREATE TABLE IF NOT EXISTS guild_settings (id INTEGER PRIMARY KEY, guild_id TEXT UNIQUE, key TEXT, value TEXT);
 
@@ -196,6 +201,29 @@ db.exec(`
     reply_body TEXT,
     replied_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );`);
+
+// Bring the verification_queue schema up to what src/commands/verify.js
+// actually uses. Each ALTER wrapped individually because SQLite throws
+// if the column exists and this block is idempotent on boot.
+for (const col of [
+  `guild_id TEXT`,
+  `requested_nickname TEXT`,
+  `portal_user_id INTEGER`,
+  `position TEXT`,
+  `employee_number TEXT`,
+  `supervisor_name TEXT`,
+  `channel_id TEXT`,
+  `message_id TEXT`,
+  `verified_official INTEGER DEFAULT 0`,
+  `is_probation INTEGER DEFAULT 0`,
+  `approved_by TEXT`,
+  `approved_at DATETIME`,
+  `denied_reason TEXT`,
+  `denied_at DATETIME`,
+  `auth_level_override INTEGER`,
+]) {
+  try { db.exec(`ALTER TABLE verification_queue ADD COLUMN ${col}`); } catch (e) { /* exists */ }
+}
 
 db.exec(`CREATE TABLE IF NOT EXISTS assignments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
