@@ -3082,11 +3082,16 @@ webhookApp.post('/webhook/dm-with-attachment', uploadDmAttachment.single('file')
   }
 });
 
-// POST /bot/suspend
+// POST /bot/suspend — respond immediately, run role stripping in the
+// background so the portal PUT doesn't proxy-timeout at 60s.
 webhookApp.post('/bot/suspend', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
   const { discordId, reason, duration, moderatorId, moderatorName, targetName } = req.body;
   if (!discordId) return res.status(400).json({ ok: false, error: 'discordId required' });
+
+  // Ack the caller; everything below runs in the background.
+  res.json({ ok: true, async: true });
+
   try {
     const { suspendAcrossGuilds } = await import('./utils/roleManager.js');
     const { addInfraction, addSuspension } = await import('./utils/botDb.js');
@@ -3181,53 +3186,57 @@ webhookApp.post('/bot/suspend', async (req, res) => {
       }, durationMs);
     }
 
-    res.json({ ok: true, duration: durationDisplay, expires: expiresAt });
+    // (Response already sent at the top of the handler — see 'async: true' ack)
   } catch (e) {
-    console.error('[BOT WEBHOOK /suspend]', e.message);
-    res.status(500).json({ ok: false, error: e.message });
+    console.error('[BOT WEBHOOK /suspend async]', e.message, e.stack);
   }
 });
 
-// POST /bot/unsuspend
+// POST /bot/unsuspend — respond immediately, restore roles in the
+// background. Iterating 9 guilds × N roles via Discord's API typically
+// takes 15-30s and was causing the portal's reverse proxy to return 502.
 webhookApp.post('/bot/unsuspend', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
   const { discordId, moderatorName, targetName } = req.body;
   if (!discordId) return res.status(400).json({ ok: false, error: 'discordId required' });
-  try {
-    const { unsuspendAcrossGuilds } = await import('./utils/roleManager.js');
-    const { liftSuspension } = await import('./utils/botDb.js');
-    const botDbMod = await import('./utils/botDb.js');
-    await unsuspendAcrossGuilds(client, discordId, botDbMod.default);
-    liftSuspension(discordId);
 
+  // Acknowledge the caller straight away so the portal PUT can return.
+  res.json({ ok: true, async: true });
+
+  (async () => {
     try {
-      const { EmbedBuilder } = await import('discord.js');
-      const user = await client.users.fetch(discordId).catch(() => null);
-      if (user) await user.send({ embeds: [new EmbedBuilder()
-        .setTitle('✅ Suspension Lifted')
-        .setColor(0x22C55E)
-        .setDescription('Your suspension from **Community Organisation** has ended and your roles have been restored.')
-        .addFields({ name: '👤 Actioned By', value: moderatorName || 'Staff Management', inline: true })
-        .setFooter({ text: 'Community Organisation | Staff Assistant' })
-        .setTimestamp()
-      ]});
-    } catch {}
+      const { unsuspendAcrossGuilds } = await import('./utils/roleManager.js');
+      const { liftSuspension } = await import('./utils/botDb.js');
+      const botDbMod = await import('./utils/botDb.js');
+      await unsuspendAcrossGuilds(client, discordId, botDbMod.default);
+      liftSuspension(discordId);
 
-    const { logAction } = await import('./utils/logger.js');
-    await logAction(client, {
-      action: '✅ Suspension Lifted (Portal)',
-      moderator: { discordId: 'PORTAL', name: moderatorName || 'Portal' },
-      target: { discordId, name: targetName || discordId },
-      reason: 'Lifted via CO Staff Portal',
-      color: 0x22C55E,
-      fields: [{ name: '🌐 Source', value: 'CO Staff Portal — Case Management', inline: true }]
-    });
+      try {
+        const { EmbedBuilder } = await import('discord.js');
+        const user = await client.users.fetch(discordId).catch(() => null);
+        if (user) await user.send({ embeds: [new EmbedBuilder()
+          .setTitle('✅ Suspension Lifted')
+          .setColor(0x22C55E)
+          .setDescription('Your suspension from **Community Organisation** has ended and your roles have been restored.')
+          .addFields({ name: '👤 Actioned By', value: moderatorName || 'Staff Management', inline: true })
+          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setTimestamp()
+        ]});
+      } catch {}
 
-    res.json({ ok: true });
-  } catch (e) {
-    console.error('[BOT WEBHOOK /unsuspend]', e.message);
-    res.status(500).json({ ok: false, error: e.message });
-  }
+      const { logAction } = await import('./utils/logger.js');
+      await logAction(client, {
+        action: '✅ Suspension Lifted (Portal)',
+        moderator: { discordId: 'PORTAL', name: moderatorName || 'Portal' },
+        target: { discordId, name: targetName || discordId },
+        reason: 'Lifted via CO Staff Portal',
+        color: 0x22C55E,
+        fields: [{ name: '🌐 Source', value: 'CO Staff Portal — Case Management', inline: true }]
+      });
+    } catch (e) {
+      console.error('[BOT WEBHOOK /unsuspend async]', e.message, e.stack);
+    }
+  })();
 });
 
 // POST /bot/assignment-extension — handle deadline extension from portal
