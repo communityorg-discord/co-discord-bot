@@ -2940,7 +2940,7 @@ webhookApp.get('/webhook/check-guild-member', async (req, res) => {
 // POSITIONS map (src/utils/positions.js) for role resolution.
 webhookApp.post('/webhook/welcome-new-staff', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
-  const { discord_id, display_name, position, department } = req.body || {};
+  const { discord_id, display_name, position, department, add_roles } = req.body || {};
   if (!discord_id || !display_name) {
     return res.status(400).json({ ok: false, reason: 'missing_fields' });
   }
@@ -2950,6 +2950,7 @@ webhookApp.post('/webhook/welcome-new-staff', async (req, res) => {
   try {
     // Channel announcement
     const welcomeChannelId = process.env.WELCOME_CHANNEL_ID || null;
+    if (!welcomeChannelId) console.warn('[welcome] WELCOME_CHANNEL_ID not set — skipping channel post');
     if (welcomeChannelId) {
       try {
         const ch = await client.channels.fetch(welcomeChannelId);
@@ -2973,8 +2974,10 @@ webhookApp.post('/webhook/welcome-new-staff', async (req, res) => {
       } catch (e) { console.warn('[welcome] channel post failed:', e.message); }
     }
 
-    // Role assignment across all guilds the bot is in
-    if (position) {
+    // Role assignment is OPT-IN — callers must pass { add_roles: true }.
+    // The default onboarding flow leaves roles to be added when the user
+    // verifies with the bot, not automatically on staff creation.
+    if (add_roles === true && position) {
       const positionRoles = POSITIONS[position] || [];
       if (positionRoles.length > 0) {
         for (const [, guild] of client.guilds.cache) {
