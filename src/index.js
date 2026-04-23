@@ -3946,6 +3946,90 @@ webhookApp.get('/api/brag/breakdown/:discordId', async (req, res) => {
   }
 });
 
+// ─── Generic role management ────────────────────────────────────
+// Lets the portal manage role membership on the staff guild without
+// duplicating Discord-API logic on both sides. Default guild is
+// Staff HQ (1357119461957570570); callers can override for other
+// guilds the bot sits in. Role is matched by name (case-insensitive)
+// and optionally created if missing — saves the caller having to
+// maintain a name→id map.
+const STAFF_HQ_GUILD = '1357119461957570570';
+
+function pickRoleColour(roleName) {
+  // Tiny lookup so the handful of known portal-managed roles get
+  // consistent branding. Unknown names fall through to Discord's
+  // default (no colour) so we don't lock in opinions on roles the
+  // portal doesn't own.
+  const n = String(roleName || '').toLowerCase();
+  if (n.includes('welfare')) return 0xF472B6;   // pink — matches the portal badge
+  if (n.includes('iac'))     return 0xC9A84C;   // gold
+  return 0;
+}
+
+webhookApp.post('/api/role/assign', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { discord_id, role_name, guild_id, create_if_missing = true, reason } = req.body || {};
+  if (!discord_id) return res.status(400).json({ ok: false, error: 'discord_id required' });
+  if (!role_name)  return res.status(400).json({ ok: false, error: 'role_name required' });
+  const gid = String(guild_id || STAFF_HQ_GUILD);
+  try {
+    const guild = client.guilds.cache.get(gid) || await client.guilds.fetch(gid).catch(() => null);
+    if (!guild) return res.status(404).json({ ok: false, error: 'guild not found or bot not a member' });
+
+    let role = guild.roles.cache.find(r => r.name.toLowerCase() === String(role_name).toLowerCase());
+    let created = false;
+    if (!role) {
+      if (!create_if_missing) return res.status(404).json({ ok: false, error: 'role not found' });
+      role = await guild.roles.create({
+        name: role_name,
+        color: pickRoleColour(role_name),
+        mentionable: false,
+        reason: reason || 'Portal: auto-create role on first assignment',
+      });
+      created = true;
+    }
+
+    const member = await guild.members.fetch(String(discord_id)).catch(() => null);
+    if (!member) return res.status(404).json({ ok: false, error: 'member not in guild' });
+
+    if (!member.roles.cache.has(role.id)) {
+      await member.roles.add(role, reason || 'Portal: role assignment');
+    }
+
+    res.json({ ok: true, role_id: role.id, role_name: role.name, guild_id: gid, created });
+  } catch (e) {
+    console.error('[Role API] assign error:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+webhookApp.post('/api/role/unassign', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { discord_id, role_name, guild_id, reason } = req.body || {};
+  if (!discord_id) return res.status(400).json({ ok: false, error: 'discord_id required' });
+  if (!role_name)  return res.status(400).json({ ok: false, error: 'role_name required' });
+  const gid = String(guild_id || STAFF_HQ_GUILD);
+  try {
+    const guild = client.guilds.cache.get(gid) || await client.guilds.fetch(gid).catch(() => null);
+    if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
+
+    const role = guild.roles.cache.find(r => r.name.toLowerCase() === String(role_name).toLowerCase());
+    if (!role) return res.json({ ok: true, removed: false, reason: 'role_does_not_exist' });
+
+    const member = await guild.members.fetch(String(discord_id)).catch(() => null);
+    if (!member) return res.json({ ok: true, removed: false, reason: 'member_not_in_guild' });
+
+    if (member.roles.cache.has(role.id)) {
+      await member.roles.remove(role, reason || 'Portal: role removal');
+      return res.json({ ok: true, removed: true, role_id: role.id });
+    }
+    res.json({ ok: true, removed: false, reason: 'role_not_held' });
+  } catch (e) {
+    console.error('[Role API] unassign error:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 webhookApp.listen(3017, () => console.log('[CO Bot] Webhook server listening on port 3017'));
 
 client.login(process.env.DISCORD_BOT_TOKEN);
