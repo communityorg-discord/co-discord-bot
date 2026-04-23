@@ -4030,6 +4030,114 @@ webhookApp.post('/api/role/unassign', async (req, res) => {
   }
 });
 
+// POST /api/role/position
+//   Body: { role_name, below_role_name?, above_role_name?, guild_id?,
+//           all_servers?, create_if_missing? (default true), reason? }
+//
+// Moves `role_name` to sit immediately below (or above) a reference
+// role in each targeted guild. If the role doesn't exist in a guild
+// but the reference does AND create_if_missing, it's created first
+// (mirroring the /role/assign create path) so the position lookup
+// has something to place.
+//
+// "All servers" iterates ALL_SERVER_IDS (Staff HQ + Network) so a
+// single portal call keeps the role hierarchy consistent across every
+// staff-facing server.
+webhookApp.post('/api/role/position', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const {
+    role_name,
+    below_role_name,
+    above_role_name,
+    guild_id,
+    all_servers = false,
+    create_if_missing = true,
+    reason,
+  } = req.body || {};
+  if (!role_name) return res.status(400).json({ ok: false, error: 'role_name required' });
+  if (!below_role_name && !above_role_name) {
+    return res.status(400).json({ ok: false, error: 'below_role_name or above_role_name required' });
+  }
+
+  // Resolve guild set. Deferred import so we read any env tweaks
+  // without a restart; falls back to STAFF_HQ_GUILD if the env list
+  // is empty.
+  let targetGuildIds;
+  if (all_servers) {
+    const { ALL_SERVER_IDS } = await import('./config.js');
+    targetGuildIds = (ALL_SERVER_IDS && ALL_SERVER_IDS.length) ? ALL_SERVER_IDS : [STAFF_HQ_GUILD];
+  } else {
+    targetGuildIds = [String(guild_id || STAFF_HQ_GUILD)];
+  }
+
+  const results = [];
+  for (const gid of targetGuildIds) {
+    try {
+      const guild = client.guilds.cache.get(gid) || await client.guilds.fetch(gid).catch(() => null);
+      if (!guild) { results.push({ guild_id: gid, ok: false, error: 'guild_not_cached' }); continue; }
+
+      const refName = below_role_name || above_role_name;
+      const refRole = guild.roles.cache.find(r => r.name.toLowerCase() === String(refName).toLowerCase());
+      if (!refRole) { results.push({ guild_id: gid, ok: false, error: `reference_role_not_found: ${refName}` }); continue; }
+
+      let role = guild.roles.cache.find(r => r.name.toLowerCase() === String(role_name).toLowerCase());
+      let created = false;
+      if (!role) {
+        if (!create_if_missing) { results.push({ guild_id: gid, ok: false, error: 'role_not_found' }); continue; }
+        role = await guild.roles.create({
+          name: role_name,
+          color: pickRoleColour(role_name),
+          mentionable: false,
+          reason: reason || 'Portal: auto-create role for position sync',
+        });
+        created = true;
+      }
+
+      // Don't try to move @everyone or managed roles — Discord rejects.
+      if (role.managed || role.id === guild.roles.everyone.id) {
+        results.push({ guild_id: gid, ok: false, error: 'role_not_repositionable' });
+        continue;
+      }
+
+      // Target = reference.position adjusted by direction. Discord
+      // enforces "role must be below bot's highest role"; if the
+      // target exceeds the bot's ceiling we just clamp and log so
+      // the caller sees what happened.
+      const desired = below_role_name
+        ? Math.max(1, refRole.position - 1)
+        : refRole.position + 1;
+
+      const me = await guild.members.fetchMe().catch(() => null);
+      const botCeiling = me?.roles?.highest?.position ?? 0;
+      const clamped = Math.min(desired, Math.max(1, botCeiling - 1));
+      const finalPosition = role.position === clamped ? role.position : clamped;
+
+      if (finalPosition !== role.position) {
+        await role.setPosition(finalPosition, { reason: reason || 'Portal: role hierarchy sync' });
+      }
+
+      results.push({
+        guild_id: gid,
+        guild_name: guild.name,
+        ok: true,
+        created,
+        role_id: role.id,
+        previous_position: role.position,
+        requested_position: desired,
+        final_position: finalPosition,
+        reference_role: refRole.name,
+        reference_position: refRole.position,
+        bot_ceiling: botCeiling,
+      });
+    } catch (e) {
+      console.error(`[Role API] position error on ${gid}:`, e.message);
+      results.push({ guild_id: gid, ok: false, error: e.message });
+    }
+  }
+
+  res.json({ ok: results.some(r => r.ok), results });
+});
+
 webhookApp.listen(3017, () => console.log('[CO Bot] Webhook server listening on port 3017'));
 
 client.login(process.env.DISCORD_BOT_TOKEN);
