@@ -3344,7 +3344,7 @@ webhookApp.post('/bot/assignment-extension', async (req, res) => {
 // POST /bot/disciplinary — handle disciplinary role actions from portal
 webhookApp.post('/bot/disciplinary', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
-  const { action, discordId, caseRef, notes, newPosition, targetName } = req.body;
+  const { action, discordId, caseRef, notes, newPosition, targetName, moderatorName } = req.body;
   if (!action || !discordId) return res.status(400).json({ ok: false, error: 'action and discordId required' });
 
   try {
@@ -3461,16 +3461,28 @@ webhookApp.post('/bot/disciplinary', async (req, res) => {
       }
     }
 
+    // Tidy the action label — bare tokens like `warning` render as-is,
+    // so title-case for the embed. `first_written_warning` →
+    // `First Written Warning`, `warning` → `Warning`.
+    const actionLabel = String(action)
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
+    // Some action types don't touch guilds (`warning`, future inline
+    // notices). Don't bolt a 'Servers: None' row onto the embed in
+    // those cases — it's noise, not information.
+    const embedFields = [{ name: 'Action', value: actionLabel, inline: true }];
+    if (results.servers.length > 0) {
+      embedFields.push({ name: 'Servers', value: results.servers.join(', '), inline: true });
+    }
+
     await logAction(client, {
-      action: `📋 Disciplinary Action (Portal): ${action}`,
-      moderator: { discordId: 'PORTAL', name: 'Portal Case Management' },
+      action: `📋 Disciplinary Action (Portal): ${actionLabel}`,
+      moderator: { discordId: 'PORTAL', name: moderatorName || 'Portal Case Management' },
       target: { discordId, name: targetName || discordId },
       reason: notes || caseRef || 'No reason',
       color: 0xEF4444,
-      fields: [
-        { name: 'Action', value: action, inline: true },
-        { name: 'Servers', value: results.servers.join(', ') || 'None', inline: true },
-      ]
+      fields: embedFields,
     });
 
     res.json({ ok: true, ...results });
