@@ -22,6 +22,7 @@ const TEAMS = {
 const MANAGER_POSITIONS = [
   'Line Manager', 'Supervisor', 'Director', 'Secretary-General',
   'Deputy Secretary-General', 'Chef de Cabinet', 'Director-General',
+  'Chief Operations Officer',
   'Under Secretary-General', 'Assistant Secretary-General', 'Deputy Director',
   'Senior Advisor'
 ];

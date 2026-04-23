@@ -8,7 +8,8 @@ const ON_LEAVE_ROLE_NAME = 'On Leave';
 
 const MANAGER_POSITIONS = [
   'Director', 'Manager', 'Supervisor', 'Secretary-General', 'Deputy Secretary-General',
-  'Chef de Cabinet', 'Director-General', 'Under Secretary-General', 'Assistant Secretary-General',
+  'Chef de Cabinet', 'Director-General', 'Chief Operations Officer',
+  'Under Secretary-General', 'Assistant Secretary-General',
   'President', 'Vice-President', 'Senior Advisor'
 ];
 

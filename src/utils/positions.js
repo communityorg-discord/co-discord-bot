@@ -4,6 +4,7 @@ export const POSITIONS = {
   "Chef de Cabinet": ["Chef de Cabinet","Authorisation Level 7","Executive Operations Board","Board of Directors","Extended Board of Directors"],
   "Senior Advisor to the Secretariat": ["Senior Advisor to the Secretariat","Authorisation Level 7","Executive Operations Board","Board of Directors","Extended Board of Directors"],
   "Director-General": ["Director-General","Authorisation Level 7","Executive Operations Board","Board of Directors","Extended Board of Directors"],
+  "Chief Operations Officer": ["Chief Operations Officer","Authorisation Level 7","Executive Operations Board","Board of Directors","Extended Board of Directors"],
   "Under Secretary-General (DSS)": ["Under Secretary-General (DSS)","Authorisation Level 6","Board of Directors","Extended Board of Directors","Department for Safety and Security"],
   "Under Secretary-General (DMSPC)": ["Under Secretary-General (DMSPC)","Authorisation Level 6","Board of Directors","Extended Board of Directors","Department of Management Strategy, Policy and Compliance"],
   "Under Secretary-General (IC)": ["Under Secretary-General (IC)","Authorisation Level 6","Board of Directors","Extended Board of Directors","International Court"],
