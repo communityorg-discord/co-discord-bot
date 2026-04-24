@@ -4138,6 +4138,47 @@ webhookApp.post('/api/role/position', async (req, res) => {
   res.json({ ok: results.some(r => r.ok), results });
 });
 
+// POST /api/guild/unban-all
+//   Body: { guild_id, reason?, dry_run? (default false) }
+//   Mirrors the /mass-unban slash command's local-scope path but
+//   scriptable from the portal. Returns per-entry results so the
+//   caller can see exactly who got unbanned.
+webhookApp.post('/api/guild/unban-all', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { guild_id, reason, dry_run = false } = req.body || {};
+  if (!guild_id) return res.status(400).json({ ok: false, error: 'guild_id required' });
+  try {
+    const guild = client.guilds.cache.get(String(guild_id)) || await client.guilds.fetch(String(guild_id)).catch(() => null);
+    if (!guild) return res.status(404).json({ ok: false, error: 'guild not found or bot not a member' });
+
+    const bans = await guild.bans.fetch();
+    if (bans.size === 0) return res.json({ ok: true, guild_name: guild.name, total: 0, unbanned: 0, failed: 0, entries: [] });
+
+    const entries = [];
+    let unbanned = 0;
+    let failed = 0;
+    for (const [userId, banEntry] of bans.entries()) {
+      if (dry_run) {
+        entries.push({ user_id: userId, tag: banEntry.user?.tag || null, would_unban: true, ban_reason: banEntry.reason || null });
+        continue;
+      }
+      try {
+        await guild.bans.remove(userId, reason || 'Portal: mass unban');
+        unbanned++;
+        entries.push({ user_id: userId, tag: banEntry.user?.tag || null, unbanned: true });
+      } catch (e) {
+        failed++;
+        entries.push({ user_id: userId, tag: banEntry.user?.tag || null, unbanned: false, error: e.message });
+      }
+    }
+
+    res.json({ ok: true, guild_name: guild.name, total: bans.size, unbanned, failed, dry_run, entries });
+  } catch (e) {
+    console.error('[Guild API] unban-all error:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 webhookApp.listen(3017, () => console.log('[CO Bot] Webhook server listening on port 3017'));
 
 client.login(process.env.DISCORD_BOT_TOKEN);
