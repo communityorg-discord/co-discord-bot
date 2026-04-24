@@ -4174,6 +4174,94 @@ webhookApp.post('/api/role/position', async (req, res) => {
   res.json({ ok: results.some(r => r.ok), results });
 });
 
+// POST /api/role/permissions
+//   Body: { role_name, remove?: [...], add?: [...], guild_id?,
+//           all_servers?, reason? }
+//
+// Edits the Discord permission bitfield on `role_name` in each
+// targeted guild by clearing any flags in `remove` and setting any in
+// `add`. Flags use discord.js PermissionsBitField flag names
+// (e.g. 'Administrator', 'ManageGuild', 'BanMembers'). Roles the bot
+// can't modify (role above bot's highest, managed roles) are reported
+// with skipped=true so the caller can see exactly which guilds were
+// gated. Non-existent role in a guild → ok:false, role_not_found;
+// we don't auto-create here since permission edits should only ever
+// happen against known, deliberate roles.
+webhookApp.post('/api/role/permissions', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { role_name, remove = [], add = [], guild_id, all_servers = false, reason } = req.body || {};
+  if (!role_name) return res.status(400).json({ ok: false, error: 'role_name required' });
+  if (!Array.isArray(remove) || !Array.isArray(add)) {
+    return res.status(400).json({ ok: false, error: 'remove and add must be arrays of permission flag names' });
+  }
+  if (remove.length === 0 && add.length === 0) {
+    return res.status(400).json({ ok: false, error: 'pass at least one flag in remove or add' });
+  }
+
+  const { PermissionsBitField } = await import('discord.js');
+  const FLAGS = PermissionsBitField.Flags;
+  // Validate flag names up-front so a typo in the payload doesn't
+  // silently result in a no-op across every guild.
+  const unknown = [...remove, ...add].filter(f => !(f in FLAGS));
+  if (unknown.length) {
+    return res.status(400).json({ ok: false, error: `unknown permission flag(s): ${unknown.join(', ')}` });
+  }
+
+  const targetGuildIds = await resolveTargetGuilds(all_servers, guild_id);
+  const results = [];
+
+  for (const gid of targetGuildIds) {
+    try {
+      const guild = client.guilds.cache.get(gid) || await client.guilds.fetch(gid).catch(() => null);
+      if (!guild) { results.push({ guild_id: gid, ok: false, error: 'guild_not_cached' }); continue; }
+
+      const role = guild.roles.cache.find(r => r.name.toLowerCase() === String(role_name).toLowerCase());
+      if (!role) { results.push({ guild_id: gid, guild_name: guild.name, ok: false, error: 'role_not_found' }); continue; }
+
+      if (role.managed || role.id === guild.roles.everyone.id) {
+        results.push({ guild_id: gid, guild_name: guild.name, ok: false, error: 'role_not_editable', skipped: true });
+        continue;
+      }
+      const me = await guild.members.fetchMe().catch(() => null);
+      if (me && role.position >= me.roles.highest.position) {
+        results.push({ guild_id: gid, guild_name: guild.name, ok: false, error: 'role_above_bot', skipped: true, role_position: role.position, bot_ceiling: me.roles.highest.position });
+        continue;
+      }
+
+      const beforeBits = role.permissions.bitfield;
+      const beforeAdmin = role.permissions.has(FLAGS.Administrator);
+      let perms = new PermissionsBitField(role.permissions.bitfield);
+      for (const f of remove) perms = perms.remove(FLAGS[f]);
+      for (const f of add) perms = perms.add(FLAGS[f]);
+      const afterBits = perms.bitfield;
+
+      if (afterBits === beforeBits) {
+        results.push({
+          guild_id: gid, guild_name: guild.name, ok: true, role_id: role.id,
+          unchanged: true,
+          before_admin: beforeAdmin,
+        });
+        continue;
+      }
+
+      await role.setPermissions(perms, reason || 'Portal: permission edit');
+      results.push({
+        guild_id: gid, guild_name: guild.name, ok: true, role_id: role.id,
+        changed: true,
+        before_admin: beforeAdmin,
+        after_admin: perms.has(FLAGS.Administrator),
+        before_bitfield: String(beforeBits),
+        after_bitfield: String(afterBits),
+      });
+    } catch (e) {
+      console.error(`[Role API] permissions error on ${gid}:`, e.message);
+      results.push({ guild_id: gid, ok: false, error: e.message });
+    }
+  }
+
+  res.json({ ok: results.some(r => r.ok), results });
+});
+
 // POST /api/guild/unban-all
 //   Body: { guild_id, reason?, dry_run? (default false) }
 //   Mirrors the /mass-unban slash command's local-scope path but
