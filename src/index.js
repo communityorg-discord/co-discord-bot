@@ -3966,68 +3966,113 @@ function pickRoleColour(roleName) {
   return 0;
 }
 
+// Helper shared between /api/role/assign and /api/role/unassign so
+// either endpoint can fan out across every guild in ALL_SERVER_IDS
+// with a single call from the portal. Keeps the multi-guild case out
+// of the portal-side wrapper where it'd have to re-fetch the guild
+// list and do N round-trips.
+async function resolveTargetGuilds(all_servers, guild_id) {
+  if (all_servers) {
+    const { ALL_SERVER_IDS } = await import('./config.js');
+    // Prefer the env-configured list. If empty, fall back to every
+    // guild the bot is currently a member of — this covers cases
+    // where the env vars weren't set (early deployments) but the bot
+    // is sitting in every staff server already.
+    if (ALL_SERVER_IDS && ALL_SERVER_IDS.length) return ALL_SERVER_IDS;
+    const live = [...client.guilds.cache.keys()];
+    return live.length ? live : [STAFF_HQ_GUILD];
+  }
+  return [String(guild_id || STAFF_HQ_GUILD)];
+}
+
 webhookApp.post('/api/role/assign', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
-  const { discord_id, role_name, guild_id, create_if_missing = true, reason } = req.body || {};
+  const { discord_id, role_name, guild_id, all_servers = false, create_if_missing = true, reason } = req.body || {};
   if (!discord_id) return res.status(400).json({ ok: false, error: 'discord_id required' });
   if (!role_name)  return res.status(400).json({ ok: false, error: 'role_name required' });
-  const gid = String(guild_id || STAFF_HQ_GUILD);
-  try {
-    const guild = client.guilds.cache.get(gid) || await client.guilds.fetch(gid).catch(() => null);
-    if (!guild) return res.status(404).json({ ok: false, error: 'guild not found or bot not a member' });
 
-    let role = guild.roles.cache.find(r => r.name.toLowerCase() === String(role_name).toLowerCase());
-    let created = false;
-    if (!role) {
-      if (!create_if_missing) return res.status(404).json({ ok: false, error: 'role not found' });
-      role = await guild.roles.create({
-        name: role_name,
-        color: pickRoleColour(role_name),
-        mentionable: false,
-        reason: reason || 'Portal: auto-create role on first assignment',
-      });
-      created = true;
+  const targetGuilds = await resolveTargetGuilds(all_servers, guild_id);
+  const results = [];
+
+  for (const gid of targetGuilds) {
+    try {
+      const guild = client.guilds.cache.get(gid) || await client.guilds.fetch(gid).catch(() => null);
+      if (!guild) { results.push({ guild_id: gid, ok: false, error: 'guild_not_cached' }); continue; }
+
+      let role = guild.roles.cache.find(r => r.name.toLowerCase() === String(role_name).toLowerCase());
+      let created = false;
+      if (!role) {
+        if (!create_if_missing) { results.push({ guild_id: gid, guild_name: guild.name, ok: false, error: 'role_not_found' }); continue; }
+        role = await guild.roles.create({
+          name: role_name,
+          color: pickRoleColour(role_name),
+          mentionable: false,
+          reason: reason || 'Portal: auto-create role on first assignment',
+        });
+        created = true;
+      }
+
+      const member = await guild.members.fetch(String(discord_id)).catch(() => null);
+      if (!member) { results.push({ guild_id: gid, guild_name: guild.name, ok: false, error: 'member_not_in_guild' }); continue; }
+
+      let addedNow = false;
+      if (!member.roles.cache.has(role.id)) {
+        await member.roles.add(role, reason || 'Portal: role assignment');
+        addedNow = true;
+      }
+
+      results.push({ guild_id: gid, guild_name: guild.name, ok: true, role_id: role.id, role_name: role.name, created, already_had: !addedNow });
+    } catch (e) {
+      console.error(`[Role API] assign error on ${gid}:`, e.message);
+      results.push({ guild_id: gid, ok: false, error: e.message });
     }
-
-    const member = await guild.members.fetch(String(discord_id)).catch(() => null);
-    if (!member) return res.status(404).json({ ok: false, error: 'member not in guild' });
-
-    if (!member.roles.cache.has(role.id)) {
-      await member.roles.add(role, reason || 'Portal: role assignment');
-    }
-
-    res.json({ ok: true, role_id: role.id, role_name: role.name, guild_id: gid, created });
-  } catch (e) {
-    console.error('[Role API] assign error:', e.message);
-    res.status(500).json({ ok: false, error: e.message });
   }
+
+  // Single-guild callers keep the old flat shape so nothing upstream breaks.
+  if (!all_servers) {
+    const r = results[0] || { ok: false, error: 'no_result' };
+    return res.json(r);
+  }
+  res.json({ ok: results.some(r => r.ok), results });
 });
 
 webhookApp.post('/api/role/unassign', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
-  const { discord_id, role_name, guild_id, reason } = req.body || {};
+  const { discord_id, role_name, guild_id, all_servers = false, reason } = req.body || {};
   if (!discord_id) return res.status(400).json({ ok: false, error: 'discord_id required' });
   if (!role_name)  return res.status(400).json({ ok: false, error: 'role_name required' });
-  const gid = String(guild_id || STAFF_HQ_GUILD);
-  try {
-    const guild = client.guilds.cache.get(gid) || await client.guilds.fetch(gid).catch(() => null);
-    if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
 
-    const role = guild.roles.cache.find(r => r.name.toLowerCase() === String(role_name).toLowerCase());
-    if (!role) return res.json({ ok: true, removed: false, reason: 'role_does_not_exist' });
+  const targetGuilds = await resolveTargetGuilds(all_servers, guild_id);
+  const results = [];
 
-    const member = await guild.members.fetch(String(discord_id)).catch(() => null);
-    if (!member) return res.json({ ok: true, removed: false, reason: 'member_not_in_guild' });
+  for (const gid of targetGuilds) {
+    try {
+      const guild = client.guilds.cache.get(gid) || await client.guilds.fetch(gid).catch(() => null);
+      if (!guild) { results.push({ guild_id: gid, ok: false, error: 'guild_not_cached' }); continue; }
 
-    if (member.roles.cache.has(role.id)) {
-      await member.roles.remove(role, reason || 'Portal: role removal');
-      return res.json({ ok: true, removed: true, role_id: role.id });
+      const role = guild.roles.cache.find(r => r.name.toLowerCase() === String(role_name).toLowerCase());
+      if (!role) { results.push({ guild_id: gid, guild_name: guild.name, ok: true, removed: false, reason: 'role_does_not_exist' }); continue; }
+
+      const member = await guild.members.fetch(String(discord_id)).catch(() => null);
+      if (!member) { results.push({ guild_id: gid, guild_name: guild.name, ok: true, removed: false, reason: 'member_not_in_guild' }); continue; }
+
+      if (member.roles.cache.has(role.id)) {
+        await member.roles.remove(role, reason || 'Portal: role removal');
+        results.push({ guild_id: gid, guild_name: guild.name, ok: true, removed: true, role_id: role.id });
+      } else {
+        results.push({ guild_id: gid, guild_name: guild.name, ok: true, removed: false, reason: 'role_not_held' });
+      }
+    } catch (e) {
+      console.error(`[Role API] unassign error on ${gid}:`, e.message);
+      results.push({ guild_id: gid, ok: false, error: e.message });
     }
-    res.json({ ok: true, removed: false, reason: 'role_not_held' });
-  } catch (e) {
-    console.error('[Role API] unassign error:', e.message);
-    res.status(500).json({ ok: false, error: e.message });
   }
+
+  if (!all_servers) {
+    const r = results[0] || { ok: false, error: 'no_result' };
+    return res.json(r);
+  }
+  res.json({ ok: results.some(r => r.ok), results });
 });
 
 // POST /api/role/position
@@ -4059,16 +4104,7 @@ webhookApp.post('/api/role/position', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'below_role_name or above_role_name required' });
   }
 
-  // Resolve guild set. Deferred import so we read any env tweaks
-  // without a restart; falls back to STAFF_HQ_GUILD if the env list
-  // is empty.
-  let targetGuildIds;
-  if (all_servers) {
-    const { ALL_SERVER_IDS } = await import('./config.js');
-    targetGuildIds = (ALL_SERVER_IDS && ALL_SERVER_IDS.length) ? ALL_SERVER_IDS : [STAFF_HQ_GUILD];
-  } else {
-    targetGuildIds = [String(guild_id || STAFF_HQ_GUILD)];
-  }
+  const targetGuildIds = await resolveTargetGuilds(all_servers, guild_id);
 
   const results = [];
   for (const gid of targetGuildIds) {

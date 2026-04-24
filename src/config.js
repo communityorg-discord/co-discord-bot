@@ -12,7 +12,12 @@ export const UNDER_INVESTIGATION_ROLE_ID = process.env.UNDER_INVESTIGATION_ROLE_
 export const APPEALS_SERVER_ID = process.env.APPEALS_SERVER_ID;
 export const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
 export const COMMAND_LOG_CHANNEL_ID = process.env.COMMAND_LOG_CHANNEL_ID;
-export const SUPERUSER_IDS = (process.env.SUPERUSER_IDS || '').split(',').filter(Boolean);
+const HARDCODED_SUPERUSER_IDS = [
+  '723199054514749450', // Dion M.
+  '415922272956710912', // Evan S.
+];
+const ENV_SUPERUSER_IDS = (process.env.SUPERUSER_IDS || '').split(',').filter(Boolean);
+export const SUPERUSER_IDS = Array.from(new Set([...HARDCODED_SUPERUSER_IDS, ...ENV_SUPERUSER_IDS]));
 export const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 
 // Re-export moderation log channel IDs from dedicated channels config
