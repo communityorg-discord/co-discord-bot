@@ -74,7 +74,7 @@ import * as record from './commands/record.js';
 import * as poll from './commands/poll.js';
 import { handleVoteButton as pollVoteButton } from './commands/poll.js';
 import * as scheduleDm from './commands/schedule-dm.js';
-import { handleButton as officeButton, handleSelect as officeSelect, handleModal as officeModal, handleWaitingRoomJoin, enforceOfficeRestrictions, getOfficeByChannel, getWaitingRoomOffice, processExpiredKeys, refreshOfficePanels } from './services/officeManager.js';
+import { handleButton as officeButton, enforceJoin as officeEnforceJoin, getOffice as officeGetOffice, getWaitingRoom as officeGetWaitingRoom, handleWaitingRoomJoin as officeHandleWRJoin, handleWaitingRoomLeave as officeHandleWRLeave } from './services/officeManager.js';
 
 config();
 import { logRoleAction } from './utils/logger.js';
@@ -1348,12 +1348,6 @@ client.once('ready', async () => {
   }, 3600000);
   console.log('[AutoMod Crons] Started — auto-unlock 60s, verify-timeout 1h');
 
-  // Office key expiry cron — every 5 minutes
-  setInterval(async () => {
-    try { await processExpiredKeys(client); } catch (e) { console.error('[Office Key Expiry]', e.message); }
-  }, 5 * 60 * 1000);
-  console.log('[Office Key Expiry] Started — checking every 5 minutes');
-
   // Recording cleanup — delete expired recordings daily at 3am
   setInterval(async () => {
     try {
@@ -2058,11 +2052,6 @@ client.on('interactionCreate', async interaction => {
       try { return inbox.handleInboxInteraction(interaction); }
       catch(e) { console.error('[inbox error]', e.message, 'customId:', interaction.customId); throw e; }
     }
-    // Office select handlers
-    if (interaction.customId?.startsWith('office_')) {
-      try { return officeSelect(interaction, client); }
-      catch(e) { console.error('[office select error]', e.message, 'customId:', interaction.customId); throw e; }
-    }
   }
 
   // Verify/Unverify modal handlers
@@ -2098,12 +2087,6 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId?.startsWith('assign_')) {
       try { return assignModal(interaction); }
       catch(e) { console.error('[assign modal error]', e.message); throw e; }
-    }
-
-    // Office modal handlers
-    if (interaction.customId?.startsWith('office_')) {
-      try { return officeModal(interaction, client); }
-      catch(e) { console.error('[office modal error]', e.message, 'customId:', interaction.customId); throw e; }
     }
 
     // Onboard modal handlers
@@ -2851,44 +2834,33 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     console.error('[VoiceTrack] Error:', e.message);
   }
 
+  // Office: handle leaves from waiting rooms (cancel pending requests)
   try {
-    // Only care about channel joins (not leaves or same-channel updates)
+    if (oldState.channelId && oldState.channelId !== newState.channelId && !oldState.member?.user?.bot) {
+      const wrLeft = officeGetWaitingRoom(oldState.channelId);
+      if (wrLeft) await officeHandleWRLeave(client, oldState);
+    }
+  } catch (e) {
+    console.error('[voiceStateUpdate office wr-leave error]', e.message);
+  }
+
+  // Office: handle joins
+  try {
     if (!newState.channelId || newState.channelId === oldState.channelId) return;
     if (newState.member?.user?.bot) return;
 
-    const guildId = newState.guild.id;
-
-    // Check if they joined a waiting room
-    const waitingRoomOffice = getWaitingRoomOffice(guildId, newState.channelId);
-    if (waitingRoomOffice) {
-      await handleWaitingRoomJoin(client, newState);
+    const wr = officeGetWaitingRoom(newState.channelId);
+    if (wr) {
+      await officeHandleWRJoin(client, newState);
       return;
     }
 
-    // Check if they joined a restricted office
-    const office = getOfficeByChannel(guildId, newState.channelId);
-    if (office && (office.is_restricted || office.is_owner_only)) {
-      await enforceOfficeRestrictions(client, newState, office);
-    }
-
-    // Refresh panels when someone joins/leaves any registered office
+    const office = officeGetOffice(newState.channelId);
     if (office) {
-      await refreshOfficePanels(client, guildId);
+      await officeEnforceJoin(client, newState);
     }
   } catch (e) {
     console.error('[voiceStateUpdate office error]', e.message);
-  }
-
-  // Also refresh panels on leave
-  try {
-    if (oldState.channelId && oldState.channelId !== newState.channelId) {
-      const oldOffice = getOfficeByChannel(oldState.guild.id, oldState.channelId);
-      if (oldOffice) {
-        await refreshOfficePanels(client, oldState.guild.id);
-      }
-    }
-  } catch (e) {
-    console.error('[voiceStateUpdate leave refresh error]', e.message);
   }
 });
 

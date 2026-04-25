@@ -1059,65 +1059,58 @@ export function activateActingAssignment(id) {
   db.prepare("UPDATE acting_assignments SET status = 'active', started_at = datetime('now') WHERE id = ?").run(id);
 }
 
-// ── Office Restrictions ─────────────────────────────────────────────────────
+// ── Office Access Control ───────────────────────────────────────────────────
 
-db.exec(`CREATE TABLE IF NOT EXISTS offices (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+db.exec(`DROP TABLE IF EXISTS office_keys`);
+db.exec(`DROP TABLE IF EXISTS office_access_requests`);
+db.exec(`DROP TABLE IF EXISTS office_master_panel`);
+db.exec(`DROP TABLE IF EXISTS office_allowlist`);
+db.exec(`DROP TABLE IF EXISTS offices`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS managed_offices (
+  channel_id TEXT PRIMARY KEY,
   guild_id TEXT NOT NULL,
-  channel_id TEXT NOT NULL,
-  channel_name TEXT NOT NULL,
-  owner_discord_id TEXT,
-  is_restricted INTEGER DEFAULT 0,
-  is_owner_only INTEGER DEFAULT 0,
-  waiting_room_enabled INTEGER DEFAULT 0,
-  waiting_room_channel_id TEXT,
-  panel_message_id TEXT,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(guild_id, channel_id)
+  channel_name TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )`);
 
 db.exec(`CREATE TABLE IF NOT EXISTS office_allowlist (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  office_id INTEGER NOT NULL REFERENCES offices(id) ON DELETE CASCADE,
+  channel_id TEXT NOT NULL REFERENCES managed_offices(channel_id) ON DELETE CASCADE,
   discord_id TEXT NOT NULL,
-  added_by TEXT NOT NULL,
-  entry_type TEXT DEFAULT 'user',
+  added_by TEXT,
   added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(office_id, discord_id)
+  PRIMARY KEY (channel_id, discord_id)
 )`);
 
-// Migration: add entry_type column if missing
-try { db.exec("ALTER TABLE office_allowlist ADD COLUMN entry_type TEXT DEFAULT 'user'"); } catch (e) { /* already exists */ }
+db.exec(`CREATE TABLE IF NOT EXISTS office_request_feed (
+  guild_id TEXT PRIMARY KEY,
+  channel_id TEXT NOT NULL
+)`);
 
-db.exec(`CREATE TABLE IF NOT EXISTS office_keys (
+// office_requests had a NOT NULL on channel_id from the older schema — drop & recreate so
+// waiting-room requests (which don't tie to a single office until approval) can insert NULL.
+db.exec(`DROP TABLE IF EXISTS office_requests`);
+db.exec(`CREATE TABLE office_requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  office_id INTEGER NOT NULL REFERENCES offices(id) ON DELETE CASCADE,
-  role_id TEXT NOT NULL,
   guild_id TEXT NOT NULL,
-  granted_by TEXT NOT NULL,
-  expires_at DATETIME,
+  channel_id TEXT,
+  requester_id TEXT NOT NULL,
+  requester_tag TEXT,
+  source TEXT NOT NULL DEFAULT 'kicked' CHECK(source IN ('kicked','waiting_room')),
+  source_channel_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','denied','expired','cancelled')),
+  feed_message_id TEXT,
+  resolved_by TEXT,
+  resolved_office_id TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(office_id, role_id)
-)`);
-
-db.exec(`CREATE TABLE IF NOT EXISTS office_access_requests (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  office_id INTEGER NOT NULL REFERENCES offices(id) ON DELETE CASCADE,
-  requester_discord_id TEXT NOT NULL,
-  requester_username TEXT,
-  status TEXT DEFAULT 'pending' CHECK(status IN ('pending','approved','denied','expired','cancelled')),
-  approved_by TEXT,
-  request_message_id TEXT,
-  dm_message_id TEXT,
-  requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   resolved_at DATETIME
 )`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_office_requests_pending ON office_requests(requester_id, status)`);
 
-db.exec(`CREATE TABLE IF NOT EXISTS office_master_panel (
-  guild_id TEXT PRIMARY KEY,
-  channel_id TEXT NOT NULL,
-  message_id TEXT NOT NULL,
+db.exec(`CREATE TABLE IF NOT EXISTS office_waiting_rooms (
+  channel_id TEXT PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_name TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )`);
 
