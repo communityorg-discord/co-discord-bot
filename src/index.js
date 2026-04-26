@@ -100,6 +100,17 @@ const client = new Client({
 });
 
 client.commands = new Collection();
+
+// Module-scope tracking sets — shared by the 'ready' handler that
+// reads/syncs them and the top-level voiceStateUpdate / messageCreate
+// handlers that write to them. Originally declared inside 'ready' which
+// meant the top-level handlers couldn't see them and threw "X is not
+// defined" on every voice/message event.
+const dailyActiveUsers   = new Set();
+const voiceSessions      = new Map(); // discord_id → { channel_id, channel_name, joined_at }
+const meetingAttendance  = new Map(); // discord_id → { channel_name, joined_at }
+const weeklyReactions    = new Map(); // discord_id (author) → count
+const welcomeTracker     = new Map(); // discord_id → count this week
 const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
@@ -532,12 +543,13 @@ client.once('ready', async () => {
   // ========== ACTIVITY POINTS SYNC (replaces BRAG sync) ==========
   const ACTIVITY_LOG_CH = '1487643487460659280';
 
-  // In-memory tracking sets
-  const dailyActiveUsers = new Set();
-  const voiceSessions = new Map(); // discord_id → { channel_id, channel_name, joined_at }
-  const meetingAttendance = new Map(); // discord_id → { channel_name, joined_at }
-  const weeklyReactions = new Map(); // discord_id (author) → count
-  const welcomeTracker = new Map(); // discord_id → count this week
+  // The voice/meeting/welcome trackers were declared here (inside the
+  // 'ready' handler) historically, but the voiceStateUpdate handler at
+  // the top level of the file referenced them — so every voice join
+  // threw "dailyActiveUsers is not defined". Hoisted to module scope
+  // (declared above) so both closures share the same Maps. The
+  // assignments below were removed; the top-level declarations are
+  // pre-instantiated at module load.
 
   // Staff cache — refreshed every 30 minutes
   let staffCache = new Map(); // discord_id → { id, display_name, position }
