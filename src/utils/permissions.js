@@ -28,7 +28,29 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 const COMMANDS_DIR = path.join(__dirname, '..', 'commands');
 
-// Map: <command-name> | <command-name>:<sub> → fallback descriptor
+// Map: <command-name> | <command-name>:<sub> | <command-name>:<flag> → fallback kind
+//
+// Two comment shapes supported:
+//   // COMMAND_PERMISSION_FALLBACK: <kind>
+//      Default rule for the command (or the base when used alone).
+//   // COMMAND_PERMISSION_FALLBACK: <kind>;subcommand=<sub>
+//   // COMMAND_PERMISSION_FALLBACK: <kind>;option=<name>=<value>
+//   // COMMAND_PERMISSION_FALLBACK: <kind>;option=<name>
+//      Modifier suffix — registers the rule under
+//      "<base>:<sub>" or "<base>:<value>" or "<base>:<name>" so the
+//      runtime canUseCommand('<base>:<sub>', …) check finds it.
+//   // COMMAND_PERMISSION_FALLBACK[<sub>]: <kind>
+//      Legacy bracket syntax (kept for back-compat).
+//
+// Parenthetical clarifications in <kind> ("everyone (per-case access
+// also enforced inline)") are stripped before matching.
+function parseFallbackKind(rawKind) {
+  return String(rawKind || '')
+    .replace(/\([^)]*\)/g, '')   // drop parentheticals
+    .replace(/\s+OR\s+.*$/i, '') // drop "OR …" trailing clauses
+    .trim();
+}
+
 const FALLBACK_MAP = (() => {
   const out = new Map();
   try {
@@ -38,13 +60,29 @@ const FALLBACK_MAP = (() => {
       const nameMatch = src.match(/setName\(\s*['"]([^'"]+)['"]\s*\)/);
       if (!nameMatch) continue;
       const baseName = nameMatch[1];
-      // "// COMMAND_PERMISSION_FALLBACK: <kind>"  (default for the command)
-      // "// COMMAND_PERMISSION_FALLBACK[<sub>]: <kind>"  (subcommand-specific)
       const re = /\/\/\s*COMMAND_PERMISSION_FALLBACK(?:\[([^\]]+)\])?\s*:\s*([^\n\r]+)/gi;
       let m;
       while ((m = re.exec(src))) {
-        const sub = m[1] ? m[1].trim() : '';
-        const kind = m[2].trim();
+        const bracketSub = m[1] ? m[1].trim() : '';
+        let body = m[2].trim();
+
+        // Suffix modifier: "<kind>;subcommand=<sub>" or
+        // "<kind>;option=<name>=<value>" or "<kind>;option=<name>".
+        let suffixKey = '';
+        const semi = body.indexOf(';');
+        if (semi >= 0) {
+          const modifier = body.slice(semi + 1).trim();
+          body = body.slice(0, semi).trim();
+          const subM = modifier.match(/^subcommand\s*=\s*(.+)$/i);
+          const optM = modifier.match(/^option\s*=\s*([^=]+?)\s*=\s*(.+)$/i);
+          const optBareM = modifier.match(/^option\s*=\s*(.+)$/i);
+          if (subM)         suffixKey = subM[1].trim();
+          else if (optM)    suffixKey = optM[2].trim();
+          else if (optBareM) suffixKey = optBareM[1].trim();
+        }
+
+        const kind = parseFallbackKind(body);
+        const sub = bracketSub || suffixKey;
         const key = sub ? `${baseName}:${sub}` : baseName;
         out.set(key, kind);
       }
