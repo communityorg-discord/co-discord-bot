@@ -574,10 +574,19 @@ client.once('ready', async () => {
       const records = [];
       for (const row of counts) {
         const delta = row.total_count - row.total_synced;
-        if (delta > 0) records.push({ discord_id: row.discord_id, category: 'messages', points: row.total_count });
+        // Bug history: this used to send `points: row.total_count` (the
+        // cumulative). The portal's /sync/bulk handler treats each record
+        // additively (INSERTs a new row each time, summing them for the
+        // weekly total), so sending the cumulative inflated everyone's
+        // weekly points until they hit the cap. Now we send the DELTA
+        // since the last sync — which matches the portal's additive
+        // contract — and the bot resets last_synced_count below so the
+        // next iteration emits only what's NEW.
+        if (delta > 0) records.push({ discord_id: row.discord_id, category: 'messages', points: delta });
       }
 
-      // Also sync welcome points
+      // Welcome points — same delta semantics. welcomeTracker resets to
+      // the synced state below by being cleared after a successful POST.
       for (const [discordId, count] of welcomeTracker) {
         if (count > 0) records.push({ discord_id: discordId, category: 'welcome', points: count * 3 });
       }
@@ -593,6 +602,10 @@ client.once('ready', async () => {
       console.log(`[Activity Sync] ${data.synced} synced, ${data.skipped} skipped for week ${weekKey}`);
 
       botDatabase.prepare('UPDATE brag_message_counts SET last_synced_count = message_count WHERE week_key = ?').run(weekKey);
+      // welcomeTracker isn't persisted across restarts, so the in-process
+      // counts are deltas-since-process-start. Clear it after a successful
+      // sync so the next run only emits new welcomes.
+      welcomeTracker.clear();
     } catch (e) {
       console.error('[Activity Sync] Failed:', e.message);
     }
@@ -608,7 +621,7 @@ client.once('ready', async () => {
   // capped at 100/week (the portal also enforces the cap server-side).
   async function syncVoiceActivity() {
     try {
-      const { db: botDatabase, flushActiveSessions, getVoiceLeaderboard } = await import('./utils/botDb.js');
+      const { db: botDatabase, flushActiveSessions } = await import('./utils/botDb.js');
       const weekKey = getBragWeekKey();
 
       // Fold in any in-flight session time so the leaderboard reflects
@@ -616,15 +629,35 @@ client.once('ready', async () => {
       // they ended a session.
       flushActiveSessions(weekKey);
 
-      const rows = getVoiceLeaderboard(weekKey);
+      // Pull total + last_synced_seconds together so we can compute the
+      // delta in points since the previous sync. The portal's /sync/bulk
+      // endpoint adds each record additively to the user's weekly total,
+      // so sending the cumulative would inflate everyone's voice points
+      // until they hit the cap (this was the silent corruption fixed on
+      // 2026-04-26 — see the dedupe migration).
+      const rows = botDatabase.prepare(
+        `SELECT id, discord_id, total_seconds, COALESCE(last_synced_seconds, 0) AS last_synced_seconds
+         FROM voice_time_tracking
+         WHERE week_key = ? AND total_seconds > 0`
+      ).all(weekKey);
       if (!rows.length) return;
 
       const records = [];
+      const cursorUpdates = [];
       for (const row of rows) {
-        const minutes = Math.floor((row.total_seconds || 0) / 60);
-        if (minutes < 30) continue;
-        const points = Math.min(Math.floor(minutes / 30) * 5, 100);
-        if (points > 0) records.push({ discord_id: row.discord_id, category: 'voice', points });
+        const totalMinutes  = Math.floor((row.total_seconds || 0) / 60);
+        const syncedMinutes = Math.floor((row.last_synced_seconds || 0) / 60);
+        // 5 points per 30 min. Compute "points already sent" vs "points
+        // earned now" and emit the delta. Cumulative is capped at 100/wk
+        // by the portal — we never exceed that, but compute against the
+        // earned total so deltas naturally taper to 0 at the cap.
+        const totalPoints  = Math.min(Math.floor(totalMinutes / 30) * 5, 100);
+        const syncedPoints = Math.min(Math.floor(syncedMinutes / 30) * 5, 100);
+        const deltaPoints  = totalPoints - syncedPoints;
+        if (deltaPoints > 0) {
+          records.push({ discord_id: row.discord_id, category: 'voice', points: deltaPoints });
+          cursorUpdates.push({ id: row.id, total_seconds: row.total_seconds });
+        }
       }
       if (!records.length) return;
 
@@ -635,6 +668,10 @@ client.once('ready', async () => {
       });
       const data = await res.json().catch(() => ({}));
       console.log(`[Voice Sync] ${data.synced || 0} synced, ${data.skipped || 0} skipped (records=${records.length}) for week ${weekKey}`);
+
+      // Advance the cursor only for users we successfully synced.
+      const upd = botDatabase.prepare('UPDATE voice_time_tracking SET last_synced_seconds = ? WHERE id = ?');
+      for (const c of cursorUpdates) upd.run(c.total_seconds, c.id);
     } catch (e) {
       console.error('[Voice Sync] Failed:', e.message);
     }

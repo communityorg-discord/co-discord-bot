@@ -272,6 +272,10 @@ db.exec(`CREATE TABLE IF NOT EXISTS dm_sent_tracking (
 )`);
 
 // Voice channel time tracking
+// Track last_synced_seconds so the portal sync can send DELTAS rather
+// than the cumulative total. Without this column, the portal's additive
+// /sync/bulk endpoint inflated everyone's weekly voice points until they
+// hit the cap. Idempotent — added with a try/catch ALTER below.
 db.exec(`CREATE TABLE IF NOT EXISTS voice_time_tracking (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   discord_id TEXT NOT NULL,
@@ -280,6 +284,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS voice_time_tracking (
   session_start DATETIME,
   UNIQUE(discord_id, week_key)
 )`);
+// Idempotent ALTER — older DBs predate the last_synced_seconds column.
+try { db.exec(`ALTER TABLE voice_time_tracking ADD COLUMN last_synced_seconds INTEGER DEFAULT 0`); } catch (e) { if (!String(e.message).includes('duplicate column')) console.warn('[botDb] voice_time_tracking ALTER:', e.message); }
 
 // Migration: remove legacy UNIQUE constraint on category alone — it prevents multiple guild_id rows per category
 // SQLite can't drop constraints, so recreate the table

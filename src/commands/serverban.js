@@ -44,16 +44,21 @@ function formatDuration(ms) {
   return `${seconds} second${seconds !== 1 ? 's' : ''}`;
 }
 
+// Renamed to /serverban so it stops colliding with /ban (which is the
+// global cross-guild ban defined in ban.js). Both files used to register
+// data.name = 'ban', so only one survived Discord's slash-command upsert
+// at a time — depending on filesystem load order the wrong handler would
+// run. /serverban is the single-server scope; /ban is the global one.
 export const data = new SlashCommandBuilder()
-  .setName('ban')
-  .setDescription('Ban a user from this server')
+  .setName('serverban')
+  .setDescription('Ban a user from THIS server only (single-guild scope)')
   .addStringOption(opt => opt.setName('user').setDescription('User to ban (@mention or user ID)').setRequired(true))
   .addStringOption(opt => opt.setName('duration').setDescription('Duration for temp ban: 1d, 7d (omit for permanent)').setRequired(false))
   .addStringOption(opt => opt.setName('reason').setDescription('Reason for the ban').setRequired(false))
   .addIntegerOption(opt => opt.setName('delete_messages').setDescription('Delete message history: 0–7 days').setRequired(false));
 
 export async function execute(interaction) {
-  const perm = await canUseCommand('ban', interaction);
+  const perm = await canUseCommand('serverban', interaction);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}` });
 
   const userArg = interaction.options.getString('user');
