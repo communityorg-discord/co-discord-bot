@@ -3097,6 +3097,38 @@ webhookApp.post('/webhook/acting-process-pending', async (req, res) => {
   }
 });
 
+// POST /webhook/set-nickname — set a member's nickname across guilds.
+// Body: { discord_id, nickname, all_servers? (default true), guild_id? }
+// nickname is truncated to Discord's 32-char limit; pass null/'' to clear.
+webhookApp.post('/webhook/set-nickname', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { discord_id, nickname, all_servers = true, guild_id } = req.body || {};
+  if (!discord_id || !/^[0-9]{17,20}$/.test(String(discord_id))) {
+    return res.status(400).json({ ok: false, error: 'discord_id required' });
+  }
+  const nick = nickname == null || nickname === '' ? null : String(nickname).slice(0, 32);
+
+  const guildIds = all_servers
+    ? Array.from(client.guilds.cache.keys())
+    : (guild_id ? [String(guild_id)] : []);
+  if (!guildIds.length) return res.status(400).json({ ok: false, error: 'no_target_guild' });
+
+  const results = [];
+  for (const gid of guildIds) {
+    try {
+      const guild = client.guilds.cache.get(gid) || await client.guilds.fetch(gid).catch(() => null);
+      if (!guild) { results.push({ guild_id: gid, ok: false, error: 'guild_not_cached' }); continue; }
+      const member = await guild.members.fetch(discord_id).catch(() => null);
+      if (!member) { results.push({ guild_id: gid, guild_name: guild.name, ok: false, error: 'not_a_member' }); continue; }
+      await member.setNickname(nick, 'Portal: nickname update').catch(e => { throw e; });
+      results.push({ guild_id: gid, guild_name: guild.name, ok: true, nickname: nick });
+    } catch (e) {
+      results.push({ guild_id: gid, ok: false, error: e.message });
+    }
+  }
+  res.json({ ok: true, results });
+});
+
 // GET /webhook/check-guild-member?discord_id=…&guild_id=…
 // Returns whether the user is a member of the given guild. Used by the
 // portal's Add New Staff wizard to verify the Discord ID belongs to the
