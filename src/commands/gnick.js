@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 6
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { hasPortalAuth } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { logAction } from '../utils/logger.js';
 
 export const data = new SlashCommandBuilder()
@@ -11,8 +12,9 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
-  if (!hasPortalAuth(interaction.user.id, 6)) {
-    return interaction.editReply({ content: '❌ This command requires authorisation level 6+.' });
+  const perm = await canUseCommand('gnick', interaction);
+  if (!perm.allowed) {
+    return interaction.editReply({ content: `❌ ${perm.reason}` });
   }
 
   const targetUser = interaction.options.getUser('user');

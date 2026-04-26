@@ -1,6 +1,7 @@
+// COMMAND_PERMISSION_FALLBACK: everyone
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { getPortalUser, isSuperuser, applyVerification, getOrCreateVerificationChannel } from '../utils/verifyHelper.js';
-import { hasPortalAuth } from '../utils/permissions.js';
+import { hasPortalAuth, canUseCommand } from '../utils/permissions.js';
 import { POSITIONS, getAuthLevelRole } from '../utils/positions.js';
 import db from '../utils/botDb.js';
 import { VERIFY_UNVERIFY_LOG_CHANNEL_ID, OFFICIAL_BYPASS_IDS } from '../config.js';
@@ -18,6 +19,11 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   try {
     await interaction.deferReply({ ephemeral: true });
+
+    const perm = await canUseCommand('verify', interaction);
+    if (!perm.allowed) {
+      return interaction.editReply({ content: `❌ ${perm.reason}` });
+    }
 
     const discordId = interaction.user.id;
     const nickname = '(pending approver input)';

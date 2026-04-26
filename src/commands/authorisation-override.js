@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: superuser_only
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { isSuperuser } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { getAuthLevelRole } from '../utils/positions.js';
 import { ALL_SERVER_IDS } from '../config.js';
 import { logAction } from '../utils/logger.js';
@@ -31,8 +32,9 @@ export async function execute(interaction) {
   try {
     await interaction.deferReply({ ephemeral: true });
 
-    if (!await isSuperuser(interaction.user.id)) {
-      return interaction.editReply({ content: '❌ Only superusers can use this command.' });
+    const perm = await canUseCommand('authorisation-override', interaction);
+    if (!perm.allowed) {
+      return interaction.editReply({ content: `❌ ${perm.reason}` });
     }
 
     const targetUser = interaction.options.getUser('user');

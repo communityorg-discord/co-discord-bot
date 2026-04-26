@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder } from 'discord.js';
-import { canRunCommand } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { getDmExemptions } from '../utils/botDb.js';
 
 export const data = new SlashCommandBuilder()
@@ -7,7 +8,7 @@ export const data = new SlashCommandBuilder()
   .setDescription('View and manage users exempt from mass/team DMs');
 
 export async function execute(interaction) {
-  const perm = await canRunCommand(interaction.user.id, 5);
+  const perm = await canUseCommand('dm-exempt', interaction);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
   try {

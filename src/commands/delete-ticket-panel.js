@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: superuser_only
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { canRunCommand } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { getTicketPanelById, getTicketPanelByName, deleteTicketPanel, getAllTicketPanels } from '../utils/botDb.js';
 
 export const data = new SlashCommandBuilder()
@@ -13,9 +14,9 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
-  const auth = await canRunCommand(interaction.user.id, 99);
-  if (!auth.allowed) {
-    return interaction.reply({ content: `❌ ${auth.reason}`, ephemeral: true });
+  const perm = await canUseCommand('ticket-panel-delete', interaction);
+  if (!perm.allowed) {
+    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
   }
 
   const panelName = interaction.options.getString('name');

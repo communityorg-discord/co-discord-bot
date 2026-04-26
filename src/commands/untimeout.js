@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { canRunCommand } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
@@ -12,7 +13,7 @@ export const data = new SlashCommandBuilder()
   .addStringOption(opt => opt.setName('reason').setDescription('Reason for removing the timeout').setRequired(false));
 
 export async function execute(interaction) {
-  const perm = await canRunCommand(interaction.user.id, 5);
+  const perm = await canUseCommand('untimeout', interaction);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
   const target = interaction.options.getUser('user');

@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: superuser_only
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { isSuperuser } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { COOLDOWN_LOG_CHANNEL_ID, MOD_LOG_CHANNEL_ID } from '../config.js';
 import { logAction } from '../utils/logger.js';
 
@@ -25,11 +26,12 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
-  if (!await isSuperuser(interaction.user.id)) {
-    return interaction.reply({ content: '❌ Only superusers can use this command.', ephemeral: true });
-  }
-
   await interaction.deferReply({ ephemeral: true });
+
+  const perm = await canUseCommand('cooldown', interaction);
+  if (!perm.allowed) {
+    return interaction.editReply({ content: `❌ ${perm.reason}` });
+  }
 
   const seconds = interaction.options.getInteger('seconds');
   const targetChannel = interaction.options.getChannel('channel') || interaction.channel;

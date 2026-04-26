@@ -1,3 +1,4 @@
+// COMMAND_PERMISSION_FALLBACK: everyone (per-inbox access enforced inline via getAccessibleInboxes)
 import {
   SlashCommandBuilder, EmbedBuilder, ActionRowBuilder,
   StringSelectMenuBuilder, ButtonBuilder, ButtonStyle,
@@ -9,6 +10,7 @@ import {
   sendReply, sendForward, archiveEmail,
   markdownToDiscord, paginateText,
 } from '../services/emailService.js';
+import { canUseCommand } from '../utils/permissions.js';
 
 const PAGE_SIZE = 8;
 
@@ -102,6 +104,10 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   await interaction.deferReply({ ephemeral: true });
+  const perm = await canUseCommand('inbox', interaction);
+  if (!perm.allowed) {
+    return interaction.editReply({ content: `❌ ${perm.reason}` });
+  }
   const discordUserId = interaction.user.id;
   const discordRoleIds = interaction.member?.roles?.cache?.map(r => r.id) || [];
   const accessibleInboxes = await getAccessibleInboxes(discordUserId, discordRoleIds);

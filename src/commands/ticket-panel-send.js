@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 7
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from 'discord.js';
-import { canRunCommand } from '../utils/permissions.js';
+import { canRunCommand, canUseCommand } from '../utils/permissions.js';
 import { getTicketPanelByName, getAllTicketPanels } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { closeTicketWithTranscript } from '../utils/ticketTranscript.js';
@@ -117,9 +118,9 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
-  const auth = await canRunCommand(interaction.user.id, 7);
-  if (!auth.allowed) {
-    return interaction.reply({ content: `❌ ${auth.reason}`, ephemeral: true });
+  const perm = await canUseCommand('ticket-panel-send', interaction);
+  if (!perm.allowed) {
+    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
   }
 
   const panelName = interaction.options.getString('panel_name');

@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5 OR position is line-manager/supervisor
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
-import { isSuperuser, getPortalUser } from '../utils/permissions.js';
+import { isSuperuser, getPortalUser, canUseCommand } from '../utils/permissions.js';
 import { createAssignment, generateAssignmentNumber, getAssignment, updateAssignment, getAssignmentStats } from '../utils/botDb.js';
 import { getUserByDiscordId, getTeamMembers } from '../db.js';
 import { logAction } from '../utils/logger.js';
@@ -252,9 +253,14 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
+  const perm = await canUseCommand('assign', interaction);
+  if (!perm.allowed) {
+    return interaction.editReply({ content: `❌ ${perm.reason}` });
+  }
+
   const assignerPortal = getPortalUser(interaction.user.id);
-  if (!assignerPortal || !canAssign(assignerPortal)) {
-    return interaction.editReply({ content: '❌ Only line managers and supervisors can create assignments.' });
+  if (!assignerPortal) {
+    return interaction.editReply({ content: '❌ Your Discord account is not linked to the CO Staff Portal.' });
   }
 
   const targetUser = interaction.options.getUser('assigned_to');

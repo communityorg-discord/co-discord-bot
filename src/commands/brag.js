@@ -1,7 +1,9 @@
+// COMMAND_PERMISSION_FALLBACK: everyone
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5;option=user=other
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getUserByDiscordId, getBragStatus } from '../db.js';
 import portalDb from '../db.js';
-import { canRunCommand } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 
 function getWeekKey(date = new Date()) {
   const d = new Date(date);
@@ -36,6 +38,10 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   try {
+    const perm = await canUseCommand('brag', interaction);
+    if (!perm.allowed) {
+      return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    }
     const commandUser = getUserByDiscordId(interaction.user.id);
     if (!commandUser) {
       return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account. Contact DMSPC.', ephemeral: true });
@@ -46,7 +52,7 @@ export async function execute(interaction) {
     let isViewingOther = false;
 
     if (targetUserOption && targetUserOption.id !== interaction.user.id) {
-      const canView = await canRunCommand(interaction.user.id, 5);
+      const canView = await canUseCommand('brag:other', interaction);
       if (!canView.allowed) {
         return interaction.reply({ content: `❌ ${canView.reason}`, ephemeral: true });
       }

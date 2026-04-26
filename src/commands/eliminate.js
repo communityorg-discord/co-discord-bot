@@ -1,10 +1,11 @@
+// COMMAND_PERMISSION_FALLBACK: superuser_only
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { db } from '../utils/botDb.js';
 import { getUserByDiscordId } from '../db.js';
 import { logAction } from '../utils/logger.js';
+import { canUseCommand } from '../utils/permissions.js';
+import { SUPERUSER_IDS } from '../config.js';
 import Database from 'better-sqlite3';
-
-const SUPERUSER_DISCORD_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'];
 
 export const data = new SlashCommandBuilder()
   .setName('eliminate')
@@ -15,8 +16,9 @@ export const data = new SlashCommandBuilder()
   .addStringOption(opt => opt.setName('reason').setDescription('Reason for elimination').setRequired(false));
 
 export async function execute(interaction) {
-  if (!SUPERUSER_DISCORD_IDS.includes(interaction.user.id)) {
-    return interaction.reply({ content: '❌ This command is restricted to superusers only.', ephemeral: true });
+  const perm = await canUseCommand('eliminate', interaction);
+  if (!perm.allowed) {
+    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
   }
 
   const targetId = interaction.options.getString('user').replace(/[<@!>]/g, '').trim();
@@ -28,7 +30,7 @@ export async function execute(interaction) {
     return interaction.reply({ content: '❌ You must type `CONFIRM` exactly (case sensitive) to proceed with elimination.', ephemeral: true });
   }
 
-  if (SUPERUSER_DISCORD_IDS.includes(targetId)) {
+  if (SUPERUSER_IDS.includes(targetId)) {
     return interaction.reply({ content: '❌ Cannot eliminate a superuser.', ephemeral: true });
   }
 

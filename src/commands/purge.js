@@ -1,5 +1,8 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 7;option=scope=full_server
+// COMMAND_PERMISSION_FALLBACK: superuser_only;option=scope=global
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { canRunCommand } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { getUserByDiscordId } from '../db.js';
 import { randomBytes } from 'crypto';
 import { logAction } from '../utils/logger.js';
@@ -119,7 +122,7 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
-  const perm = await canRunCommand(interaction.user.id, 5);
+  const perm = await canUseCommand('purge', interaction);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
   const amount = interaction.options.getInteger('amount');
@@ -137,15 +140,9 @@ export async function execute(interaction) {
 
   // Handle full_server and global scopes
   if (scope === 'full_server' || scope === 'global') {
-    if (scope === 'full_server') {
-      const authCheck = canRunCommand(interaction.user.id, 7);
-      if (!authCheck.allowed) return interaction.editReply({ content: '❌ Full server purge requires Auth Level 7+.' });
-    }
-    if (scope === 'global') {
-      const { SUPERUSER_IDS } = await import('../config.js');
-      if (!SUPERUSER_IDS.includes(interaction.user.id) && !['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'].includes(interaction.user.id)) {
-        return interaction.editReply({ content: '❌ Global purge is superuser only.' });
-      }
+    const scopePerm = await canUseCommand(`purge:${scope}`, interaction);
+    if (!scopePerm.allowed) {
+      return interaction.editReply({ content: `❌ ${scopePerm.reason}` });
     }
     if (confirmText !== 'CONFIRM') {
       return interaction.editReply({ content: '❌ You must set the `confirm` option to `CONFIRM` for this scope.' });

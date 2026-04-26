@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: superuser_only
 import { SlashCommandBuilder, EmbedBuilder, ChannelType } from 'discord.js';
-import { isSuperuser } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import {
   upsertOffice, deleteOffice, getOffice, listOffices,
   setAllowlist, addAllowed, removeAllowed, getAllowlist,
@@ -77,11 +78,13 @@ async function kickNonAllowlisted(guild, channelId) {
 }
 
 export async function execute(interaction) {
-  if (!isSuperuser(interaction.user.id)) {
-    return interaction.reply({ content: '❌ This command requires Superuser access.', ephemeral: true });
+  const sub = interaction.options.getSubcommand(false);
+  const checkName = sub ? `office:${sub}` : 'office';
+  const perm = await canUseCommand(checkName, interaction);
+  if (!perm.allowed) {
+    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
   }
 
-  const sub = interaction.options.getSubcommand();
   const guild = interaction.guild;
   if (!guild) return interaction.reply({ content: '❌ Use this in a server.', ephemeral: true });
 

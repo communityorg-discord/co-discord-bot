@@ -1,5 +1,7 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 3;subcommand=view
+// COMMAND_PERMISSION_FALLBACK: superuser_only;subcommand=delete
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { canRunCommand, isSuperuser } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { getInfractions, getDeletedInfractions, deleteInfraction } from '../utils/botDb.js';
 import { getUserByDiscordId } from '../db.js';
 import { logAction } from '../utils/logger.js';
@@ -58,11 +60,10 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   try {
     const sub = interaction.options.getSubcommand();
+    const perm = await canUseCommand(`infractions:${sub}`, interaction);
+    if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
     if (sub === 'view') {
-      const perm = await canRunCommand(interaction.user.id, 3);
-      if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
-
       const target = interaction.options.getUser('user');
       const includeDeleted = interaction.options.getString('include_deleted') === 'yes';
       const infractions = getInfractions(target.id, false);
@@ -74,7 +75,6 @@ export async function execute(interaction) {
     }
 
     if (sub === 'delete') {
-      if (!await isSuperuser(interaction.user.id)) return interaction.reply({ content: '❌ Superuser only.', ephemeral: true });
       const id = interaction.options.getInteger('id');
       const deleted = deleteInfraction(id, interaction.user.id);
       if (!deleted) return interaction.reply({ content: `❌ Infraction #${id} not found.`, ephemeral: true });

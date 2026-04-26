@@ -1,6 +1,8 @@
+// COMMAND_PERMISSION_FALLBACK: everyone
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { db } from '../utils/botDb.js';
 import { getUserByDiscordId } from '../db.js';
+import { canUseCommand } from '../utils/permissions.js';
 import Database from 'better-sqlite3';
 
 export const data = new SlashCommandBuilder()
@@ -9,6 +11,11 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   await interaction.deferReply();
+
+  const perm = await canUseCommand('stats', interaction);
+  if (!perm.allowed) {
+    return interaction.editReply({ content: `❌ ${perm.reason}` });
+  }
 
   let portalDb;
   try { portalDb = new Database(process.env.PORTAL_DB_PATH, { readonly: true }); } catch { portalDb = null; }

@@ -1,9 +1,10 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5;subcommand=start
+// COMMAND_PERMISSION_FALLBACK: everyone;subcommand=stop
+// COMMAND_PERMISSION_FALLBACK: everyone;subcommand=list
 import { SlashCommandBuilder, EmbedBuilder, ChannelType } from 'discord.js';
 import { startRecording, stopRecording, isRecording, getActiveRecording } from '../services/recordingService.js';
-import { hasPortalAuth } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { db } from '../utils/botDb.js';
-
-const SUPERUSER_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'];
 
 export const data = new SlashCommandBuilder()
   .setName('record')
@@ -31,12 +32,12 @@ export async function execute(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
   const sub = interaction.options.getSubcommand();
+  const perm = await canUseCommand(`record:${sub}`, interaction);
+  if (!perm.allowed) {
+    return interaction.editReply({ content: `❌ ${perm.reason}` });
+  }
 
   if (sub === 'start') {
-    if (!SUPERUSER_IDS.includes(interaction.user.id) && !await hasPortalAuth(interaction.user.id, 5)) {
-      return interaction.editReply({ content: '❌ You need authorisation level 5+ to start recordings.' });
-    }
-
     const voiceChannel = interaction.options.getChannel('channel') || interaction.member.voice?.channel;
     if (!voiceChannel || (voiceChannel.type !== ChannelType.GuildVoice && voiceChannel.type !== ChannelType.GuildStageVoice)) {
       return interaction.editReply({ content: '❌ Please specify a voice channel or join one first.' });

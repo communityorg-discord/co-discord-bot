@@ -1,6 +1,8 @@
+// COMMAND_PERMISSION_FALLBACK: everyone
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, TextInputBuilder, ModalBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { logAction } from '../utils/logger.js';
 import { getLogConfig, setLogChannel, getGlobalLogChannel, setGlobalLogChannel, getLogChannel, getAllLogConfig, getAssignmentStats } from '../utils/botDb.js';
+import { canUseCommand } from '../utils/permissions.js';
 
 // Per-guild log categories and their types
 const CATEGORIES = {
@@ -193,6 +195,11 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   try {
   await interaction.deferReply();
+
+  const perm = await canUseCommand('logspanel', interaction);
+  if (!perm.allowed) {
+    return interaction.editReply({ content: `❌ ${perm.reason}` });
+  }
 
   const guildId = interaction.guildId;
   const embed = buildInfoEmbed(guildId);

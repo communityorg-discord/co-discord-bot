@@ -1,5 +1,7 @@
+// COMMAND_PERMISSION_FALLBACK: everyone
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import db, { getUserByDiscordId } from '../db.js';
+import { canUseCommand } from '../utils/permissions.js';
 
 // ISO week key helper (matches portal's getWeekKey)
 function weekKey(d = new Date()) {
@@ -24,6 +26,10 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   try {
+    const perm = await canUseCommand('aps', interaction);
+    if (!perm.allowed) {
+      return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    }
     const user = getUserByDiscordId(interaction.user.id);
     if (!user) {
       return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account.', ephemeral: true });

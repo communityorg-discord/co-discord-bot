@@ -1,7 +1,8 @@
+// COMMAND_PERMISSION_FALLBACK: superuser_only
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { logAction } from '../utils/logger.js';
 import db, { addInfraction } from '../utils/botDb.js';
-import { isSuperuser } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { ALL_SERVER_IDS } from '../config.js';
 
 // Uses ALL_SERVER_IDS from config.js
@@ -26,8 +27,9 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
-    if (!await isSuperuser(interaction.user.id)) {
-      return interaction.reply({ content: '❌ Insufficient permissions.', ephemeral: true });
+    const perm = await canUseCommand('ban', interaction);
+    if (!perm.allowed) {
+      return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
     }
 
     if (!interaction.inGuild()) {

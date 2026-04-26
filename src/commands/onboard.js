@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5
 import { SlashCommandBuilder, EmbedBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
-import { canRunCommand } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { getUserByDiscordId } from '../db.js';
 import { POSITIONS } from '../utils/positions.js';
 import { applyVerification } from '../utils/verifyHelper.js';
@@ -19,9 +20,9 @@ export const data = new SlashCommandBuilder()
   .addStringOption(opt => opt.setName('position').setDescription('Their position').setRequired(true).addChoices(...positionChoices));
 
 export async function execute(interaction) {
-  const check = canRunCommand(interaction.user.id, 5);
-  if (!check.allowed) {
-    return interaction.reply({ content: '❌ Auth Level 5+ required to onboard staff.', ephemeral: true });
+  const perm = await canUseCommand('onboard', interaction);
+  if (!perm.allowed) {
+    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
   }
 
   const targetUser = interaction.options.getUser('user');

@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { canRunCommand } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { getUserByDiscordId } from '../db.js';
 import { randomBytes } from 'crypto';
 import { logAction } from '../utils/logger.js';
@@ -137,7 +138,7 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
-  const perm = await canRunCommand(interaction.user.id, 5);
+  const perm = await canUseCommand('scribe', interaction);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
   const limit = interaction.options.getInteger('limit') || 100;

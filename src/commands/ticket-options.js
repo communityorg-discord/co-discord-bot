@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
-import { canRunCommand } from '../utils/permissions.js';
+import { canRunCommand, canUseCommand, isSuperuser } from '../utils/permissions.js';
 import { logAction } from '../utils/logger.js';
 import { getTicketChannelByChannelId, closeTicket, getTicketPanelById } from '../utils/botDb.js';
 import { closeTicketWithTranscript } from '../utils/ticketTranscript.js';
@@ -10,9 +11,9 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   try {
-  const auth = await canRunCommand(interaction.user.id, 5);
-  if (!auth.allowed) {
-    return interaction.reply({ content: `❌ ${auth.reason}`, ephemeral: true });
+  const perm = await canUseCommand('ticket-options', interaction);
+  if (!perm.allowed) {
+    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
   }
 
   const channelId = interaction.channel.id;
@@ -25,7 +26,7 @@ export async function execute(interaction) {
   const guild = interaction.guild;
   const member = guild.members.cache.get(interaction.user.id) || await guild.members.fetch(interaction.user.id).catch(() => null);
   const isClaimer = ticket.claimed_by === interaction.user.id;
-  const isSuper = auth.reason === 'Superuser';
+  const isSuper = isSuperuser(interaction.user.id);
 
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()

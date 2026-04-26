@@ -1,7 +1,9 @@
+// COMMAND_PERMISSION_FALLBACK: everyone
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getUserByDiscordId } from '../db.js';
 import { getInfractions, getActiveSuspension, getActiveInvestigation, getActiveGlobalBan } from '../utils/botDb.js';
 import botDb from '../utils/botDb.js';
+import { canUseCommand } from '../utils/permissions.js';
 
 export const data = new SlashCommandBuilder()
   .setName('user')
@@ -10,6 +12,10 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   try {
+    const perm = await canUseCommand('user', interaction);
+    if (!perm.allowed) {
+      return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    }
     const target = interaction.options.getUser('user') || interaction.user;
     const portalUser = getUserByDiscordId(target.id);
     const infractions = getInfractions(target.id);

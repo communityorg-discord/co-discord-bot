@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: superuser_only
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { isSuperuser } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { ALL_SERVER_IDS, MASS_UNBAN_LOG_CHANNEL_ID } from '../config.js';
 import { logAction } from '../utils/logger.js';
 
@@ -22,11 +23,12 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
-  if (!await isSuperuser(interaction.user.id)) {
-    return interaction.reply({ content: '❌ Only superusers can use this command.', ephemeral: true });
-  }
-
   await interaction.deferReply({ ephemeral: true });
+
+  const perm = await canUseCommand('mass-unban', interaction);
+  if (!perm.allowed) {
+    return interaction.editReply({ content: `❌ ${perm.reason}` });
+  }
 
   const scope = interaction.options.getString('scope');
   const reason = interaction.options.getString('reason');

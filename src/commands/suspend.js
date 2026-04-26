@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { canRunCommand } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { suspendAcrossGuilds } from '../utils/roleManager.js';
 import { addInfraction, addSuspension } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
@@ -26,7 +27,7 @@ export const data = new SlashCommandBuilder()
   .addStringOption(opt => opt.setName('duration').setDescription('Duration e.g. 7d, 24h, 1m (leave blank for indefinite)').setRequired(false));
 
 export async function execute(interaction) {
-  const perm = await canRunCommand(interaction.user.id, 5);
+  const perm = await canUseCommand('suspend', interaction);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
   const target = interaction.options.getUser('user');

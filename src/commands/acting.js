@@ -1,12 +1,11 @@
+// COMMAND_PERMISSION_FALLBACK: superuser_only
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { SUPERUSER_IDS } from '../config.js';
 import { POSITIONS } from '../utils/positions.js';
 import { getUserByDiscordId } from '../db.js';
 import { getActiveActingAssignment, endActingAssignment } from '../utils/botDb.js';
 import { applyActingRoles, revertActingRoles } from '../services/leaveRoles.js';
 import { logAction } from '../utils/logger.js';
-
-const SUPERUSER_DISCORD_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'];
+import { canUseCommand } from '../utils/permissions.js';
 
 // Build position choices (Discord allows max 25)
 const positionChoices = Object.keys(POSITIONS)
@@ -32,11 +31,12 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
-  if (!SUPERUSER_DISCORD_IDS.includes(interaction.user.id) && !SUPERUSER_IDS.includes(interaction.user.id)) {
-    return interaction.editReply({ content: '❌ Only superusers (dionm, evans) can manage acting assignments.' });
-  }
-
   const sub = interaction.options.getSubcommand();
+  const checkName = sub ? `acting:${sub}` : 'acting';
+  const perm = await canUseCommand(checkName, interaction);
+  if (!perm.allowed) {
+    return interaction.editReply({ content: `❌ ${perm.reason}` });
+  }
 
   if (sub === 'start') {
     const targetUser = interaction.options.getUser('user');

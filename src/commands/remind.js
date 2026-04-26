@@ -1,6 +1,8 @@
+// COMMAND_PERMISSION_FALLBACK: everyone
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 4;option=target=other-user
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { db } from '../utils/botDb.js';
-import { canRunCommand } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 
 export const data = new SlashCommandBuilder()
   .setName('remind')
@@ -68,15 +70,20 @@ function parseTime(input) {
 export async function execute(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
+  const perm = await canUseCommand('remind', interaction);
+  if (!perm.allowed) {
+    return interaction.editReply({ content: `❌ ${perm.reason}` });
+  }
+
   const timeStr = interaction.options.getString('time');
   const message = interaction.options.getString('message');
   const targetUser = interaction.options.getUser('target') || interaction.user;
 
   // Auth check for reminding others
   if (targetUser.id !== interaction.user.id) {
-    const check = canRunCommand(interaction.user.id, 4);
-    if (!check.allowed) {
-      return interaction.editReply({ content: '❌ You need Auth Level 4+ to set reminders for other people.' });
+    const otherPerm = await canUseCommand('remind:other', interaction);
+    if (!otherPerm.allowed) {
+      return interaction.editReply({ content: `❌ ${otherPerm.reason}` });
     }
   }
 

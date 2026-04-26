@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 7
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { canRunCommand } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { saveTicketPanel, getTicketPanelByName } from '../utils/botDb.js';
 
 export const data = new SlashCommandBuilder()
@@ -13,9 +14,9 @@ export const data = new SlashCommandBuilder()
   .addChannelOption(opt => opt.setName('transcripts_channel').setDescription('Channel where closed ticket transcripts are posted').setRequired(false));
 
 export async function execute(interaction) {
-  const auth = await canRunCommand(interaction.user.id, 7);
-  if (!auth.allowed) {
-    return interaction.reply({ content: `❌ ${auth.reason}`, ephemeral: true });
+  const perm = await canUseCommand('create-ticket-panel', interaction);
+  if (!perm.allowed) {
+    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
   }
 
   const panelName = interaction.options.getString('name').trim();

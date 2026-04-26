@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 7
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { canRunCommand, requiresSuperuserWarning } from '../utils/permissions.js';
+import { canUseCommand, requiresSuperuserWarning } from '../utils/permissions.js';
 import { ALL_SERVER_IDS, APPEALS_SERVER_ID } from '../config.js';
 import { addInfraction, addGlobalBan, getActiveGlobalBan } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
@@ -15,7 +16,7 @@ export const data = new SlashCommandBuilder()
     .addChoices({ name: 'Yes', value: 'yes' }, { name: 'No', value: 'no' }));
 
 export async function execute(interaction) {
-  const perm = await canRunCommand(interaction.user.id, 7);
+  const perm = await canUseCommand('gban', interaction);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
   const target = interaction.options.getUser('user');

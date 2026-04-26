@@ -1,4 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: everyone
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { canUseCommand } from '../utils/permissions.js';
 
 const startTime = Date.now();
 const botVersion = 'v1.1.0';
@@ -18,6 +20,11 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   await interaction.deferReply();
+
+  const perm = await canUseCommand('bot', interaction);
+  if (!perm.allowed) {
+    return interaction.editReply({ content: `❌ ${perm.reason}` });
+  }
 
   const uptimeSeconds = Math.floor((Date.now() - startTime) / 1000);
   const startTimestamp = Math.floor(startTime / 1000);

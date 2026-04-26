@@ -1,5 +1,7 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5
+// COMMAND_PERMISSION_FALLBACK: superuser_only;option=mass
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder } from 'discord.js';
-import { canRunCommand, isSuperuser } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { logAction } from '../utils/logger.js';
 import { DM_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
@@ -64,7 +66,7 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
-  const perm = await canRunCommand(interaction.user.id, 5);
+  const perm = await canUseCommand('dm', interaction);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
   const target = interaction.options.getUser('user');
@@ -81,10 +83,13 @@ export async function execute(interaction) {
     return interaction.reply({ content: '❌ You must specify a `user`, set `mass: True`, or choose a `team`.', ephemeral: true });
   }
 
-  // Mass DM requires superuser
-  if (mass && !await isSuperuser(interaction.user.id)) {
-    interaction._commandFailed = 'Mass DM requires superuser access.';
-    return interaction.reply({ content: '❌ Mass DM requires superuser access.', ephemeral: true });
+  // Mass DM has its own permission gate
+  if (mass) {
+    const massPerm = await canUseCommand('dm:mass', interaction);
+    if (!massPerm.allowed) {
+      interaction._commandFailed = 'Mass DM requires superuser access.';
+      return interaction.reply({ content: `❌ ${massPerm.reason}`, ephemeral: true });
+    }
   }
 
   await interaction.deferReply({ ephemeral: true });

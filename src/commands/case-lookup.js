@@ -1,5 +1,7 @@
+// COMMAND_PERMISSION_FALLBACK: everyone (per-case access also enforced inline: raiser/subject/assignee or auth_level >= 5)
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import db, { getUserByDiscordId } from '../db.js';
+import { canUseCommand } from '../utils/permissions.js';
 
 export const data = new SlashCommandBuilder()
   .setName('case')
@@ -8,6 +10,10 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   try {
+    const perm = await canUseCommand('case', interaction);
+    if (!perm.allowed) {
+      return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    }
     const caller = getUserByDiscordId(interaction.user.id);
     if (!caller) {
       return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account.', ephemeral: true });

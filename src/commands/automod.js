@@ -1,6 +1,8 @@
+// COMMAND_PERMISSION_FALLBACK: superuser_only;subcommand=setup
+// COMMAND_PERMISSION_FALLBACK: everyone;subcommand=request-approval
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { db } from '../utils/botDb.js';
-import { isSuperuser, canRunCommand } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { randomBytes } from 'crypto';
 import { postAllPanels } from '../services/automodPanels.js';
 import { automod } from '../services/automod.js';
@@ -22,11 +24,12 @@ export async function execute(interaction) {
   const sub = interaction.options.getSubcommand();
 
   if (sub === 'setup') {
-    if (!isSuperuser(interaction.user.id)) {
-      return interaction.reply({ content: '❌ Only superusers can set up automod panels.', ephemeral: true });
-    }
-
     await interaction.deferReply({ ephemeral: true });
+
+    const perm = await canUseCommand('automod:setup', interaction);
+    if (!perm.allowed) {
+      return interaction.editReply({ content: `❌ ${perm.reason}` });
+    }
 
     try {
       const results = await postAllPanels(interaction.channel, interaction.guildId);
@@ -39,6 +42,11 @@ export async function execute(interaction) {
 
   else if (sub === 'request-approval') {
     await interaction.deferReply({ ephemeral: true });
+
+    const perm = await canUseCommand('automod:request-approval', interaction);
+    if (!perm.allowed) {
+      return interaction.editReply({ content: `❌ ${perm.reason}` });
+    }
 
     const actionType = interaction.options.getString('action');
     const description = interaction.options.getString('description');

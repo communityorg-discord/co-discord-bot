@@ -1,11 +1,11 @@
+// COMMAND_PERMISSION_FALLBACK: superuser_only
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { getPortalUser, getOrCreateVerificationChannel } from '../utils/verifyHelper.js';
 import { POSITIONS } from '../utils/positions.js';
 import { db } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { OFFICIAL_BYPASS_IDS } from '../config.js';
-
-const SUPERUSER_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'];
+import { canUseCommand } from '../utils/permissions.js';
 
 export const data = new SlashCommandBuilder()
   .setName('force-verify')
@@ -20,8 +20,9 @@ export async function execute(interaction) {
   try {
     await interaction.deferReply({ ephemeral: true });
 
-    if (!SUPERUSER_IDS.includes(interaction.user.id)) {
-      return interaction.editReply({ content: 'This command is restricted to superusers only.' });
+    const perm = await canUseCommand('force-verify', interaction);
+    if (!perm.allowed) {
+      return interaction.editReply({ content: `❌ ${perm.reason}` });
     }
 
     const targetUser = interaction.options.getUser('user');

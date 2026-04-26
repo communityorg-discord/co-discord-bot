@@ -1,6 +1,8 @@
+// COMMAND_PERMISSION_FALLBACK: everyone (gated by personal email setup existing)
 import { SlashCommandBuilder, ModalBuilder, TextInputBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { getPersonalEmailSetup } from '../utils/botDb.js';
 import { fetchEmailConfig } from '../services/emailService.js';
+import { canUseCommand } from '../utils/permissions.js';
 
 export const data = new SlashCommandBuilder()
   .setName('compose')
@@ -12,6 +14,10 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
+  const perm = await canUseCommand('compose', interaction);
+  if (!perm.allowed) {
+    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  }
   const setup = getPersonalEmailSetup(interaction.user.id);
   if (!setup) {
     return interaction.reply({

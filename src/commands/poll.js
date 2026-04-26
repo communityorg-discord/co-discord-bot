@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 1
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } from 'discord.js';
-import { canRunCommand } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { db } from '../utils/botDb.js';
 
 // Ensure polls table exists
@@ -99,9 +100,9 @@ export function buildPollButtons(pollId, options, disabled = false) {
 export async function execute(interaction) {
   await interaction.deferReply();
 
-  const check = canRunCommand(interaction.user.id, 1);
-  if (!check.allowed) {
-    return interaction.editReply({ content: `❌ ${check.reason}` });
+  const perm = await canUseCommand('poll', interaction);
+  if (!perm.allowed) {
+    return interaction.editReply({ content: `❌ ${perm.reason}` });
   }
 
   const question = interaction.options.getString('question');

@@ -1,4 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: everyone
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { canUseCommand } from '../utils/permissions.js';
 
 const CATEGORIES = [
   { name: 'Verification & Onboarding', emoji: '✅', commands: [
@@ -71,6 +73,10 @@ export const data = new SlashCommandBuilder()
   .setDescription('Show all bot commands grouped by category');
 
 export async function execute(interaction) {
+  const perm = await canUseCommand('help', interaction);
+  if (!perm.allowed) {
+    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  }
   const totalCmds = CATEGORIES.reduce((s, c) => s + c.commands.length, 0);
 
   const embed = new EmbedBuilder()

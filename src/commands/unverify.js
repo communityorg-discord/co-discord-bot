@@ -1,5 +1,7 @@
+// COMMAND_PERMISSION_FALLBACK: superuser_only
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { isSuperuser, stripVerification, getOrCreateVerificationChannel } from '../utils/verifyHelper.js';
+import { canUseCommand } from '../utils/permissions.js';
 import db from '../utils/botDb.js';
 import { VERIFY_UNVERIFY_LOG_CHANNEL_ID } from '../config.js';
 import { logAction } from '../utils/logger.js';
@@ -37,8 +39,9 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
-  if (!await isSuperuser(interaction.user.id)) {
-    return interaction.editReply({ content: '❌ Only superusers can run /unverify.' });
+  const perm = await canUseCommand('unverify', interaction);
+  if (!perm.allowed) {
+    return interaction.editReply({ content: `❌ ${perm.reason}` });
   }
 
   const target = interaction.options.getUser('user');

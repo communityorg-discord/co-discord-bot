@@ -1,5 +1,7 @@
+// COMMAND_PERMISSION_FALLBACK: everyone
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getUserByDiscordId, getStaffByName } from '../db.js';
+import { canUseCommand } from '../utils/permissions.js';
 
 export const data = new SlashCommandBuilder()
   .setName('staff')
@@ -8,6 +10,10 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   try {
+  const perm = await canUseCommand('staff', interaction);
+  if (!perm.allowed) {
+    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  }
   const requestingUser = getUserByDiscordId(interaction.user.id);
   if (!requestingUser) {
     return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account.', ephemeral: true });

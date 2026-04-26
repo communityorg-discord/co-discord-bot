@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: superuser_only
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { isSuperuser } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { ALL_SERVER_IDS, APPEALS_SERVER_ID } from '../config.js';
 import { getActiveGlobalBan } from '../utils/botDb.js';
 import db, { addInfraction } from '../utils/botDb.js';
@@ -13,7 +14,8 @@ export const data = new SlashCommandBuilder()
   .addStringOption(opt => opt.setName('reason').setDescription('Reason for unbanning').setRequired(true));
 
 export async function execute(interaction) {
-  if (!await isSuperuser(interaction.user.id)) return interaction.reply({ content: '❌ Superuser only.', ephemeral: true });
+  const perm = await canUseCommand('gunban', interaction);
+  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
   const userId = interaction.options.getString('userid');
   const reason = interaction.options.getString('reason');

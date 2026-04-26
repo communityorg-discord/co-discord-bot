@@ -1,6 +1,8 @@
+// COMMAND_PERMISSION_FALLBACK: everyone
 import { SlashCommandBuilder, EmbedBuilder, ModalBuilder, TextInputBuilder, ActionRowBuilder } from 'discord.js';
 import { savePersonalEmailSetup, getPersonalEmailSetup, removePersonalEmailSetup } from '../utils/botDb.js';
 import { getUserByDiscordId } from '../db.js';
+import { canUseCommand } from '../utils/permissions.js';
 
 export const data = new SlashCommandBuilder()
   .setName('setup-email')
@@ -22,6 +24,12 @@ export async function execute(interaction) {
   let sub;
   try { sub = interaction.options.getSubcommand(); }
   catch { return interaction.reply({ content: 'Please select a subcommand.' }); }
+
+  const checkName = sub ? `setup-email:${sub}` : 'setup-email';
+  const perm = await canUseCommand(checkName, interaction);
+  if (!perm.allowed) {
+    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  }
 
   if (sub === 'configure') {
     const portalUser = getUserByDiscordId(interaction.user.id);

@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
-import { canRunCommand } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { getPortalUser } from '../utils/verifyHelper.js';
 import { addInvestigationRole, removeInvestigationRole, restorePositionRoles } from '../utils/roleManager.js';
 import { addInfraction } from '../utils/botDb.js';
@@ -20,13 +21,13 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
-  const target = interaction.options.getUser('user');
-  const reason = interaction.options.getString('description');
-
-  const perm = await canRunCommand(interaction.user.id, 5);
+  const perm = await canUseCommand('investigate', interaction);
   if (!perm.allowed) {
     return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
   }
+
+  const target = interaction.options.getUser('user');
+  const reason = interaction.options.getString('description');
 
   const portalUser = await getPortalUser(target.id);
   const displayName = portalUser?.display_name || target.username;

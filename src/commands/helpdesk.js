@@ -1,9 +1,11 @@
+// COMMAND_PERMISSION_FALLBACK: everyone
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import {
   getUserByDiscordId,
   getHelpdeskTicketByRef,
   getRecentHelpdeskTickets,
 } from '../db.js';
+import { canUseCommand } from '../utils/permissions.js';
 
 const STATUS_EMOJI = {
   open: '🟢',
@@ -38,6 +40,11 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const sub = interaction.options.getSubcommand();
+  const checkName = sub ? `helpdesk:${sub}` : 'helpdesk';
+  const perm = await canUseCommand(checkName, interaction);
+  if (!perm.allowed) {
+    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  }
 
   // Every subcommand other than 'new' needs a linked portal user.
   const portalUser = getUserByDiscordId(interaction.user.id);

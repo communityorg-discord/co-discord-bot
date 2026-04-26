@@ -1,6 +1,7 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5
 import { SlashCommandBuilder, EmbedBuilder, ChannelType } from 'discord.js';
 import { db } from '../utils/botDb.js';
-import { hasPortalAuth } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 
 export const data = new SlashCommandBuilder()
   .setName('counting')
@@ -33,11 +34,12 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
-  if (!await hasPortalAuth(interaction.user.id, 5)) {
-    return interaction.editReply({ content: '❌ You need authorisation level 5+ to manage counting channels.' });
+  const sub = interaction.options.getSubcommand(false);
+  const checkName = sub ? `counting:${sub}` : 'counting';
+  const perm = await canUseCommand(checkName, interaction);
+  if (!perm.allowed) {
+    return interaction.editReply({ content: `❌ ${perm.reason}` });
   }
-
-  const sub = interaction.options.getSubcommand();
 
   if (sub === 'setup') {
     const channel = interaction.options.getChannel('channel');

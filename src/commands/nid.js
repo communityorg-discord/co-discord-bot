@@ -1,5 +1,7 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 3
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { getUserByDiscordId } from '../db.js';
+import { canUseCommand } from '../utils/permissions.js';
 
 export const data = new SlashCommandBuilder()
   .setName('nid')
@@ -14,12 +16,13 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   try {
+  const perm = await canUseCommand('nid', interaction);
+  if (!perm.allowed) {
+    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  }
   const supervisor = getUserByDiscordId(interaction.user.id);
   if (!supervisor) {
     return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account.', ephemeral: true });
-  }
-  if ((supervisor.auth_level || 0) < 3) {
-    return interaction.reply({ content: '❌ You do not have permission to raise disciplinary actions.', ephemeral: true });
   }
 
   const staffInput = interaction.options.getString('staff');

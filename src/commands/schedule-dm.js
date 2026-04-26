@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { canRunCommand } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { db } from '../utils/botDb.js';
 import { getUserByDiscordId } from '../db.js';
 
@@ -82,9 +83,9 @@ function parseWhen(input) {
 export async function execute(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
-  const check = canRunCommand(interaction.user.id, 5);
-  if (!check.allowed) {
-    return interaction.editReply({ content: `❌ ${check.reason}` });
+  const perm = await canUseCommand('schedule-dm', interaction);
+  if (!perm.allowed) {
+    return interaction.editReply({ content: `❌ ${perm.reason}` });
   }
 
   const targetUser = interaction.options.getUser('user');

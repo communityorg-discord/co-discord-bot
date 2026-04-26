@@ -1,6 +1,9 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5;subcommand=channel
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 6;subcommand=server
+// COMMAND_PERMISSION_FALLBACK: superuser_only;subcommand=global
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
 import { db } from '../utils/botDb.js';
-import { canRunCommand, isSuperuser } from '../utils/permissions.js';
+import { canUseCommand } from '../utils/permissions.js';
 import { logAction } from '../utils/logger.js';
 
 function parseDuration(input) {
@@ -88,18 +91,12 @@ export async function execute(interaction) {
   const action = interaction.options.getString('action');
   const reason = interaction.options.getString('reason') || 'No reason provided';
 
-  // Auth checks
-  if (sub === 'channel') {
-    const perm = canRunCommand(interaction.user.id, 5);
-    if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
-  } else if (sub === 'server') {
-    const perm = canRunCommand(interaction.user.id, 6);
-    if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
-  } else if (sub === 'global') {
-    if (!isSuperuser(interaction.user.id)) return interaction.reply({ content: '❌ Global lockdown is superuser only.', ephemeral: true });
-    if (action === 'lock' && interaction.options.getString('confirm') !== 'CONFIRM') {
-      return interaction.reply({ content: '❌ Set `confirm` to `CONFIRM` for global lockdown.', ephemeral: true });
-    }
+  // Auth check
+  const perm = await canUseCommand(`lockdown:${sub}`, interaction);
+  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+
+  if (sub === 'global' && action === 'lock' && interaction.options.getString('confirm') !== 'CONFIRM') {
+    return interaction.reply({ content: '❌ Set `confirm` to `CONFIRM` for global lockdown.', ephemeral: true });
   }
 
   await interaction.deferReply({ ephemeral: true });

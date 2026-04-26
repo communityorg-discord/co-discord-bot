@@ -1,5 +1,6 @@
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 7
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { canRunCommand, requiresSuperuserWarning, isSuperuser } from '../utils/permissions.js';
+import { canUseCommand, requiresSuperuserWarning } from '../utils/permissions.js';
 import { terminateAcrossGuilds } from '../utils/roleManager.js';
 import { addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
@@ -14,11 +15,8 @@ export const data = new SlashCommandBuilder()
   .addStringOption(opt => opt.setName('reason').setDescription('Reason for termination').setRequired(true));
 
 export async function execute(interaction) {
-  const perm = await canRunCommand(interaction.user.id, 5);
+  const perm = await canUseCommand('terminate', interaction);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
-  if (!await isSuperuser(interaction.user.id) && !(await canRunCommand(interaction.user.id, 7)).allowed) {
-    return interaction.reply({ content: `❌ Termination requires Auth Level 7 or Superuser.`, ephemeral: true });
-  }
 
   const target = interaction.options.getUser('user');
   const reason = interaction.options.getString('reason');
