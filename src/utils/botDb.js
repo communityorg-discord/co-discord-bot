@@ -1061,10 +1061,14 @@ export function activateActingAssignment(id) {
 
 // ── Office Access Control ───────────────────────────────────────────────────
 
+// Cleanup of legacy tables that no longer exist in the current schema.
+// IMPORTANT: do NOT add office_allowlist or managed_offices here — those
+// are LIVE tables and dropping them on every bot restart wipes every
+// allowlist (`/office add` rows survive zero seconds past the next pm2
+// restart). Only legacy tables go in this list.
 db.exec(`DROP TABLE IF EXISTS office_keys`);
 db.exec(`DROP TABLE IF EXISTS office_access_requests`);
 db.exec(`DROP TABLE IF EXISTS office_master_panel`);
-db.exec(`DROP TABLE IF EXISTS office_allowlist`);
 db.exec(`DROP TABLE IF EXISTS offices`);
 
 db.exec(`CREATE TABLE IF NOT EXISTS managed_offices (
