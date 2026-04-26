@@ -19,10 +19,9 @@ export const data = new SlashCommandBuilder()
   .setDescription('Manage acting position assignments')
   .addSubcommand(sub =>
     sub.setName('start')
-      .setDescription('Assign an acting position to a staff member')
+      .setDescription('Assign an acting position to a staff member (applies immediately)')
       .addUserOption(opt => opt.setName('user').setDescription('Staff member to assign acting to').setRequired(true))
       .addStringOption(opt => opt.setName('position').setDescription('Position to act in').setRequired(true).addChoices(...positionChoices))
-      .addStringOption(opt => opt.setName('timing').setDescription('"now" or "midnight" (default: midnight)').setRequired(false))
   )
   .addSubcommand(sub =>
     sub.setName('end')
@@ -42,48 +41,28 @@ export async function execute(interaction) {
   if (sub === 'start') {
     const targetUser = interaction.options.getUser('user');
     const position = interaction.options.getString('position');
-    const timing = (interaction.options.getString('timing') || 'midnight').toLowerCase();
 
     const portalUser = getUserByDiscordId(targetUser.id);
     if (!portalUser) {
       return interaction.editReply({ content: '❌ That user is not linked to the CO Staff Portal.' });
     }
 
-    // Check if already has an active acting
     const existing = getActiveActingAssignment(targetUser.id);
     if (existing) {
       return interaction.editReply({ content: `❌ ${portalUser.display_name} already has an active acting assignment for **${existing.position}**. End it first with \`/acting end\`.` });
     }
 
-    if (timing === 'now') {
-      await applyActingRoles(interaction.client, targetUser.id, position, null, null, interaction.user.username);
-
-      await interaction.editReply({ content: `✅ Acting assignment applied immediately. **${portalUser.display_name}** now has **${position}** roles.` });
-    } else {
-      // Queue for midnight — store in acting_assignments with status 'pending'
-      const { createActingAssignment } = await import('../utils/botDb.js');
-      createActingAssignment({
-        leaveRequestId: null,
-        onLeaveDiscordId: 'manual',
-        actingDiscordId: targetUser.id,
-        position,
-        rolesApplied: [],
-        originalRoles: [],
-        assignedBy: interaction.user.username,
-      });
-
-      await interaction.editReply({ content: `✅ Acting assignment queued. **${portalUser.display_name}** will receive **${position}** roles at midnight tonight.` });
-    }
+    await applyActingRoles(interaction.client, targetUser.id, position, null, null, interaction.user.username);
+    await interaction.editReply({ content: `✅ Acting assignment applied. **${portalUser.display_name}** now has **${position}** roles.` });
 
     await logAction(interaction.client, {
       action: '📌 Acting Assignment (Manual)',
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       target: { discordId: targetUser.id, name: portalUser.display_name },
-      reason: `Acting as ${position} — ${timing === 'now' ? 'applied immediately' : 'queued for midnight'}`,
+      reason: `Acting as ${position} — applied immediately`,
       color: 0x5865F2,
       fields: [
         { name: 'Position', value: position, inline: true },
-        { name: 'Timing', value: timing === 'now' ? 'Immediate' : 'Midnight', inline: true },
       ],
       guildId: interaction.guildId
     });

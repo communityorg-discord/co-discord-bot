@@ -447,47 +447,14 @@ client.once('ready', async () => {
     } catch (e) { console.error('[Acting Nomination Cron]', e.message); }
   }, 'Acting Nomination Cron');
 
-  // Process any pending acting assignments at midnight — apply roles but don't create duplicate DB records
+  // Process any pending acting assignments at 00:01 — safety-net for any rows
+  // that ended up pending (e.g. via leave-flow nominations). Manual /acting
+  // start now applies immediately, but legacy 'pending' rows still drain here.
   scheduleAtTime(0, 1, async () => {
     try {
-      const { db } = await import('./utils/botDb.js');
-      const { POSITIONS } = await import('./utils/positions.js');
-      const pending = db.prepare("SELECT * FROM acting_assignments WHERE status = 'pending'").all();
-      for (const a of pending) {
-        // Check if there's already an active assignment for this person+position
-        const existing = db.prepare("SELECT id FROM acting_assignments WHERE acting_discord_id = ? AND position = ? AND status = 'active'").get(a.acting_discord_id, a.position);
-        if (existing) {
-          console.log(`[Acting Midnight] ${a.acting_discord_id} already active as ${a.position} — skipping`);
-          db.prepare("UPDATE acting_assignments SET status = 'ended', ended_at = datetime('now') WHERE id = ?").run(a.id);
-          continue;
-        }
-
-        // Apply roles directly without creating a new DB record
-        const positionRoles = POSITIONS[a.position] || [];
-        const rolesApplied = {};
-        for (const [guildId, guild] of client.guilds.cache) {
-          try {
-            const member = await guild.members.fetch(a.acting_discord_id).catch(() => null);
-            if (!member) continue;
-            const addedIds = [];
-            for (const roleName of positionRoles) {
-              const role = guild.roles.cache.find(r => r.name === roleName);
-              if (role && !member.roles.cache.has(role.id)) {
-                await member.roles.add(role).catch(() => {});
-                addedIds.push(role.id);
-              }
-            }
-            const shortPos = a.position.split('(')[0].split(',')[0].trim();
-            const baseName = (member.nickname || member.user.username).replace(/ \(Acting.*\)$/, '');
-            await member.setNickname((baseName + ` (Acting ${shortPos})`).slice(0, 32)).catch(() => {});
-            if (addedIds.length) rolesApplied[guildId] = addedIds;
-          } catch {}
-        }
-        db.prepare("UPDATE acting_assignments SET status = 'active', started_at = datetime('now'), roles_applied = ? WHERE id = ?")
-          .run(JSON.stringify(rolesApplied), a.id);
-        console.log(`[Acting Midnight] Activated ${a.acting_discord_id} as ${a.position}`);
-      }
-      if (pending.length) console.log(`[Acting Midnight] Processed ${pending.length} pending assignments`);
+      const { processPendingActingAssignments } = await import('./services/leaveRoles.js');
+      const processed = await processPendingActingAssignments(client);
+      if (processed.length) console.log(`[Acting Midnight] Processed ${processed.length} pending assignments`);
     } catch (e) { console.error('[Acting Midnight]', e.message); }
   }, 'Acting Midnight Cron');
 
@@ -3111,6 +3078,21 @@ webhookApp.post('/webhook/notify', async (req, res) => {
     }
   } catch (e) {
     console.error('[webhook/notify] fatal:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// POST /webhook/acting-process-pending — apply roles for any acting_assignments
+// rows still in 'pending' status. Optional body: { id } to target one row.
+webhookApp.post('/webhook/acting-process-pending', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { processPendingActingAssignments } = await import('./services/leaveRoles.js');
+    const id = req.body && req.body.id ? Number(req.body.id) : null;
+    const processed = await processPendingActingAssignments(client, id ? { id } : {});
+    res.json({ ok: true, processed });
+  } catch (e) {
+    console.error('[webhook/acting-process-pending] fatal:', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });

@@ -225,6 +225,65 @@ export async function revertLeaveRole(client, leave, portalDb) {
   });
 }
 
+// ── Process queued (pending) acting assignments ──────────────────────────────
+// Used by both the midnight cron and the /webhook/acting-process-pending
+// endpoint so manual triggering applies the same logic as the scheduled job.
+// opts.id (optional) restricts to a single acting_assignments row.
+export async function processPendingActingAssignments(client, opts = {}) {
+  const { db } = await import('../utils/botDb.js');
+  const rows = opts.id
+    ? db.prepare("SELECT * FROM acting_assignments WHERE id = ? AND status = 'pending'").all(opts.id)
+    : db.prepare("SELECT * FROM acting_assignments WHERE status = 'pending'").all();
+
+  const processed = [];
+  for (const a of rows) {
+    const existing = db.prepare(
+      "SELECT id FROM acting_assignments WHERE acting_discord_id = ? AND position = ? AND status = 'active'"
+    ).get(a.acting_discord_id, a.position);
+    if (existing) {
+      db.prepare("UPDATE acting_assignments SET status = 'ended', ended_at = datetime('now') WHERE id = ?").run(a.id);
+      processed.push({ id: a.id, skipped: true, reason: 'already_active' });
+      continue;
+    }
+
+    const positionRoles = POSITIONS[a.position] || [];
+    const rolesApplied = {};
+    for (const [guildId, guild] of client.guilds.cache) {
+      try {
+        const member = await guild.members.fetch(a.acting_discord_id).catch(() => null);
+        if (!member) continue;
+        const addedIds = [];
+        for (const roleName of positionRoles) {
+          const role = guild.roles.cache.find(r => r.name === roleName);
+          if (role && !member.roles.cache.has(role.id)) {
+            await member.roles.add(role).catch(() => {});
+            addedIds.push(role.id);
+          }
+        }
+        const shortPos = a.position.split('(')[0].split(',')[0].trim();
+        const baseName = (member.nickname || member.user.username).replace(/ \(Acting.*\)$/, '');
+        await member.setNickname((baseName + ` (Acting ${shortPos})`).slice(0, 32)).catch(() => {});
+        if (addedIds.length) rolesApplied[guildId] = addedIds;
+      } catch {}
+    }
+    db.prepare("UPDATE acting_assignments SET status = 'active', started_at = datetime('now'), roles_applied = ? WHERE id = ?")
+      .run(JSON.stringify(rolesApplied), a.id);
+    processed.push({ id: a.id, acting_discord_id: a.acting_discord_id, position: a.position, guilds: Object.keys(rolesApplied).length });
+
+    try {
+      const user = await client.users.fetch(a.acting_discord_id);
+      await user.send({ embeds: [{
+        title: '📌 Acting Position Assigned',
+        color: 0x22C55E,
+        description: `You have been assigned to act in the position of **${a.position}**.\n\nYour Discord roles have been updated. Your original roles will be restored when the acting period ends.`,
+        footer: { text: 'Community Organisation | Leave Management' },
+        timestamp: new Date().toISOString()
+      }]});
+    } catch {}
+  }
+  return processed;
+}
+
 // ── Revert acting roles ──────────────────────────────────────────────────────
 
 export async function revertActingRoles(client, actingDiscordId, leaveRequestId) {
