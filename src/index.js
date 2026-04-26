@@ -2917,6 +2917,124 @@ webhookApp.get('/api/health', (_req, res) => {
   });
 });
 
+// POST /webhook/leave-start — swap a user's roles for the LOA role
+// across every guild the bot is in. Captures their current
+// (manageable) roles into a snapshot so /webhook/leave-end can
+// restore them.
+// Body: { discord_id }. Response: { ok, snapshot: [{guild_id, guild_name, role_ids: [..], role_names: [..]}], loa_added_in: [guild_ids], errors: [..] }.
+// LOA role lookup: looks for a role named "LOA" / "Leave of Absence" /
+// "On Leave" in each guild. Skips gracefully when no matching role.
+async function findLoaRole(guild) {
+  const targets = ['loa', 'leave of absence', 'on leave'];
+  await guild.roles.fetch();
+  for (const t of targets) {
+    const role = guild.roles.cache.find(r => String(r.name || '').toLowerCase() === t);
+    if (role) return role;
+  }
+  return null;
+}
+webhookApp.post('/webhook/leave-start', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { discord_id } = req.body || {};
+  if (!discord_id || !/^[0-9]{17,20}$/.test(String(discord_id))) {
+    return res.status(400).json({ ok: false, reason: 'bad_discord_id' });
+  }
+  const auditReason = 'Leave starting — CO Staff Portal';
+  const snapshot = [];
+  const loa_added_in = [];
+  const errors = [];
+  let memberMissing = 0;
+  try {
+    for (const [, guild] of client.guilds.cache) {
+      let member = null;
+      try { member = await guild.members.fetch(String(discord_id)); }
+      catch { memberMissing++; continue; }
+      const removable = member.roles.cache.filter(r => !r.managed && r.id !== guild.id && r.editable);
+      const loa = await findLoaRole(guild);
+      const removedHere = [];
+      for (const [, role] of removable) {
+        // Don't snapshot the LOA role itself.
+        if (loa && role.id === loa.id) continue;
+        try {
+          await member.roles.remove(role, auditReason);
+          removedHere.push({ id: role.id, name: role.name });
+        } catch (e) {
+          errors.push(`${guild.name}/${role.name}: ${e.message}`);
+        }
+      }
+      if (removedHere.length) {
+        snapshot.push({ guild_id: guild.id, guild_name: guild.name, role_ids: removedHere.map(r => r.id), role_names: removedHere.map(r => r.name) });
+      }
+      if (loa && !member.roles.cache.has(loa.id)) {
+        try { await member.roles.add(loa, auditReason); loa_added_in.push(guild.id); }
+        catch (e) { errors.push(`${guild.name}/LOA add: ${e.message}`); }
+      }
+    }
+    res.json({ ok: true, snapshot, loa_added_in, member_missing_in: memberMissing, errors });
+  } catch (e) {
+    console.error('[webhook/leave-start] fatal:', e.message);
+    res.status(500).json({ ok: false, error: e.message, snapshot, loa_added_in, errors });
+  }
+});
+
+// POST /webhook/leave-end — restore the snapshot taken by /leave-start
+// and remove the LOA role.
+// Body: { discord_id, snapshot: [{guild_id, role_ids: [..]}] }
+webhookApp.post('/webhook/leave-end', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { discord_id, snapshot } = req.body || {};
+  if (!discord_id || !/^[0-9]{17,20}$/.test(String(discord_id))) {
+    return res.status(400).json({ ok: false, reason: 'bad_discord_id' });
+  }
+  if (!Array.isArray(snapshot)) {
+    return res.status(400).json({ ok: false, reason: 'snapshot must be an array' });
+  }
+  const auditReason = 'Leave ended — CO Staff Portal';
+  let restored = 0;
+  let loaRemovedIn = 0;
+  const errors = [];
+  try {
+    for (const entry of snapshot) {
+      const guild = client.guilds.cache.get(entry.guild_id);
+      if (!guild) { errors.push(`guild ${entry.guild_id}: not in cache`); continue; }
+      let member = null;
+      try { member = await guild.members.fetch(String(discord_id)); }
+      catch { errors.push(`${guild.name}: member missing`); continue; }
+      // Restore roles, skip ones the bot can no longer manage.
+      for (const roleId of (entry.role_ids || [])) {
+        const role = guild.roles.cache.get(roleId);
+        if (!role) { errors.push(`${guild.name}/${roleId}: role gone`); continue; }
+        if (member.roles.cache.has(roleId)) continue;
+        try { await member.roles.add(role, auditReason); restored++; }
+        catch (e) { errors.push(`${guild.name}/${role.name}: ${e.message}`); }
+      }
+      // Remove LOA role if present.
+      const loa = await findLoaRole(guild);
+      if (loa && member.roles.cache.has(loa.id)) {
+        try { await member.roles.remove(loa, auditReason); loaRemovedIn++; }
+        catch (e) { errors.push(`${guild.name}/LOA remove: ${e.message}`); }
+      }
+    }
+    // Also pass guilds NOT in the snapshot so we can still strip a
+    // stray LOA role (e.g. snapshot missed a guild that wasn't in
+    // cache at start time, or LOA was added manually by an operator).
+    for (const [, guild] of client.guilds.cache) {
+      if (snapshot.some(s => s.guild_id === guild.id)) continue;
+      let member = null;
+      try { member = await guild.members.fetch(String(discord_id)); } catch { continue; }
+      const loa = await findLoaRole(guild);
+      if (loa && member.roles.cache.has(loa.id)) {
+        try { await member.roles.remove(loa, auditReason); loaRemovedIn++; }
+        catch (e) { errors.push(`${guild.name}/LOA remove: ${e.message}`); }
+      }
+    }
+    res.json({ ok: true, roles_restored: restored, loa_removed_in: loaRemovedIn, errors });
+  } catch (e) {
+    console.error('[webhook/leave-end] fatal:', e.message);
+    res.status(500).json({ ok: false, error: e.message, restored, errors });
+  }
+});
+
 // POST /webhook/offboarding-remove-roles — strip ALL CO-managed roles
 // from a leaving staff member across every guild the bot is in. Used
 // by the IT helpdesk's offboarding "Remove Discord roles" button.
