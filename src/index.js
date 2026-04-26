@@ -2917,6 +2917,52 @@ webhookApp.get('/api/health', (_req, res) => {
   });
 });
 
+// POST /webhook/offboarding-remove-roles — strip ALL CO-managed roles
+// from a leaving staff member across every guild the bot is in. Used
+// by the IT helpdesk's offboarding "Remove Discord roles" button.
+// Body: { discord_id, reason? }. Header: x-bot-secret.
+//
+// We don't kick — DMSPC may want the leaver to remain visible in
+// public channels for handover continuity. Roles are the access lever.
+// "Manageable" = bot has higher hoisted role; protected (server-owner,
+// integration-managed) roles are skipped silently. Reports per-guild.
+webhookApp.post('/webhook/offboarding-remove-roles', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { discord_id, reason } = req.body || {};
+  if (!discord_id || !/^[0-9]{17,20}$/.test(String(discord_id))) {
+    return res.status(400).json({ ok: false, reason: 'bad_discord_id' });
+  }
+  const auditReason = (reason ? String(reason).slice(0, 480) : 'Offboarding via CO Staff Portal');
+  let guildsProcessed = 0;
+  let rolesRemoved = 0;
+  let memberMissing = 0;
+  const perGuild = [];
+  try {
+    for (const [, guild] of client.guilds.cache) {
+      let member = null;
+      try { member = await guild.members.fetch(String(discord_id)); }
+      catch { memberMissing++; continue; }
+      const removable = member.roles.cache.filter(r => !r.managed && r.id !== guild.id && r.editable);
+      let removedHere = 0;
+      for (const [, role] of removable) {
+        try {
+          await member.roles.remove(role, auditReason);
+          removedHere++;
+        } catch (e) {
+          // Role above bot's highest, or other guild-side issue. Skip.
+        }
+      }
+      perGuild.push({ guild_id: guild.id, guild_name: guild.name, removed: removedHere, attempted: removable.size });
+      rolesRemoved += removedHere;
+      guildsProcessed++;
+    }
+    res.json({ ok: true, guilds_processed: guildsProcessed, member_missing_in: memberMissing, roles_removed: rolesRemoved, per_guild: perGuild });
+  } catch (e) {
+    console.error('[webhook/offboarding-remove-roles] fatal:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // POST /webhook/notify — generic text DM to a Discord user
 // Body: { discord_id, body, title? }. Header: x-bot-secret.
 webhookApp.post('/webhook/notify', async (req, res) => {
