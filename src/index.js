@@ -602,6 +602,47 @@ client.once('ready', async () => {
   setInterval(syncActivityMessages, 60 * 1000);
   console.log('[Activity Sync] Started — syncing to portal every 60 seconds');
 
+  // VC time → activity points sync. Voice tracking writes seconds into
+  // voice_time_tracking; without this loop the seconds never become
+  // points. Conversion mirrors manual voice claims: 5 pts per 30 min,
+  // capped at 100/week (the portal also enforces the cap server-side).
+  async function syncVoiceActivity() {
+    try {
+      const { db: botDatabase, flushActiveSessions, getVoiceLeaderboard } = await import('./utils/botDb.js');
+      const weekKey = getBragWeekKey();
+
+      // Fold in any in-flight session time so the leaderboard reflects
+      // the user's "as of right now" total rather than the last time
+      // they ended a session.
+      flushActiveSessions(weekKey);
+
+      const rows = getVoiceLeaderboard(weekKey);
+      if (!rows.length) return;
+
+      const records = [];
+      for (const row of rows) {
+        const minutes = Math.floor((row.total_seconds || 0) / 60);
+        if (minutes < 30) continue;
+        const points = Math.min(Math.floor(minutes / 30) * 5, 100);
+        if (points > 0) records.push({ discord_id: row.discord_id, category: 'voice', points });
+      }
+      if (!records.length) return;
+
+      const res = await fetch('http://localhost:3016/api/activity/sync/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET },
+        body: JSON.stringify({ weekKey, records })
+      });
+      const data = await res.json().catch(() => ({}));
+      console.log(`[Voice Sync] ${data.synced || 0} synced, ${data.skipped || 0} skipped (records=${records.length}) for week ${weekKey}`);
+    } catch (e) {
+      console.error('[Voice Sync] Failed:', e.message);
+    }
+  }
+  await syncVoiceActivity();
+  setInterval(syncVoiceActivity, 60 * 1000);
+  console.log('[Voice Sync] Started — syncing VC time to portal every 60 seconds');
+
   // Daily activity + availability sync — 23:30 every day
   function scheduleDailyActivitySync() {
     const now = new Date();
