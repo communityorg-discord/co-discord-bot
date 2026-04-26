@@ -3125,6 +3125,77 @@ webhookApp.post('/webhook/notify', async (req, res) => {
 
 // POST /webhook/acting-process-pending — apply roles for any acting_assignments
 // rows still in 'pending' status. Optional body: { id } to target one row.
+// ─── Bot command permissions API ──────────────────────────────────────
+// Read/write the command_permissions table from the portal's Access
+// Control → Bot Permissions tab. All gated by x-bot-secret.
+
+// GET /api/bot/commands — every known command + its documented fallback.
+webhookApp.get('/api/bot/commands', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { listKnownCommands } = await import('./utils/permissions.js');
+    res.json({ ok: true, commands: listKnownCommands() });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// GET /api/bot/command-permissions[?command=foo] — current grants.
+webhookApp.get('/api/bot/command-permissions', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { listCommandPermissions } = await import('./utils/botDb.js');
+    const command = req.query.command ? String(req.query.command) : null;
+    res.json({ ok: true, permissions: listCommandPermissions(command) });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// PATCH /api/bot/command-permissions/:command
+// Body: { user_ids: [...], role_ids: [...], set_by? }
+// Replaces all rows for the command. Empty arrays clear the grants.
+webhookApp.patch('/api/bot/command-permissions/:command', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { setCommandPermissions, listCommandPermissions } = await import('./utils/botDb.js');
+    const command = String(req.params.command || '').trim();
+    if (!command) return res.status(400).json({ ok: false, error: 'command required' });
+    const { user_ids = [], role_ids = [], set_by = 'portal' } = req.body || {};
+    setCommandPermissions(command, {
+      user_ids: (Array.isArray(user_ids) ? user_ids : []).map(String).filter(Boolean),
+      role_ids: (Array.isArray(role_ids) ? role_ids : []).map(String).filter(Boolean),
+    }, String(set_by));
+    res.json({ ok: true, command, permissions: listCommandPermissions(command) });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// GET /api/bot/guild-roles[?guild_id=…] — list roles across guilds for
+// the role-picker UI. Returns a flat list of { guild_id, guild_name,
+// role_id, role_name, color, position } sorted by guild then position.
+webhookApp.get('/api/bot/guild-roles', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const guildIdFilter = req.query.guild_id ? String(req.query.guild_id) : null;
+    const out = [];
+    for (const guild of client.guilds.cache.values()) {
+      if (guildIdFilter && guild.id !== guildIdFilter) continue;
+      try { await guild.roles.fetch(); } catch {}
+      for (const role of guild.roles.cache.values()) {
+        if (role.id === guild.id) continue; // skip @everyone
+        if (role.managed) continue; // skip integration roles
+        out.push({
+          guild_id: guild.id,
+          guild_name: guild.name,
+          role_id: role.id,
+          role_name: role.name,
+          color: role.hexColor,
+          position: role.position,
+          member_count: role.members?.size ?? 0,
+        });
+      }
+    }
+    out.sort((a, b) => a.guild_name.localeCompare(b.guild_name) || (b.position - a.position));
+    res.json({ ok: true, roles: out });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 webhookApp.post('/webhook/acting-process-pending', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
   try {

@@ -1301,4 +1301,59 @@ export function getVoiceLeaderboard(weekKey) {
   return db.prepare('SELECT discord_id, total_seconds FROM voice_time_tracking WHERE week_key = ? AND total_seconds > 0 ORDER BY total_seconds DESC LIMIT 20').all(weekKey);
 }
 
+// ── Bot command permissions ───────────────────────────────────────────────
+// Per-command grants. The central canUseCommand() helper consults this
+// table; if there are no rows for a command, the command's documented
+// fallback applies (parsed from a COMMAND_PERMISSION_FALLBACK comment at
+// the top of each command file). Superusers always bypass.
+//
+// command_name        — slash-command name, optionally with ":<subcommand>"
+//                       suffix for subcommand-specific grants.
+// kind                — 'user' | 'role' — what the id refers to.
+// id                  — discord user id OR discord role id.
+// guild_id (nullable) — restrict role grants to a specific guild. NULL =
+//                       any guild the bot operates in (we then match the
+//                       role id wherever it appears in member.roles.cache).
+db.exec(`CREATE TABLE IF NOT EXISTS command_permissions (
+  command_name TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('user', 'role')),
+  id TEXT NOT NULL,
+  guild_id TEXT NOT NULL DEFAULT '',
+  set_by TEXT,
+  set_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (command_name, kind, id, guild_id)
+)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_cmdperm_lookup ON command_permissions(command_name, kind)`);
+
+export function listCommandPermissions(commandName) {
+  if (commandName) {
+    return db.prepare('SELECT * FROM command_permissions WHERE command_name = ? ORDER BY kind, id').all(commandName);
+  }
+  return db.prepare('SELECT * FROM command_permissions ORDER BY command_name, kind, id').all();
+}
+
+export function setCommandPermissions(commandName, { user_ids = [], role_ids = [] }, setBy = 'system') {
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM command_permissions WHERE command_name = ?').run(commandName);
+    const ins = db.prepare("INSERT INTO command_permissions (command_name, kind, id, set_by) VALUES (?, ?, ?, ?)");
+    for (const id of user_ids) ins.run(commandName, 'user', String(id), String(setBy));
+    for (const id of role_ids) ins.run(commandName, 'role', String(id), String(setBy));
+  });
+  tx();
+}
+
+export function commandHasAnyRows(commandName) {
+  const r = db.prepare('SELECT 1 FROM command_permissions WHERE command_name = ? LIMIT 1').get(commandName);
+  return !!r;
+}
+
+export function commandPermitsUser(commandName, discordId, roleIds = []) {
+  const userHit = db.prepare("SELECT 1 FROM command_permissions WHERE command_name = ? AND kind = 'user' AND id = ? LIMIT 1").get(commandName, String(discordId));
+  if (userHit) return true;
+  if (!roleIds.length) return false;
+  const placeholders = roleIds.map(() => '?').join(',');
+  const roleHit = db.prepare(`SELECT 1 FROM command_permissions WHERE command_name = ? AND kind = 'role' AND id IN (${placeholders}) LIMIT 1`).get(commandName, ...roleIds.map(String));
+  return !!roleHit;
+}
+
 export { db };
