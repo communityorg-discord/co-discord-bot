@@ -987,12 +987,15 @@ client.once('ready', async () => {
       const portalDb = (await import('./db.js')).default;
       const weekKey = getBragWeekKey();
 
+      // brag_records was retired alongside brag_reports — both replaced
+      // by activity_point_records. Read this week's auto-synced message
+      // points per user, joined to active staff with a discord_id.
       const rows = portalDb.prepare(`
-        SELECT br.discord_id, br.message_count as total, u.display_name, u.full_name, u.position
-        FROM brag_records br
-        INNER JOIN users u ON u.discord_id = br.discord_id AND lower(u.account_status) = 'active'
-        WHERE br.week_key = ? AND br.message_count > 0
-        ORDER BY br.message_count DESC
+        SELECT u.discord_id, apr.points as total, u.display_name, u.full_name, u.position
+        FROM activity_point_records apr
+        INNER JOIN users u ON u.id = apr.user_id AND lower(u.account_status) = 'active' AND u.discord_id IS NOT NULL
+        WHERE apr.week_key = ? AND apr.category = 'messages' AND apr.source = 'auto' AND apr.points > 0
+        ORDER BY apr.points DESC
         LIMIT 20
       `).all(weekKey);
 
