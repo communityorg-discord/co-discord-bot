@@ -88,19 +88,45 @@ export async function handleModal(interaction) {
   // Re-fetch portal user after setup
   portalUser = getUserByDiscordId(targetDiscordId);
 
-  // Step 2 — DM credentials
+  // Step 2 — Generate Staff HQ invite
+  const STAFF_HQ_GUILD_ID = '1357119461957570570';
+  let staffHqInviteUrl = null;
   try {
+    const staffHq = await interaction.client.guilds.fetch(STAFF_HQ_GUILD_ID);
+    const inviteChannel = staffHq.channels.cache.find(c =>
+      c.isTextBased() && c.permissionsFor(staffHq.members.me)?.has('CreateInstantInvite')
+    );
+    if (!inviteChannel) throw new Error('No channel with CreateInstantInvite permission');
+    const invite = await inviteChannel.createInvite({
+      maxAge: 604800,
+      maxUses: 1,
+      unique: true,
+      reason: `Onboarding ${targetUser.tag} (${matchedPosition})`
+    });
+    staffHqInviteUrl = invite.url;
+    steps.push('Staff HQ invite generated');
+  } catch (e) {
+    steps.push(`Staff HQ invite failed: ${e.message}`);
+  }
+
+  // Step 3 — DM credentials + Staff HQ invite
+  try {
+    const dmFields = [
+      { name: '🌐 Portal URL', value: 'https://portal.communityorg.co.uk', inline: false },
+      { name: '👤 Username', value: `\`${credentials?.username || portalUser?.username || 'N/A'}\``, inline: true },
+      { name: '🔑 Temporary Password', value: `\`${credentials?.temp_password || 'Contact admin'}\``, inline: true },
+      { name: '📌 Position', value: matchedPosition, inline: true },
+    ];
+    if (staffHqInviteUrl) {
+      dmFields.push({ name: '🏛️ Staff HQ Server', value: `[Click to join](${staffHqInviteUrl}) — single-use, expires in 7 days`, inline: false });
+    }
+    dmFields.push({ name: '⚠️ Action Required', value: 'Please log in and change your password immediately. You will also be asked to set up 2FA on first login.', inline: false });
+
     await targetUser.send({ embeds: [new EmbedBuilder()
       .setColor(0x5865F2)
       .setTitle('👋 Welcome to Community Organisation')
       .setDescription('Welcome to the CO team! Your staff portal account has been set up.')
-      .addFields(
-        { name: '🌐 Portal URL', value: 'https://portal.communityorg.co.uk', inline: false },
-        { name: '👤 Username', value: `\`${credentials?.username || portalUser?.username || 'N/A'}\``, inline: true },
-        { name: '🔑 Temporary Password', value: `\`${credentials?.temp_password || 'Contact admin'}\``, inline: true },
-        { name: '📌 Position', value: matchedPosition, inline: true },
-        { name: '⚠️ Action Required', value: 'Please log in and change your password immediately. You will also be asked to set up 2FA on first login.', inline: false },
-      )
+      .addFields(...dmFields)
       .setFooter({ text: 'Community Organisation | Keep these credentials private' })
       .setTimestamp()
     ]});
@@ -109,7 +135,7 @@ export async function handleModal(interaction) {
     steps.push(`Credentials DM failed: ${e.message}`);
   }
 
-  // Step 3 — Apply Discord roles
+  // Step 4 — Apply Discord roles
   let roleCount = 0;
   try {
     const results = await applyVerification(interaction.client, targetDiscordId, matchedPosition, nickname, {});
@@ -125,7 +151,7 @@ export async function handleModal(interaction) {
     steps.push(`Role application failed: ${e.message}`);
   }
 
-  // Step 4 — Trigger Drive folder
+  // Step 5 — Trigger Drive folder
   try {
     if (portalUser?.id) {
       await fetch('http://localhost:3016/api/drive/backfill-staff-folders', {
