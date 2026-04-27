@@ -67,7 +67,30 @@ async function getDirectivePdf(data) {
 }
 
 async function getMemoPdf(data) {
-  // Try 1: Export Google Doc via Drive API (same as directives)
+  // Try 0: Portal-rendered PDF. The portal generates a CO-themed,
+  // SCSC-branded PDF using its local pdfkit pipeline (with type
+  // ribbon, severity pills, signature block) and serves it at
+  // /uploads/iac/<memo_number>.pdf. Prefer it over the Drive Google
+  // Doc export, which still uses the older IAC template and lacks
+  // the new CO theme.
+  if (data.pdf_url) {
+    try {
+      const r = await fetch(data.pdf_url, {
+        headers: { 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET || '' },
+      });
+      if (r.ok) {
+        const buffer = Buffer.from(await r.arrayBuffer());
+        if (buffer.length > 100) {
+          console.log(`[Memo PDF] Got PDF from portal (${buffer.length} bytes)`);
+          return { buffer, filename: `${data.memo_number}.pdf` };
+        }
+      }
+    } catch (e) {
+      console.error('[Memo PDF] Portal fetch failed:', e.message);
+    }
+  }
+  // Try 1: Export Google Doc via Drive API (same as directives) —
+  // legacy fallback when the webhook didn't carry pdf_url.
   if (data.document_id) {
     try {
       const buffer = await downloadGoogleDocAsPdf(data.document_id);
