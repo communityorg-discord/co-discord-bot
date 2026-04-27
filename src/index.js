@@ -4081,15 +4081,27 @@ webhookApp.post('/api/send-dm', async (req, res) => {
   const { discord_id, message, embed, pdf_buffer, pdf_filename } = req.body;
   if (!discord_id) return res.status(400).json({ error: 'discord_id required' });
   try {
-    const user = await client.users.fetch(String(discord_id));
-    if (embed) {
-      await user.send({ embeds: [typeof embed === 'string' ? JSON.parse(embed) : embed] });
-    } else {
-      await user.send(message || 'No message provided');
+    const trimmedMessage = typeof message === 'string' ? message.trim() : '';
+    const hasEmbed = !!embed;
+    const hasPdf = !!pdf_buffer;
+    // Refuse instead of sending a placeholder. Earlier the route fell
+    // back to "No message provided" when message/embed were both empty,
+    // which leaked a useless DM to staff whenever a caller forgot the
+    // body or chained a pdf-only payload through the message field.
+    if (!trimmedMessage && !hasEmbed && !hasPdf) {
+      return res.status(400).json({ ok: false, error: 'message, embed, or pdf_buffer required' });
     }
 
-    // Send PDF attachment if provided
-    if (pdf_buffer) {
+    const user = await client.users.fetch(String(discord_id));
+    if (hasEmbed) {
+      await user.send({ embeds: [typeof embed === 'string' ? JSON.parse(embed) : embed] });
+    } else if (trimmedMessage) {
+      await user.send(trimmedMessage);
+    }
+    // If only pdf_buffer is present we skip the leading text DM —
+    // the attachment block below sends the PDF as its own message.
+
+    if (hasPdf) {
       const { AttachmentBuilder } = await import('discord.js');
       const buf = Buffer.from(pdf_buffer, 'base64');
       const attachment = new AttachmentBuilder(buf, { name: pdf_filename || 'document.pdf' });
