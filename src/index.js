@@ -111,6 +111,14 @@ const voiceSessions      = new Map(); // discord_id → { channel_id, channel_na
 const meetingAttendance  = new Map(); // discord_id → { channel_name, joined_at }
 const weeklyReactions    = new Map(); // discord_id (author) → count
 const welcomeTracker     = new Map(); // discord_id → count this week
+
+// Atlas cap-gate notifier — when a staffer @mentions Atlas while over
+// cap, OpenClaw silently drops the message. We notice the mention and
+// reply once with a polite "you're capped, resets in Xm" message, then
+// stay quiet for the cooldown window so we don't spam the channel.
+const ATLAS_DISCORD_USER_ID = '1465559216172568812';
+const ATLAS_GATE_NOTICE_COOLDOWN_MS = 5 * 60_000; // 5m per user
+const atlasGateNoticeCooldown = new Map(); // discord_id → last notice ms
 const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
@@ -2393,6 +2401,36 @@ client.on('messageCreate', async (message) => {
       console.error('[Counting]', e.message);
     }
   }
+
+  // Atlas cap-gate notifier — when a staffer @mentions Atlas while
+  // they're over their portal AI cap, the gateway silently drops the
+  // message. That's confusing UX; reply once telling them why and
+  // when it resets, then stay quiet (per-user cooldown).
+  try {
+    if (
+      !message.author.bot &&
+      message.mentions?.users?.has(ATLAS_DISCORD_USER_ID)
+    ) {
+      const last = atlasGateNoticeCooldown.get(message.author.id) || 0;
+      if (Date.now() - last > ATLAS_GATE_NOTICE_COOLDOWN_MS) {
+        atlasGateNoticeCooldown.set(message.author.id, Date.now());
+        const r = await fetch(`http://localhost:3016/api/atlas/cap-by-discord?discord_id=${message.author.id}`, {
+          headers: { 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET },
+          signal: AbortSignal.timeout(2000),
+        }).then(r => r.ok ? r.json() : null).catch(() => null);
+        if (r?.tracked && r.allowed === false) {
+          const mins = Math.max(1, Math.ceil((r.resetMs || 0) / 60_000));
+          const reasonText = r.reason === 'weekly'
+            ? `weekly AI cap (${r.used.toLocaleString()} / ${r.cap.toLocaleString()} tokens)`
+            : `5-hour AI session cap (${r.used.toLocaleString()} / ${r.cap.toLocaleString()} tokens)`;
+          await message.reply({
+            content: `⛔ Atlas can't reply right now — you've hit your ${reasonText}. Resets in ~${mins}m. See https://portal.communityorg.co.uk/usage for details.`,
+            allowedMentions: { repliedUser: false },
+          }).catch(() => {});
+        }
+      }
+    }
+  } catch (e) { console.error('[Atlas gate notice]', e.message); }
 
   try { await automod.checkMessage(message); } catch (e) { console.error('[AutoMod messageCreate]', e.message); }
 
