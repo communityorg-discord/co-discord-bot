@@ -2421,8 +2421,8 @@ client.on('messageCreate', async (message) => {
         if (r?.tracked && r.allowed === false) {
           const mins = Math.max(1, Math.ceil((r.resetMs || 0) / 60_000));
           const reasonText = r.reason === 'weekly'
-            ? `weekly AI cap (${r.used.toLocaleString()} / ${r.cap.toLocaleString()} tokens)`
-            : `5-hour AI session cap (${r.used.toLocaleString()} / ${r.cap.toLocaleString()} tokens)`;
+            ? `weekly AI cap (${r.used.toLocaleString()} / ${r.cap.toLocaleString()} messages)`
+            : `5-hour session AI cap (${r.used.toLocaleString()} / ${r.cap.toLocaleString()} messages)`;
           await message.reply({
             content: `⛔ Atlas can't reply right now — you've hit your ${reasonText}. Resets in ~${mins}m. See https://portal.communityorg.co.uk/usage for details.`,
             allowedMentions: { repliedUser: false },
