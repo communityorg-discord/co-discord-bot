@@ -3263,14 +3263,27 @@ webhookApp.get('/api/bot/guild-roles', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
   try {
     const guildIdFilter = req.query.guild_id ? String(req.query.guild_id) : null;
+    // include_members=1 expands each role with a `member_ids` array.
+    // Heavier payload — for servers with thousands of members in a
+    // role we cap per-role at MEMBER_ID_CAP so a single response
+    // doesn't get pathological. The bot has the SERVER_MEMBERS_INTENT
+    // privileged intent (otherwise role.members would be empty), so
+    // member enumeration works without per-user OAuth.
+    const includeMembers = req.query.include_members === '1' || req.query.include_members === 'true';
+    const MEMBER_ID_CAP = 5000;
     const out = [];
     for (const guild of client.guilds.cache.values()) {
       if (guildIdFilter && guild.id !== guildIdFilter) continue;
       try { await guild.roles.fetch(); } catch {}
+      // When we're returning members, fetch the full member list once
+      // per guild so role.members.cache is populated. Discord API
+      // pagination handled by Discord.js — call is cached after the
+      // first hit.
+      if (includeMembers) { try { await guild.members.fetch(); } catch {} }
       for (const role of guild.roles.cache.values()) {
         if (role.id === guild.id) continue; // skip @everyone
         if (role.managed) continue; // skip integration roles
-        out.push({
+        const entry = {
           guild_id: guild.id,
           guild_name: guild.name,
           role_id: role.id,
@@ -3278,11 +3291,140 @@ webhookApp.get('/api/bot/guild-roles', async (req, res) => {
           color: role.hexColor,
           position: role.position,
           member_count: role.members?.size ?? 0,
-        });
+        };
+        if (includeMembers) {
+          const ids = Array.from(role.members?.keys?.() || []).slice(0, MEMBER_ID_CAP);
+          entry.member_ids = ids;
+          entry.truncated = (role.members?.size ?? 0) > MEMBER_ID_CAP;
+        }
+        out.push(entry);
       }
     }
     out.sort((a, b) => a.guild_name.localeCompare(b.guild_name) || (b.position - a.position));
-    res.json({ ok: true, roles: out });
+    res.json({ ok: true, roles: out, include_members: includeMembers });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// GET /api/bot/guild-members?guild_id=X[&limit=N] — list members of
+// one guild. Cached; returns id, username, display_name, role_ids,
+// joined_at, bot flag.
+webhookApp.get('/api/bot/guild-members', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const guildId = req.query.guild_id ? String(req.query.guild_id) : null;
+    if (!guildId) return res.status(400).json({ ok: false, error: 'guild_id required' });
+    const limit = Math.max(1, Math.min(2000, Number(req.query.limit) || 1000));
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
+    try { await guild.members.fetch(); } catch {}
+    const out = [];
+    for (const m of guild.members.cache.values()) {
+      if (out.length >= limit) break;
+      out.push({
+        user_id: m.id,
+        username: m.user?.username,
+        display_name: m.displayName,
+        global_name: m.user?.globalName || null,
+        bot: !!m.user?.bot,
+        role_ids: Array.from(m.roles.cache.keys()).filter(rid => rid !== guild.id),
+        joined_at: m.joinedAt?.toISOString() || null,
+      });
+    }
+    res.json({ ok: true, guild_id: guild.id, guild_name: guild.name, count: out.length, members: out });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// GET /api/bot/member?user_id=X[&guild_id=Y] — single member lookup.
+// Without guild_id, returns the member as found in the FIRST guild
+// that has them (with a list of every guild the bot shares with them).
+webhookApp.get('/api/bot/member', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const userId = String(req.query.user_id || '').trim();
+    if (!/^[0-9]{17,20}$/.test(userId)) return res.status(400).json({ ok: false, error: 'user_id must be a Discord snowflake' });
+    const guildIdFilter = req.query.guild_id ? String(req.query.guild_id) : null;
+    const sharedGuilds = [];
+    let primary = null;
+    for (const guild of client.guilds.cache.values()) {
+      if (guildIdFilter && guild.id !== guildIdFilter) continue;
+      try {
+        const m = await guild.members.fetch(userId).catch(() => null);
+        if (!m) continue;
+        const entry = {
+          guild_id: guild.id, guild_name: guild.name,
+          display_name: m.displayName, joined_at: m.joinedAt?.toISOString() || null,
+          role_ids: Array.from(m.roles.cache.keys()).filter(rid => rid !== guild.id),
+          role_names: Array.from(m.roles.cache.values()).filter(r => r.id !== guild.id).map(r => r.name),
+        };
+        sharedGuilds.push(entry);
+        if (!primary) primary = { ...entry, username: m.user?.username, global_name: m.user?.globalName, bot: !!m.user?.bot };
+      } catch {}
+    }
+    if (!primary) return res.status(404).json({ ok: false, error: 'user not found in any guild the bot is in' });
+    res.json({ ok: true, member: primary, guilds: sharedGuilds });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// GET /api/bot/channels?guild_id=X — list text/voice/announcement
+// channels in a guild. (Categories included so a parent_id makes sense.)
+webhookApp.get('/api/bot/channels', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const guildId = req.query.guild_id ? String(req.query.guild_id) : null;
+    if (!guildId) return res.status(400).json({ ok: false, error: 'guild_id required' });
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
+    try { await guild.channels.fetch(); } catch {}
+    const out = [];
+    for (const c of guild.channels.cache.values()) {
+      out.push({
+        channel_id: c.id, name: c.name,
+        type: c.type, // 0=text, 2=voice, 4=category, 5=announcement, 13=stage, 15=forum
+        parent_id: c.parentId || null,
+        position: c.position,
+      });
+    }
+    out.sort((a, b) => (a.parent_id || '').localeCompare(b.parent_id || '') || a.position - b.position);
+    res.json({ ok: true, guild_id: guild.id, guild_name: guild.name, channels: out });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// POST /api/bot/role-assign — add or remove a role. Body:
+// { action: 'add' | 'remove', user_id, role_id, guild_id, reason? }
+webhookApp.post('/api/bot/role-assign', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { action, user_id, role_id, guild_id, reason } = req.body || {};
+    if (!['add', 'remove'].includes(action)) return res.status(400).json({ ok: false, error: 'action must be add|remove' });
+    if (!/^[0-9]{17,20}$/.test(String(user_id))) return res.status(400).json({ ok: false, error: 'user_id invalid' });
+    if (!/^[0-9]{17,20}$/.test(String(role_id))) return res.status(400).json({ ok: false, error: 'role_id invalid' });
+    if (!/^[0-9]{17,20}$/.test(String(guild_id))) return res.status(400).json({ ok: false, error: 'guild_id invalid' });
+    const guild = client.guilds.cache.get(String(guild_id));
+    if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
+    const member = await guild.members.fetch(String(user_id)).catch(() => null);
+    if (!member) return res.status(404).json({ ok: false, error: 'member not in guild' });
+    const role = guild.roles.cache.get(String(role_id));
+    if (!role) return res.status(404).json({ ok: false, error: 'role not found' });
+    const auditReason = String(reason || 'portal chat agent role-assign').slice(0, 500);
+    if (action === 'add') await member.roles.add(role, auditReason);
+    else                  await member.roles.remove(role, auditReason);
+    res.json({ ok: true, action, user_id, role_id, guild_id });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// POST /api/bot/send-channel-message — post a message in a channel.
+// Body: { channel_id, content }
+webhookApp.post('/api/bot/send-channel-message', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { channel_id, content } = req.body || {};
+    if (!/^[0-9]{17,20}$/.test(String(channel_id))) return res.status(400).json({ ok: false, error: 'channel_id invalid' });
+    const text = String(content || '').slice(0, 1900);
+    if (!text) return res.status(400).json({ ok: false, error: 'content required' });
+    const ch = await client.channels.fetch(String(channel_id)).catch(() => null);
+    if (!ch || !ch.isTextBased?.()) return res.status(404).json({ ok: false, error: 'channel not found or not text' });
+    const sent = await ch.send({ content: text });
+    res.json({ ok: true, message_id: sent.id, channel_id: ch.id });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
