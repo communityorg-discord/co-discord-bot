@@ -3428,6 +3428,138 @@ webhookApp.post('/api/bot/send-channel-message', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// POST /api/bot/kick { user_id, guild_id, reason? }
+webhookApp.post('/api/bot/kick', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { user_id, guild_id, reason } = req.body || {};
+    if (!/^[0-9]{17,20}$/.test(String(user_id)))  return res.status(400).json({ ok: false, error: 'user_id invalid' });
+    if (!/^[0-9]{17,20}$/.test(String(guild_id))) return res.status(400).json({ ok: false, error: 'guild_id invalid' });
+    const guild = client.guilds.cache.get(String(guild_id));
+    if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
+    const m = await guild.members.fetch(String(user_id)).catch(() => null);
+    if (!m) return res.status(404).json({ ok: false, error: 'member not in guild' });
+    await m.kick(String(reason || 'portal chat — superuser kick').slice(0, 500));
+    res.json({ ok: true, kicked: user_id, guild_id });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// POST /api/bot/ban { user_id, guild_id, reason?, delete_message_seconds? }
+webhookApp.post('/api/bot/ban', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { user_id, guild_id, reason, delete_message_seconds } = req.body || {};
+    if (!/^[0-9]{17,20}$/.test(String(user_id)))  return res.status(400).json({ ok: false, error: 'user_id invalid' });
+    if (!/^[0-9]{17,20}$/.test(String(guild_id))) return res.status(400).json({ ok: false, error: 'guild_id invalid' });
+    const guild = client.guilds.cache.get(String(guild_id));
+    if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
+    await guild.members.ban(String(user_id), {
+      reason: String(reason || 'portal chat — superuser ban').slice(0, 500),
+      deleteMessageSeconds: Math.max(0, Math.min(604800, Number(delete_message_seconds) || 0)),
+    });
+    res.json({ ok: true, banned: user_id, guild_id });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// POST /api/bot/thread-create { channel_id, name, message? }
+webhookApp.post('/api/bot/thread-create', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { channel_id, name, message } = req.body || {};
+    if (!/^[0-9]{17,20}$/.test(String(channel_id))) return res.status(400).json({ ok: false, error: 'channel_id invalid' });
+    if (!name) return res.status(400).json({ ok: false, error: 'name required' });
+    const ch = await client.channels.fetch(String(channel_id)).catch(() => null);
+    if (!ch || !ch.threads?.create) return res.status(404).json({ ok: false, error: 'channel not found or does not support threads' });
+    const thread = await ch.threads.create({ name: String(name).slice(0, 100), autoArchiveDuration: 1440 });
+    if (message) await thread.send(String(message).slice(0, 1900));
+    res.json({ ok: true, thread_id: thread.id, name: thread.name });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// POST /api/bot/thread-archive { thread_id }
+webhookApp.post('/api/bot/thread-archive', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { thread_id } = req.body || {};
+    if (!/^[0-9]{17,20}$/.test(String(thread_id))) return res.status(400).json({ ok: false, error: 'thread_id invalid' });
+    const thread = await client.channels.fetch(String(thread_id)).catch(() => null);
+    if (!thread?.setArchived) return res.status(404).json({ ok: false, error: 'thread not found' });
+    await thread.setArchived(true);
+    res.json({ ok: true, thread_id });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// POST /api/bot/voice-move { user_id, guild_id, channel_id }
+webhookApp.post('/api/bot/voice-move', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { user_id, guild_id, channel_id } = req.body || {};
+    if (!/^[0-9]{17,20}$/.test(String(user_id)))    return res.status(400).json({ ok: false, error: 'user_id invalid' });
+    if (!/^[0-9]{17,20}$/.test(String(guild_id)))   return res.status(400).json({ ok: false, error: 'guild_id invalid' });
+    if (!/^[0-9]{17,20}$/.test(String(channel_id))) return res.status(400).json({ ok: false, error: 'channel_id invalid' });
+    const guild = client.guilds.cache.get(String(guild_id));
+    if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
+    const m = await guild.members.fetch(String(user_id)).catch(() => null);
+    if (!m) return res.status(404).json({ ok: false, error: 'member not in guild' });
+    if (!m.voice?.channelId) return res.status(400).json({ ok: false, error: 'member is not currently in a voice channel' });
+    await m.voice.setChannel(String(channel_id));
+    res.json({ ok: true, moved: user_id, to: channel_id });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// GET /api/bot/audit-log?guild_id=X[&limit=N]
+webhookApp.get('/api/bot/audit-log', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const guildId = String(req.query.guild_id || '').trim();
+    if (!/^[0-9]{17,20}$/.test(guildId)) return res.status(400).json({ ok: false, error: 'guild_id required' });
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 25));
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
+    const log = await guild.fetchAuditLogs({ limit });
+    const out = [];
+    for (const e of log.entries.values()) {
+      out.push({
+        id: e.id,
+        action: e.action, // numeric action type per Discord
+        action_type: e.actionType, // e.g. 'CREATE'/'DELETE'/'UPDATE'
+        target_id: e.targetId,
+        executor_id: e.executorId,
+        executor_username: e.executor?.username || null,
+        reason: e.reason || null,
+        created_at: e.createdAt?.toISOString() || null,
+      });
+    }
+    res.json({ ok: true, guild_id: guild.id, guild_name: guild.name, entries: out });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// GET /api/bot/emojis[?guild_id=X]
+webhookApp.get('/api/bot/emojis', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const guildIdFilter = req.query.guild_id ? String(req.query.guild_id) : null;
+    const out = [];
+    for (const guild of client.guilds.cache.values()) {
+      if (guildIdFilter && guild.id !== guildIdFilter) continue;
+      try { await guild.emojis.fetch(); } catch {}
+      for (const em of guild.emojis.cache.values()) {
+        out.push({
+          guild_id: guild.id,
+          guild_name: guild.name,
+          emoji_id: em.id,
+          name: em.name,
+          animated: em.animated,
+          url: em.imageURL?.({ size: 64 }) || `https://cdn.discordapp.com/emojis/${em.id}.${em.animated ? 'gif' : 'png'}`,
+          identifier: `<${em.animated ? 'a' : ''}:${em.name}:${em.id}>`,
+        });
+      }
+    }
+    out.sort((a, b) => a.guild_name.localeCompare(b.guild_name) || a.name.localeCompare(b.name));
+    res.json({ ok: true, count: out.length, emojis: out });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 webhookApp.post('/webhook/acting-process-pending', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
   try {
