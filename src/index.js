@@ -4497,18 +4497,26 @@ webhookApp.post('/api/case-ack-dm', async (req, res) => {
   }
 });
 
-// POST /api/send-channel — send embed to a Discord channel
+// POST /api/send-channel — send embed to a Discord channel.
+// Accepts an optional allowed_mentions object so callers can opt in
+// to @everyone / @here / specific role pings (Discord drops them
+// silently otherwise — they'd render as plain text). Pass
+// `allowed_mentions: { parse: ['everyone'] }` to actually ping the
+// guild.
 webhookApp.post('/api/send-channel', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
-  const { channel_id, embed, content } = req.body;
+  const { channel_id, embed, content, allowed_mentions } = req.body;
   if (!channel_id) return res.status(400).json({ error: 'channel_id required' });
   try {
     const channel = await client.channels.fetch(channel_id);
     const payload = {};
     if (content) payload.content = content;
     if (embed) payload.embeds = [typeof embed === 'string' ? JSON.parse(embed) : embed];
-    await channel.send(payload);
-    res.json({ ok: true });
+    if (allowed_mentions && typeof allowed_mentions === 'object') {
+      payload.allowedMentions = allowed_mentions;
+    }
+    const sent = await channel.send(payload);
+    res.json({ ok: true, message_id: sent.id });
   } catch (e) {
     console.error('[Channel API]', e.message);
     res.status(500).json({ ok: false, error: e.message });
