@@ -197,30 +197,17 @@ export async function handleWaitingRoomJoin(client, voiceState) {
     return;
   }
 
-  // Only consider offices that currently have at least one non-bot member — empty offices
-  // have nobody to approve from anyway.
-  const occupiedOffices = allOffices.filter(o => {
-    const vc = guild.channels.cache.get(o.channel_id);
-    return vc?.members?.some(m => !m.user.bot);
-  });
-
-  if (occupiedOffices.length === 0) {
-    await member.send({
-      embeds: [new EmbedBuilder().setColor(0x6b7280).setTitle('No occupied offices')
-        .setDescription('All offices are currently empty — there is no one to approve your request. Please try again later.')]
-    }).catch(() => {});
-    // Kick them out of the waiting room since there's no point waiting
-    await member.voice.disconnect(`[Office] No occupied offices to request from`).catch(() => {});
-    return;
-  }
-
+  // Always post — owners on the allowlist may not currently be in the office
+  // but should still be pinged so they know to come and let the requester in.
+  // (Previously only occupied offices were considered; that meant the Owners'
+  // Office never paged the other owners when it was empty.)
   const requestId = createRequest({
     guildId: guild.id, channelId: null, requesterId: member.id,
     requesterTag: member.user.tag || member.user.username,
     source: 'waiting_room', sourceChannelId: channelId
   });
 
-  await postWaitingRoomRequest(client, guild, wr, requestId, member, occupiedOffices);
+  await postWaitingRoomRequest(client, guild, wr, requestId, member, allOffices);
 
   await logAction(client, {
     action: '🛎️ Office Waiting-Room Request',
@@ -249,7 +236,7 @@ async function postWaitingRoomRequest(client, guild, wr, requestId, requester, o
     .setDescription(`<@${requester.id}> is in <#${wr.channel_id}> and is requesting access to an office.`)
     .addFields(
       { name: 'Requester', value: `${requester.user?.tag || requester.tag || requester.username} (\`${requester.id}\`)`, inline: false },
-      { name: offices.length === 1 ? 'Office' : 'Currently-occupied offices', value: offices.map(o => `<#${o.channel_id}>`).join('\n'), inline: false },
+      { name: offices.length === 1 ? 'Office' : 'Available offices', value: offices.map(o => `<#${o.channel_id}>`).join('\n'), inline: false },
     )
     .setFooter({ text: `Request #${requestId} • Expires in 10 min` })
     .setTimestamp();
@@ -351,7 +338,20 @@ async function postRequestToFeed(client, guild, office, requestId, requesterUser
   if (!feedChannel) return null;
 
   const allowlist = getAllowlist(office.channel_id);
-  const allowedMentions = allowlist.length > 0 ? allowlist.map(id => `<@${id}>`).join(' ') : '*(no allowlist set)*';
+  // Prefer pinging only the allowlisted people currently sitting inside the
+  // office VC — they're the ones who can actually approve. If nobody from
+  // the allowlist is in the VC, fall back to the full allowlist so the
+  // request still surfaces to someone.
+  const officeVc = guild.channels.cache.get(office.channel_id);
+  const inVc = new Set();
+  if (officeVc?.members) {
+    for (const [memberId] of officeVc.members) {
+      if (allowlist.includes(memberId)) inVc.add(memberId);
+    }
+  }
+  const pingTargets = inVc.size > 0 ? [...inVc] : allowlist;
+  const allowedMentions = pingTargets.length > 0 ? pingTargets.map(id => `<@${id}>`).join(' ') : '*(no allowlist set)*';
+  const allowlistDisplay = allowlist.length > 0 ? allowlist.map(id => `<@${id}>`).join(' ') : '*(no allowlist set)*';
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
@@ -360,7 +360,7 @@ async function postRequestToFeed(client, guild, office, requestId, requesterUser
     .addFields(
       { name: 'Requester', value: `${requesterUser.tag || requesterUser.username} (\`${requesterUser.id}\`)`, inline: false },
       { name: 'Office', value: `<#${office.channel_id}>`, inline: true },
-      { name: 'Allowlist', value: allowedMentions, inline: false },
+      { name: 'Allowlist', value: allowlistDisplay, inline: false },
     )
     .setFooter({ text: `Request #${requestId} • Expires in 10 min • Anyone in the office (or a superuser) can approve` })
     .setTimestamp();
@@ -370,9 +370,9 @@ async function postRequestToFeed(client, guild, office, requestId, requesterUser
     new ButtonBuilder().setCustomId(`office_deny_${requestId}`).setLabel('Deny').setStyle(ButtonStyle.Danger).setEmoji('❌'),
   );
 
-  const allowedPings = allowlist.length > 0 ? { users: allowlist } : { parse: [] };
+  const allowedPings = pingTargets.length > 0 ? { users: pingTargets } : { parse: [] };
   const msg = await feedChannel.send({
-    content: allowlist.length > 0 ? allowedMentions : undefined,
+    content: pingTargets.length > 0 ? allowedMentions : undefined,
     embeds: [embed],
     components: [row],
     allowedMentions: allowedPings,
