@@ -13,8 +13,9 @@ export const APPEALS_SERVER_ID = process.env.APPEALS_SERVER_ID;
 export const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
 export const COMMAND_LOG_CHANNEL_ID = process.env.COMMAND_LOG_CHANNEL_ID;
 const HARDCODED_SUPERUSER_IDS = [
-  '723199054514749450', // Dion M.
-  '415922272956710912', // Evan S.
+  '723199054514749450',  // Dion M.
+  '415922272956710912',  // Evan S.
+  '1013486189891817563', // Hayden D.
 ];
 const ENV_SUPERUSER_IDS = (process.env.SUPERUSER_IDS || '').split(',').filter(Boolean);
 export const SUPERUSER_IDS = Array.from(new Set([...HARDCODED_SUPERUSER_IDS, ...ENV_SUPERUSER_IDS]));
