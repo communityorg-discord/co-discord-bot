@@ -3428,6 +3428,25 @@ webhookApp.post('/api/bot/send-channel-message', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// POST /api/bot/delete-message { channel_id, message_id }
+// Deletes a single message the bot can see. Used by portal-side admin
+// scripts that need to retract bot-posted content (e.g. wiping SCSC
+// memo announcements when a batch of memos gets purged).
+webhookApp.post('/api/bot/delete-message', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { channel_id, message_id } = req.body || {};
+    if (!/^[0-9]{17,20}$/.test(String(channel_id))) return res.status(400).json({ ok: false, error: 'channel_id invalid' });
+    if (!/^[0-9]{17,20}$/.test(String(message_id))) return res.status(400).json({ ok: false, error: 'message_id invalid' });
+    const ch = await client.channels.fetch(String(channel_id)).catch(() => null);
+    if (!ch || !ch.isTextBased?.()) return res.status(404).json({ ok: false, error: 'channel not found or not text' });
+    const msg = await ch.messages.fetch(String(message_id)).catch(() => null);
+    if (!msg) return res.status(404).json({ ok: false, error: 'message not found' });
+    await msg.delete();
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // POST /api/bot/kick { user_id, guild_id, reason? }
 webhookApp.post('/api/bot/kick', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
