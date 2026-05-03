@@ -197,17 +197,27 @@ export async function handleWaitingRoomJoin(client, voiceState) {
     return;
   }
 
-  // Always post — owners on the allowlist may not currently be in the office
-  // but should still be pinged so they know to come and let the requester in.
-  // (Previously only occupied offices were considered; that meant the Owners'
-  // Office never paged the other owners when it was empty.)
+  // Detect which offices are currently in use (have at least one non-bot member
+  // in the VC). If any are occupied, only surface those — one Accept button per
+  // active office. If none are occupied, fall back to all offices so the
+  // allowlist still gets pinged and owners can come let the requester in.
+  const occupiedOffices = allOffices.filter(o => {
+    const vc = guild.channels.cache.get(o.channel_id);
+    if (!vc?.members) return false;
+    for (const [, m] of vc.members) {
+      if (!m.user?.bot) return true;
+    }
+    return false;
+  });
+  const offices = occupiedOffices.length > 0 ? occupiedOffices : allOffices;
+
   const requestId = createRequest({
     guildId: guild.id, channelId: null, requesterId: member.id,
     requesterTag: member.user.tag || member.user.username,
     source: 'waiting_room', sourceChannelId: channelId
   });
 
-  await postWaitingRoomRequest(client, guild, wr, requestId, member, allOffices);
+  await postWaitingRoomRequest(client, guild, wr, requestId, member, offices);
 
   await logAction(client, {
     action: '🛎️ Office Waiting-Room Request',
