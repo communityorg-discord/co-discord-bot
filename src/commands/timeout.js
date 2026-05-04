@@ -69,7 +69,7 @@ export async function execute(interaction) {
 
   const checkName = sub ? `timeout:${sub}` : 'timeout';
   const perm = await canUseCommand(checkName, interaction);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}` });
+  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
   if (sub === 'add') {
     await handleAddTimeout(interaction);
@@ -84,21 +84,21 @@ async function handleAddTimeout(interaction) {
   const reason = interaction.options.getString('reason') || 'Not specified';
 
   if (!interaction.inGuild()) {
-    return interaction.reply({ content: '❌ This command cannot be used in DMs.' });
+    return interaction.reply({ content: '❌ This command cannot be used in DMs.', ephemeral: true });
   }
 
   const resolved = await resolveUser(userArg, interaction.guild);
   if (!resolved) {
-    return interaction.reply({ content: `❌ Could not find user: ${userArg}. Use @mention or a user ID.` });
+    return interaction.reply({ content: `❌ Could not find user: ${userArg}. Use @mention or a user ID.`, ephemeral: true });
   }
   const { id: targetId, user: target } = resolved;
 
   const durationMs = parseDuration(durationStr);
   if (!durationMs || durationMs < 10000) {
-    return interaction.reply({ content: '❌ Invalid duration. Use formats like: 10s, 5m, 2h, 1d, 1 minute, 30 seconds, 1 hour 30 minutes' });
+    return interaction.reply({ content: '❌ Invalid duration. Use formats like: 10s, 5m, 2h, 1d, 1 minute, 30 seconds, 1 hour 30 minutes', ephemeral: true });
   }
   if (durationMs > 2419200000) {
-    return interaction.reply({ content: '❌ Maximum timeout duration is 28 days.' });
+    return interaction.reply({ content: '❌ Maximum timeout duration is 28 days.', ephemeral: true });
   }
 
   const member = await interaction.guild.members.fetch(targetId).catch(() => null);
