@@ -61,6 +61,14 @@ Either intentional (community vs internal) or one is a stale duplicate. Worth co
 
 `src/commands/verify.js` `EXCLUDED_WELCOME_INVITE_GUILDS` includes `1272007308704088074` — the bot is not a member of that guild, so the entry is dead. Cosmetic only.
 
+### 8. AutoMod is disabled on CO | Internal Hub
+
+`automod_config.enabled = 0` for guild `1357119461957570570` (CO | Internal Hub, 29 members). All 8 other guilds have AutoMod enabled. Either intentional (an admin disabled it) or a config gap.
+
+`raid_detection`, `verify_timeout`, and `permission_guard` are still enabled in the per-feature flags — but the master `enabled` flag gates everything, so AutoMod actually does nothing on this guild right now.
+
+**Options:** flip `enabled = 1` if you want AutoMod active on Internal Hub.
+
 ## Bot's permission posture
 
 The bot has `ManageChannels`, `ManageRoles`, `KickMembers`, `BanMembers`, and `ManageGuild` in **all 9 guilds**. Bot's role position is 60–78 across guilds — high enough to manage most non-leadership roles, but not at the top. This is fine for normal operation; flag if you want the bot's role moved up to manage Founder/leadership-tier roles.
