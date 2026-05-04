@@ -94,6 +94,7 @@ const CATEGORIES = [
     { name: 'logspanel', desc: 'Configure log channels (auth 5+)' },
     { name: 'bot', desc: 'Bot info — version, uptime, servers' },
     { name: 'server-health', desc: 'Per-guild role/AutoMod/baseline-role audit (auth 7+)' },
+    { name: 'bot-perms', desc: 'Per-channel audit of missing bot perms in this server (auth 5+)' },
     { name: 'help', desc: 'This command' },
   ]},
 ];
