@@ -3655,6 +3655,33 @@ webhookApp.get('/api/bot/commands', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// GET /api/bot/snippets — list every snippet (shared + personal) for
+// the /admin/bot-snippets page. Auth-gated by the bot secret; the
+// portal-side route gates by username.
+webhookApp.get('/api/bot/snippets', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { db: bDb } = await import('./utils/botDb.js');
+    const items = bDb.prepare(`
+      SELECT id, owner_id, name, content, use_count, created_at, updated_at
+      FROM snippets ORDER BY (owner_id IS NULL) DESC, name ASC
+    `).all();
+    res.json({ ok: true, items });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// DELETE /api/bot/snippets/:id — admin override; superusers only via portal gate.
+webhookApp.delete('/api/bot/snippets/:id', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ ok: false, error: 'bad id' });
+    const { db: bDb } = await import('./utils/botDb.js');
+    const r = bDb.prepare('DELETE FROM snippets WHERE id = ?').run(id);
+    res.json({ ok: true, changed: r.changes });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // GET /api/bot/feedback?status=open|resolved&limit=N — list feedback rows.
 // Backs /admin/bot-feedback.
 webhookApp.get('/api/bot/feedback', async (req, res) => {
