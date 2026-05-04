@@ -8,7 +8,7 @@ Read-only audit of all 9 CO guilds the bot is in. **Status update 05:46 UTC: 7/8
 - ✅ Empty env vars (`STAFF_HQ_ID`, `NETWORK_SERVER_IDS`, `SUSPENDED_ROLE_ID`, `UNDER_INVESTIGATION_ROLE_ID`) — added runtime fallbacks (96b51a3) and name-based role lookup (57a77c1).
 - ✅ Bulk role-add was all-or-nothing — switched to one-at-a-time so one denied role doesn't block the rest (f515b4d).
 
-## Discord-state findings — 7/8 done
+## Discord-state findings — 8/8 done
 
 ✅ **#1 (DONE)** — Bot Developer role created in all 9 guilds.
 ✅ **#2 (DONE)** — Under Investigation role created on Staff HQ.
@@ -63,12 +63,12 @@ The bypass-account position has its role in 8/9 guilds, missing from Dev Server 
 
 **Options:** add the role to Dev Server, OR confirm the dev server is not part of the official-account flow.
 
-### 6. Two guilds named "CO | Communications"
+### 6. Two guilds named "CO | Communications" — RESOLVED (intentional)
 
-- ID `1358129722931937280` — 45 members
-- ID `1485423935569920135` — 8 members
+- ID `1358129722931937280` — 45 members, created 2025-04-05, 27 channels (welcome/rules/general/announcements/tickets) — the real public Communications guild
+- ID `1485423935569920135` — 8 members, created 2026-03-22, channels are `#mass-unban`, `#ban-unban`, `#global-message`, `#delete-message` — a private ops/mod-tools server for superusers, sharing the name by accident
 
-Either intentional (community vs internal) or one is a stale duplicate. Worth confirming.
+Not a duplicate. Different purpose, different audience. The 8-member one is effectively the "Mod Ops" server — leaving the name alone to avoid disrupting the 8 members already using it.
 
 ### 7. Stale guild ID in welcome-DM exclusion list
 
