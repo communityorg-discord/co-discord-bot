@@ -64,65 +64,72 @@ export async function execute(interaction) {
       isViewingOther = true;
     }
 
-    const brag = getBragStatus(targetDbUser.id);
+    // BRAG was retired in the 2026-04-26 migration — read from
+    // activity_weekly_grades (the canonical APS aggregate) and
+    // activity_point_records (live points for projection). brag_records,
+    // brag_reports, and getBragStatus all referenced tables that no
+    // longer exist; queries against them threw "no such table".
     const weeks = getLast8Weeks();
     const currentWeekKey = weeks[0]?.key;
     const previousWeekKey = weeks[1]?.key;
 
     const currentWeekRecord = portalDb.prepare(
-      'SELECT * FROM brag_records WHERE discord_id = ? AND week_key = ?'
-    ).get(targetDbUser.discord_id, currentWeekKey);
+      'SELECT * FROM activity_weekly_grades WHERE user_id = ? AND week_key = ?'
+    ).get(targetDbUser.id, currentWeekKey);
 
     const previousWeekRecord = portalDb.prepare(
-      'SELECT * FROM brag_records WHERE discord_id = ? AND week_key = ?'
-    ).get(targetDbUser.discord_id, previousWeekKey);
+      'SELECT * FROM activity_weekly_grades WHERE user_id = ? AND week_key = ?'
+    ).get(targetDbUser.id, previousWeekKey);
 
-    // Fetch threshold from portal settings (may be overridden for specific weeks)
-    let thresholdsGreen = 150;
-    try {
-      const resp = await fetch('http://localhost:3016/api/brag/threshold', { headers: { 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET } }).catch(() => null);
-      if (resp?.ok) {
-        const data = await resp.json();
-        if (data.green) thresholdsGreen = data.green;
-      }
-    } catch {}
-    const thresholdsAmber = Math.round(thresholdsGreen * 0.6667);
-    const thresholdsRed = Math.round(thresholdsGreen * 0.3333);
+    // Live current-week total in case the cron hasn't yet re-baked the
+    // grade row for today's activity.
+    const liveCurrent = portalDb.prepare(
+      "SELECT COALESCE(SUM(points), 0) AS p FROM activity_point_records WHERE user_id = ? AND week_key = ?"
+    ).get(targetDbUser.id, currentWeekKey);
+    const currentCount = liveCurrent?.p || currentWeekRecord?.total_points || 0;
+
+    // Tier thresholds: prefer the user's own row; fall back to the most
+    // common tier band so the embed still has reasonable numbers when no
+    // grade row exists yet (first week of activity).
+    const fallbackTier = portalDb.prepare(
+      'SELECT green_target, amber_target, red_target FROM activity_tier_config ORDER BY id LIMIT 1'
+    ).get();
+    const thresholdsGreen = currentWeekRecord?.green_target || fallbackTier?.green_target || 300;
+    const thresholdsAmber = currentWeekRecord?.amber_target || fallbackTier?.amber_target || 200;
+    const thresholdsRed   = currentWeekRecord?.red_target   || fallbackTier?.red_target   || 100;
 
     let projected = null;
-    const currentCount = currentWeekRecord?.message_count || 0;
-    if (currentCount > 0 && currentWeekRecord?.week_key) {
-      const start = new Date(currentWeekRecord?.week_key);
+    if (currentCount > 0 && currentWeekKey) {
+      const start = new Date(currentWeekKey);
       const now = new Date();
       const daysElapsed = Math.max(1, Math.ceil((now - start) / 86400000));
       projected = Math.round((currentCount / daysElapsed) * 7);
     }
 
-    const gradeEmoji = (g) => ({ green: '🟢', amber: '🟡', red: '🔴', black: '⚫' }[g?.toLowerCase()] || '⚪');
+    const gradeEmoji = (g) => ({ green: '🟢', amber: '🟡', red: '🔴', black: '⚫', pending: '⏳' }[g?.toLowerCase()] || '⚪');
     const gradeColor = (g) => ({ green: 0x22C55E, amber: 0xF59E0B, red: 0xEF4444, black: 0x1F2937 }[g?.toLowerCase()] || 0x5865F2);
 
-    const currentGrade = currentWeekRecord?.final_grade || brag?.messages_grade || 'unknown';
-    const lastWeekGrade = previousWeekRecord?.final_grade || brag?.messages_grade || 'unknown';
-    const lastWeekCount = previousWeekRecord?.message_count || brag?.message_count || 0;
+    const currentGrade = currentWeekRecord?.grade || (currentCount > 0 ? 'pending' : 'unknown');
+    const lastWeekGrade = previousWeekRecord?.grade || 'unknown';
+    const lastWeekCount = previousWeekRecord?.total_points || 0;
 
     const viewingNote = isViewingOther ? ` (viewing ${commandUser.display_name || commandUser.full_name})` : '';
     const embed = new EmbedBuilder()
-      .setTitle(`${gradeEmoji(currentGrade)} BRAG Status — ${targetDbUser.display_name || targetDbUser.full_name}${viewingNote}`)
+      .setTitle(`${gradeEmoji(currentGrade)} Activity Points — ${targetDbUser.display_name || targetDbUser.full_name}${viewingNote}`)
       .setColor(gradeColor(currentGrade))
+      .setDescription('_BRAG was retired in 2026-04-26 — this view now reads from Activity Points._')
       .addFields(
         { name: 'Position', value: targetDbUser.position || 'N/A', inline: true },
         { name: 'Department', value: targetDbUser.department || 'N/A', inline: true },
         { name: '\u200B', value: '\u200B', inline: true },
-        { name: '📊 This Week', value: String(currentCount), inline: true },
+        { name: '📊 This Week (points)', value: String(currentCount), inline: true },
         { name: '🎯 Target', value: `🟢 ${thresholdsGreen}+\n🟡 ${thresholdsAmber}-${thresholdsGreen}\n🔴 ${thresholdsRed}-${thresholdsAmber}\n⚫ 0-${thresholdsRed}`, inline: true },
         { name: '📈 Projected', value: projected !== null ? String(projected) : 'N/A', inline: true },
-        { name: '🏆 Last Week', value: lastWeekCount > 0 ? `${lastWeekCount} — ${gradeEmoji(lastWeekGrade)} ${lastWeekGrade?.toUpperCase()}` : 'No data', inline: true },
-        { name: 'Overall Grade', value: `${gradeEmoji(lastWeekGrade)} ${(lastWeekGrade || 'N/A').toUpperCase()}`, inline: true },
-        { name: 'Last Submitted', value: brag?.submitted_at ? `<t:${Math.floor(new Date(brag.submitted_at).getTime() / 1000)}:R>` : 'No reports', inline: true },
-        { name: 'Tasks Rating', value: brag?.tasks_self_rating || 'N/A', inline: true },
-        { name: 'Notes', value: brag?.additional_comments || brag?.tasks_notes || 'No notes', inline: false }
+        { name: '🏆 Last Week', value: lastWeekCount > 0 ? `${lastWeekCount} pts — ${gradeEmoji(lastWeekGrade)} ${lastWeekGrade?.toUpperCase()}` : 'No data', inline: true },
+        { name: 'Current Grade', value: `${gradeEmoji(currentGrade)} ${(currentGrade || 'N/A').toUpperCase()}`, inline: true },
+        { name: 'Categories met', value: String(currentWeekRecord?.categories_met ?? '—'), inline: true },
       )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setFooter({ text: 'Community Organisation | Staff Assistant — try /aps for the live tier breakdown' })
       .setTimestamp();
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
