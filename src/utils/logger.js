@@ -6,13 +6,15 @@ import { LOG_CHANNEL_ID, MOD_LOG_CHANNEL_ID,
   ROLE_PERMISSION_LOG_CHANNEL_ID,
   MEMBER_ROLE_ADD_LOG_CHANNEL_ID,
   MEMBER_ROLE_REMOVE_LOG_CHANNEL_ID,
-  ROLE_ALL_LOG_CHANNEL_ID
+  ROLE_ALL_LOG_CHANNEL_ID,
+  SUPERUSER_IDS,
 } from '../config.js';
 import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent } from './botDb.js';
 
-// Map log categories to their global channel keys
-// User IDs that receive ALL logs as DMs
-const WATCHED_LOG_USER_IDS = ['415922272956710912', '723199054514749450', '1013486189891817563'];
+// Watched log audience = the superuser set. Was previously a hardcoded
+// 3-user list duplicated from config.js; now sourced from the same
+// place so adding a new superuser auto-grants log DMs without two edits.
+const WATCHED_LOG_USER_IDS = SUPERUSER_IDS;
 
 export async function sendToWatchedUsers(client, embed) {
   for (const userId of WATCHED_LOG_USER_IDS) {
