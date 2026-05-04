@@ -45,7 +45,7 @@ function buildInfractionsPage(infractions, page, total, target, includeDeleted, 
     new ButtonBuilder().setCustomId(`infr_next_${page}_${target.id}_${includeDeleted ? 1 : 0}`).setLabel('Next ▶').setStyle(ButtonStyle.Secondary).setDisabled(page >= totalPages),
   );
 
-  return { embeds: [embed], components: [row] };
+  return { embeds: [embed], components: [row], ephemeral: true };
 }
 
 export const data = new SlashCommandBuilder()
@@ -102,7 +102,7 @@ export async function execute(interaction) {
         .addFields({ name: 'Deleted By', value: interaction.user.username, inline: true })
         .setFooter({ text: 'Community Organisation' })
         .setTimestamp()
-      ]});
+      ], ephemeral: true });
       return;
     }
   } catch (err) {
