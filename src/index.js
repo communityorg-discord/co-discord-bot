@@ -2324,7 +2324,7 @@ client.on('guildMemberAdd', async (member) => {
     if (!verified) return;
 
     const { POSITIONS, ALL_MANAGED_ROLES } = await import('./utils/positions.js');
-    const roleNames = [...(POSITIONS[verified.position] || []), 'Verified', 'CO Staff'];
+    const roleNames = [...(POSITIONS[verified.position] || []), 'Verified', 'CO | Staff'];
     const toAssign = member.guild.roles.cache.filter(r => roleNames.includes(r.name));
     // Add roles one-at-a-time so a single permission-denied role (above the
     // bot's hierarchy) doesn't block the rest. Discord's bulk-edit is
@@ -4161,7 +4161,7 @@ webhookApp.post('/bot/disciplinary', async (req, res) => {
         // position-derived role list so a reinstated user ends up with
         // their full baseline role set.
         if (newPosition && POSITIONS[newPosition]) {
-          const roleNames = [...POSITIONS[newPosition], 'Verified', 'CO Staff'];
+          const roleNames = [...POSITIONS[newPosition], 'Verified', 'CO | Staff'];
           for (const [, guild] of client.guilds.cache) {
             try {
               const member = await guild.members.fetch(discordId).catch(() => null);

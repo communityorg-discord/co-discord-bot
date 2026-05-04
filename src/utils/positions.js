@@ -40,7 +40,11 @@ export const POSITIONS = {
   "Bot Developer": ["Bot Developer","Authorisation Level 7"],
 };
 
-export const ALL_MANAGED_ROLES = [...new Set([...Object.values(POSITIONS).flat(), 'Verified', 'CO | Staff', 'CO Staff'])];
+// Baseline roles every verified staff member should have. The pipe form
+// "CO | Staff" matches the actual role names in every CO guild — kept
+// "CO Staff" (no pipe) in the set as a no-op safety, since removing it
+// from this list cleans up but doesn't fix anything that's broken.
+export const ALL_MANAGED_ROLES = [...new Set([...Object.values(POSITIONS).flat(), 'Verified', 'CO | Staff'])];
 
 export function getAuthLevelRole(level) {
   return `Authorisation Level ${level}`;
