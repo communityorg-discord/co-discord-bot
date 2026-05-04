@@ -125,7 +125,7 @@ export async function execute(interaction) {
       .setFooter({ text: 'Community Organisation | Staff Assistant' })
       .setTimestamp();
 
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({ embeds: [embed], ephemeral: true });
   } catch (err) {
     console.error('[brag] Error:', err);
     const msg = { content: 'An error occurred. Please try again.', flags: 64 };

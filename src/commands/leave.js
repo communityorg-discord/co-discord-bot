@@ -51,7 +51,7 @@ export async function execute(interaction) {
     });
   }
 
-  await interaction.reply({ embeds: [embed] });
+  await interaction.reply({ embeds: [embed], ephemeral: true });
   } catch (err) {
     console.error('[leave] Error:', err);
     const msg = { content: 'An error occurred. Please try again.', flags: 64 };
