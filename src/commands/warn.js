@@ -21,18 +21,18 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const perm = await canUseCommand('warn', interaction);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}` });
+  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
   const userArg = interaction.options.getString('user');
   const reason = interaction.options.getString('reason');
 
   if (!interaction.inGuild()) {
-    return interaction.reply({ content: '❌ This command cannot be used in DMs.' });
+    return interaction.reply({ content: '❌ This command cannot be used in DMs.', ephemeral: true });
   }
 
   const resolved = await resolveUser(userArg, interaction.guild);
   if (!resolved) {
-    return interaction.reply({ content: `❌ Could not find user: ${userArg}. Use @mention or a user ID.` });
+    return interaction.reply({ content: `❌ Could not find user: ${userArg}. Use @mention or a user ID.`, ephemeral: true });
   }
   const { id: targetId, user: target } = resolved;
 

@@ -59,7 +59,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const perm = await canUseCommand('serverban', interaction);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}` });
+  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
 
   const userArg = interaction.options.getString('user');
   const durationStr = interaction.options.getString('duration');
@@ -67,16 +67,16 @@ export async function execute(interaction) {
   const deleteDays = interaction.options.getInteger('delete_messages') ?? 0;
 
   if (!interaction.inGuild()) {
-    return interaction.reply({ content: '❌ This command cannot be used in DMs.' });
+    return interaction.reply({ content: '❌ This command cannot be used in DMs.' , ephemeral: true });
   }
 
   if (deleteDays < 0 || deleteDays > 7) {
-    return interaction.reply({ content: '❌ Delete messages must be between 0 and 7 days.' });
+    return interaction.reply({ content: '❌ Delete messages must be between 0 and 7 days.' , ephemeral: true });
   }
 
   const resolved = await resolveUser(userArg, interaction.guild);
   if (!resolved) {
-    return interaction.reply({ content: `❌ Could not find user: ${userArg}. Use @mention or a user ID.` });
+    return interaction.reply({ content: `❌ Could not find user: ${userArg}. Use @mention or a user ID.`, ephemeral: true });
   }
   const { id: targetId, user: target } = resolved;
 
@@ -86,7 +86,7 @@ export async function execute(interaction) {
   // Check if already banned
   try {
     await interaction.guild.bans.fetch(targetId);
-    return interaction.reply({ content: `❌ <@${targetId}> is already banned from this server.` });
+    return interaction.reply({ content: `❌ <@${targetId}> is already banned from this server.`, ephemeral: true });
   } catch {}
 
   const isTempBan = !!durationStr;
@@ -94,10 +94,10 @@ export async function execute(interaction) {
   if (isTempBan) {
     durationMs = parseDuration(durationStr);
     if (!durationMs || durationMs < 60000) {
-      return interaction.reply({ content: '❌ Minimum temp ban duration is 1 minute. Use formats like: 1d, 7d, 12h, 30m' });
+      return interaction.reply({ content: '❌ Minimum temp ban duration is 1 minute. Use formats like: 1d, 7d, 12h, 30m' , ephemeral: true });
     }
     if (durationMs > 604800000) {
-      return interaction.reply({ content: '❌ Maximum temp ban duration is 7 days.' });
+      return interaction.reply({ content: '❌ Maximum temp ban duration is 7 days.' , ephemeral: true });
     }
   }
 
