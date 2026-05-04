@@ -3666,6 +3666,33 @@ webhookApp.get('/api/bot/commands', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// GET /api/bot/kudos?window=week|month|all — leaderboard + recent + giver stats.
+// Backs the portal /kudos page. Read-only.
+webhookApp.get('/api/bot/kudos', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { db: bDb } = await import('./utils/botDb.js');
+    const win = ['week', 'month', 'all'].includes(req.query.window) ? req.query.window : 'month';
+    const sinceClause = win === 'all' ? '' : `WHERE created_at >= datetime('now', '-${win === 'week' ? 7 : 30} days')`;
+
+    const leaderboard = bDb.prepare(`
+      SELECT to_discord_id, COUNT(*) c FROM kudos ${sinceClause}
+      GROUP BY to_discord_id ORDER BY c DESC LIMIT 20
+    `).all();
+    const givers = bDb.prepare(`
+      SELECT from_discord_id, COUNT(*) c FROM kudos ${sinceClause}
+      GROUP BY from_discord_id ORDER BY c DESC LIMIT 20
+    `).all();
+    const recent = bDb.prepare(`
+      SELECT id, from_discord_id, to_discord_id, message, created_at
+      FROM kudos ${sinceClause} ORDER BY created_at DESC LIMIT 25
+    `).all();
+    const total = bDb.prepare(`SELECT COUNT(*) c FROM kudos ${sinceClause}`).get().c;
+
+    res.json({ ok: true, window: win, total, leaderboard, givers, recent });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // GET /api/bot/runtime — system-status snapshot for /admin/bot-runtime.
 // Process/uptime/memory + counts from key tables + recent error rate
 // from command_invocations.
