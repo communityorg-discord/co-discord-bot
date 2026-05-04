@@ -1059,11 +1059,12 @@ client.once('ready', async () => {
   // ── Voice Channel Leaderboard ──
   async function postVoiceLeaderboard() {
     try {
-      const { db: cfgDb, getVoiceLeaderboard, flushActiveSessions } = await import('./utils/botDb.js');
+      const { db: cfgDb, getVoiceLeaderboard, flushActiveSessions, rolloverStaleSessions } = await import('./utils/botDb.js');
       const portalDb = (await import('./db.js')).default;
       const weekKey = getBragWeekKey();
 
-      // Flush active sessions so totals are current
+      // Close any sessions that crossed a week boundary, then flush so totals are current
+      rolloverStaleSessions(weekKey, collectCurrentlyInVoice(client));
       flushActiveSessions(weekKey);
 
       const rows = getVoiceLeaderboard(weekKey);
@@ -1362,6 +1363,42 @@ client.once('ready', async () => {
     } catch (e) {
       console.error('[Login Streak Leaderboard] Failed:', e.message);
     }
+  }
+
+  // Voice-state recovery sweep: bot restarts lose the in-memory voiceSessions
+  // map, so users already in voice when the bot comes up wouldn't get tracked
+  // until they next move. Re-anchor a session_start for anyone currently in voice
+  // and seed voiceSessions so voiceLeave fires correctly when they eventually leave.
+  try {
+    const { db: vtDb, rolloverStaleSessions } = await import('./utils/botDb.js');
+    const inVoice = collectCurrentlyInVoice(client);
+    rolloverStaleSessions(getBragWeekKey(), inVoice);
+    const weekKey = getBragWeekKey();
+    const nowIso = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    let recovered = 0;
+    for (const guild of client.guilds.cache.values()) {
+      for (const vs of guild.voiceStates.cache.values()) {
+        if (!vs.channelId || vs.member?.user?.bot) continue;
+        const userId = String(vs.id);
+        if (!voiceSessions.has(userId)) {
+          voiceSessions.set(userId, {
+            channel_id: vs.channelId,
+            channel_name: vs.channel?.name || '',
+            joined_at: Date.now(),
+          });
+          recovered++;
+        }
+        const existing = vtDb.prepare('SELECT id, session_start FROM voice_time_tracking WHERE discord_id = ? AND week_key = ?').get(userId, weekKey);
+        if (!existing) {
+          vtDb.prepare('INSERT INTO voice_time_tracking (discord_id, week_key, total_seconds, session_start, last_synced_seconds) VALUES (?, ?, 0, ?, 0)').run(userId, weekKey, nowIso);
+        } else if (!existing.session_start) {
+          vtDb.prepare('UPDATE voice_time_tracking SET session_start = ? WHERE id = ?').run(nowIso, existing.id);
+        }
+      }
+    }
+    if (recovered > 0) console.log(`[VC recovery] Re-anchored ${recovered} active voice session(s) on boot`);
+  } catch (e) {
+    console.error('[VC recovery]', e.message);
   }
 
   // Post all leaderboards on startup, then every 5 minutes
@@ -2866,13 +2903,29 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
   try { await automod.checkMemberUpdate(oldMember, newMember); } catch (e) { console.error('[AutoMod guildMemberUpdate]', e.message); }
 });
 
+// Snapshot every non-bot user currently in any voice channel across all guilds.
+// Used by the week-boundary rollover so we only carry post-boundary time
+// for users actually still in voice (avoids phantom-time on stale rows).
+function collectCurrentlyInVoice(client) {
+  const set = new Set();
+  for (const guild of client.guilds.cache.values()) {
+    for (const vs of guild.voiceStates.cache.values()) {
+      if (vs.channelId && !vs.member?.user?.bot) set.add(String(vs.id));
+    }
+  }
+  return set;
+}
+
 // ============ VOICE OFFICE RESTRICTIONS ============
 client.on('voiceStateUpdate', async (oldState, newState) => {
   // Voice time tracking for leaderboard + activity points
   try {
     const userId = newState.member?.id || oldState.member?.id;
     if (userId && !(newState.member?.user?.bot || oldState.member?.user?.bot)) {
-      const { voiceJoin, voiceLeave } = await import('./utils/botDb.js');
+      const { voiceJoin, voiceLeave, rolloverStaleSessions } = await import('./utils/botDb.js');
+      // Roll over any week-boundary-crossing session before handling this event
+      try { rolloverStaleSessions(getBragWeekKey(), collectCurrentlyInVoice(client)); }
+      catch (e) { console.error('[VC rollover voiceStateUpdate]', e.message); }
       const joined = !oldState.channelId && newState.channelId;
       const left = oldState.channelId && !newState.channelId;
       const moved = oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId;

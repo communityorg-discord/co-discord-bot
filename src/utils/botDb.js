@@ -1303,6 +1303,73 @@ export function flushActiveSessions(weekKey) {
   }
 }
 
+// Close any session_start rows whose week_key has rolled over.
+//
+// Symptom this fixes: a user who stays in voice across the Mon 00:00 UTC
+// week boundary keeps the previous week's session_start set forever — no
+// voiceLeave fires (Discord events are stateless across the boundary), so
+// the next event opens a fresh row in the new week and the boundary-crossing
+// time is lost. flushActiveSessions only touches rows for the week_key it
+// receives, so it can't catch this on its own.
+//
+// For each stale row: cap elapsed at the week boundary, credit it, clear
+// session_start. If the user is still in voice (per `currentlyInVoice`),
+// also carry the post-boundary time onto the current week's row so live
+// totals stay correct.
+export function rolloverStaleSessions(currentWeekKey, currentlyInVoice = new Set()) {
+  const stale = db.prepare(
+    'SELECT id, discord_id, week_key, session_start FROM voice_time_tracking WHERE session_start IS NOT NULL AND week_key != ?'
+  ).all(currentWeekKey);
+  if (!stale.length) return { closed: 0, carried: 0 };
+
+  let closed = 0;
+  let carried = 0;
+  const tx = db.transaction(() => {
+    for (const row of stale) {
+      const wkStart = Date.parse(row.week_key + 'T00:00:00Z');
+      const wkEnd = wkStart + 7 * 86400 * 1000; // exclusive Mon 00:00 of the next week
+      const sStart = Date.parse(row.session_start + 'Z');
+      const elapsedToBoundary = Math.max(0, Math.floor((wkEnd - sStart) / 1000));
+      db.prepare('UPDATE voice_time_tracking SET total_seconds = total_seconds + ?, session_start = NULL WHERE id = ?')
+        .run(elapsedToBoundary, row.id);
+      closed++;
+
+      if (!currentlyInVoice.has(String(row.discord_id))) continue;
+
+      const wkBoundaryIso = new Date(wkEnd).toISOString().replace('T', ' ').slice(0, 19);
+      const existing = db.prepare('SELECT * FROM voice_time_tracking WHERE discord_id = ? AND week_key = ?')
+        .get(row.discord_id, currentWeekKey);
+
+      if (!existing) {
+        // Continuously in voice since boundary — open a synthetic session anchored at the boundary
+        db.prepare('INSERT INTO voice_time_tracking (discord_id, week_key, total_seconds, session_start, last_synced_seconds) VALUES (?, ?, 0, ?, 0)')
+          .run(row.discord_id, currentWeekKey, wkBoundaryIso);
+        carried += Math.floor((Date.now() - wkEnd) / 1000);
+      } else if (existing.session_start) {
+        // A voice event fired post-boundary; credit the boundary→event gap as continuous VC time
+        const eStart = Date.parse(existing.session_start + 'Z');
+        const gap = Math.max(0, Math.floor((eStart - wkEnd) / 1000));
+        if (gap > 0) {
+          db.prepare('UPDATE voice_time_tracking SET total_seconds = total_seconds + ? WHERE id = ?')
+            .run(gap, existing.id);
+          carried += gap;
+        }
+      } else {
+        // Row exists with no active session, yet user is in voice now —
+        // the last voiceLeave closed it and a fresh voiceJoin must have missed.
+        // Re-open at now and carry the boundary→now gap.
+        const nowIso = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        const carrySecs = Math.max(0, Math.floor((Date.now() - wkEnd) / 1000));
+        db.prepare('UPDATE voice_time_tracking SET total_seconds = total_seconds + ?, session_start = ? WHERE id = ?')
+          .run(carrySecs, nowIso, existing.id);
+        carried += carrySecs;
+      }
+    }
+  });
+  tx();
+  return { closed, carried };
+}
+
 export function getVoiceLeaderboard(weekKey) {
   return db.prepare('SELECT discord_id, total_seconds FROM voice_time_tracking WHERE week_key = ? AND total_seconds > 0 ORDER BY total_seconds DESC LIMIT 20').all(weekKey);
 }
