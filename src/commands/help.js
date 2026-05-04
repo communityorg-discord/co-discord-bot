@@ -53,6 +53,7 @@ const CATEGORIES = [
     { name: 'myroles', desc: 'Show your roles across every CO server' },
     { name: 'role-info', desc: 'Detailed info on a Discord role — members, perms, colour' },
     { name: 'serverinfo', desc: 'Comprehensive info about the current Discord server' },
+    { name: 'channel-info', desc: 'Inspect a channel — type, slowmode, permissions, parent' },
     { name: 'stats', desc: 'Organisation-wide statistics' },
   ]},
   { name: 'Security & AutoMod', emoji: '🔒', commands: [
