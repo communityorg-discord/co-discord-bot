@@ -25,7 +25,17 @@ const CATEGORY_LABEL = {
 
 export const data = new SlashCommandBuilder()
   .setName('aps')
-  .setDescription('Show your Activity Points System summary for this week');
+  .setDescription('Show your Activity Points System summary for this week')
+  .addBooleanOption(opt => opt
+    .setName('history')
+    .setDescription('Show the last 4 weeks instead of just this week'));
+
+// Compute YYYY-MM-DD Monday key for an offset of N weeks back from today.
+function weekKeyOffset(weeksBack) {
+  const t = new Date();
+  t.setDate(t.getDate() - weeksBack * 7);
+  return weekKey(t);
+}
 
 export async function execute(interaction) {
   try {
@@ -38,6 +48,7 @@ export async function execute(interaction) {
       return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account.', ephemeral: true });
     }
     const wk = weekKey();
+    const showHistory = interaction.options.getBoolean('history') || false;
 
     // Resolve tier via POSITION_TO_TIER mirror (simplified — fall back to Department Staff)
     const tier = db.prepare(`SELECT * FROM activity_tier_config ORDER BY green_target LIMIT 1`).get();
@@ -98,6 +109,22 @@ export async function execute(interaction) {
 
     const base = process.env.PORTAL_URL || 'https://portal.communityorg.co.uk';
     embed.setURL(`${base}/activity-points`);
+
+    if (showHistory) {
+      const history = [];
+      for (let w = 1; w <= 4; w++) {
+        const k = weekKeyOffset(w);
+        const r = db.prepare('SELECT SUM(points) total FROM activity_point_records WHERE user_id = ? AND week_key = ?').get(user.id, k);
+        const t = Number(r?.total) || 0;
+        const g = t === 0 ? '⚫'
+          : (t >= userTier.green_target) ? '🟢'
+          : (t >= userTier.amber_target) ? '🟡'
+          : (t >= userTier.red_target)   ? '🔴'
+          : '⚫';
+        history.push(`${g} **${k}** — ${t}pt${t === 1 ? '' : 's'}`);
+      }
+      embed.addFields({ name: 'Previous 4 weeks', value: history.join('\n'), inline: false });
+    }
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
   } catch (err) {
