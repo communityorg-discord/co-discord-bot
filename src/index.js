@@ -3849,18 +3849,38 @@ webhookApp.post('/api/bot/sync-user-roles', async (req, res) => {
 });
 
 // POST /api/bot/send-channel-message — post a message in a channel.
-// Body: { channel_id, content }
+// Body: { channel_id, content?, embed?: { title, description, color_hex, footer, image_url } }
+// Either content, embed, or both required.
 webhookApp.post('/api/bot/send-channel-message', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
   try {
-    const { channel_id, content } = req.body || {};
+    const { channel_id, content, embed } = req.body || {};
     if (!/^[0-9]{17,20}$/.test(String(channel_id))) return res.status(400).json({ ok: false, error: 'channel_id invalid' });
     const text = String(content || '').slice(0, 1900);
-    if (!text) return res.status(400).json({ ok: false, error: 'content required' });
+    if (!text && !embed) return res.status(400).json({ ok: false, error: 'content or embed required' });
     const ch = await client.channels.fetch(String(channel_id)).catch(() => null);
     if (!ch || !ch.isTextBased?.()) return res.status(404).json({ ok: false, error: 'channel not found or not text' });
-    const sent = await ch.send({ content: text });
-    res.json({ ok: true, message_id: sent.id, channel_id: ch.id });
+
+    const payload = {};
+    if (text) payload.content = text;
+    if (embed) {
+      const { EmbedBuilder } = await import('discord.js');
+      const e = new EmbedBuilder();
+      if (embed.title) e.setTitle(String(embed.title).slice(0, 256));
+      if (embed.description) e.setDescription(String(embed.description).slice(0, 4000));
+      if (embed.color_hex && /^#?[0-9a-fA-F]{6}$/.test(embed.color_hex)) {
+        e.setColor(parseInt(embed.color_hex.replace('#', ''), 16));
+      }
+      if (embed.footer) e.setFooter({ text: String(embed.footer).slice(0, 2048) });
+      if (embed.image_url && /^https:\/\//i.test(embed.image_url)) {
+        try { e.setImage(embed.image_url); } catch {}
+      }
+      e.setTimestamp();
+      payload.embeds = [e];
+    }
+
+    const sent = await ch.send(payload);
+    res.json({ ok: true, message_id: sent.id, channel_id: ch.id, message_url: sent.url });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
