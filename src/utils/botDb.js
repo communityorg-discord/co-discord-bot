@@ -262,6 +262,23 @@ db.exec(`CREATE TABLE IF NOT EXISTS command_usage (
   UNIQUE(discord_id, week_key)
 )`);
 
+// Per-invocation slash-command log — separate from command_usage's
+// weekly aggregates because we want timeline + per-command breakdowns
+// for the portal /admin/discord-command-stats page.
+db.exec(`CREATE TABLE IF NOT EXISTS command_invocations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  discord_id TEXT NOT NULL,
+  command_name TEXT NOT NULL,
+  guild_id TEXT,
+  success INTEGER NOT NULL,
+  error_message TEXT,
+  latency_ms INTEGER,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_cmdinv_created  ON command_invocations(created_at)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_cmdinv_command  ON command_invocations(command_name, created_at)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_cmdinv_user     ON command_invocations(discord_id, created_at)`);
+
 // Weekly DM sent tracking
 db.exec(`CREATE TABLE IF NOT EXISTS dm_sent_tracking (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1252,6 +1269,51 @@ export function trackCommand(discordId, weekKey) {
   } else {
     db.prepare('INSERT INTO command_usage (discord_id, week_key, command_count) VALUES (?, ?, 1)').run(discordId, weekKey);
   }
+}
+
+// Per-invocation logger — drop-in for the interactionCreate handler.
+// Errors swallowed so we never break command execution.
+const _insertCmdInv = db.prepare(`
+  INSERT INTO command_invocations (discord_id, command_name, guild_id, success, error_message, latency_ms)
+  VALUES (?, ?, ?, ?, ?, ?)
+`);
+export function logCommandInvocation({ discordId, commandName, guildId, success, errorMessage, latencyMs }) {
+  try {
+    _insertCmdInv.run(
+      String(discordId),
+      String(commandName),
+      guildId ? String(guildId) : null,
+      success ? 1 : 0,
+      errorMessage ? String(errorMessage).slice(0, 500) : null,
+      Number.isFinite(latencyMs) ? Math.round(latencyMs) : null,
+    );
+  } catch { /* never break the command path */ }
+}
+
+// Stats aggregation for /admin/discord-command-stats — last N days.
+export function getCommandStats(sinceTs) {
+  const since = sinceTs || (Date.now() - 7 * 86400_000);
+  const sinceIso = new Date(since).toISOString();
+  return {
+    since: sinceIso,
+    total: db.prepare('SELECT COUNT(*) c FROM command_invocations WHERE created_at >= ?').get(sinceIso).c,
+    failed: db.prepare('SELECT COUNT(*) c FROM command_invocations WHERE created_at >= ? AND success = 0').get(sinceIso).c,
+    by_command: db.prepare(`
+      SELECT command_name, COUNT(*) total, SUM(success) success, AVG(latency_ms) avg_latency
+      FROM command_invocations WHERE created_at >= ?
+      GROUP BY command_name ORDER BY total DESC LIMIT 50
+    `).all(sinceIso),
+    by_user: db.prepare(`
+      SELECT discord_id, COUNT(*) total, SUM(success) success
+      FROM command_invocations WHERE created_at >= ?
+      GROUP BY discord_id ORDER BY total DESC LIMIT 25
+    `).all(sinceIso),
+    recent_errors: db.prepare(`
+      SELECT discord_id, command_name, error_message, created_at
+      FROM command_invocations WHERE success = 0 AND created_at >= ?
+      ORDER BY created_at DESC LIMIT 15
+    `).all(sinceIso),
+  };
 }
 
 export function getCommandLeaderboard(weekKey) {

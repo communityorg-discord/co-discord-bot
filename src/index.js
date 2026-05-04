@@ -1793,6 +1793,7 @@ client.on('interactionCreate', async interaction => {
     } catch {}
 
     let commandError = null;
+    const _cmdStart = Date.now();
     try {
       await command.execute(interaction);
     } catch (e) {
@@ -1808,6 +1809,19 @@ client.on('interactionCreate', async interaction => {
 
     const success = !commandError && !interaction._commandFailed;
     const errorMsg = commandError || (typeof interaction._commandFailed === 'string' ? interaction._commandFailed : null);
+
+    // Per-invocation log → command_invocations table → portal stats page
+    try {
+      const { logCommandInvocation } = await import('./utils/botDb.js');
+      logCommandInvocation({
+        discordId: interaction.user.id,
+        commandName: interaction.commandName,
+        guildId: interaction.guildId,
+        success,
+        errorMessage: errorMsg,
+        latencyMs: Date.now() - _cmdStart,
+      });
+    } catch {}
 
     // Always log the command attempt
     if (COMMAND_LOG_CHANNEL_ID) {
@@ -3472,6 +3486,19 @@ webhookApp.get('/api/bot/commands', async (req, res) => {
   try {
     const { listKnownCommands } = await import('./utils/permissions.js');
     res.json({ ok: true, commands: listKnownCommands() });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// GET /api/bot/command-stats?days=N — aggregated invocation stats for the
+// /admin/discord-command-stats portal page. Default 7 days, max 90.
+webhookApp.get('/api/bot/command-stats', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const days = Math.max(1, Math.min(90, Number(req.query.days) || 7));
+    const sinceTs = Date.now() - days * 86400_000;
+    const { getCommandStats } = await import('./utils/botDb.js');
+    const stats = getCommandStats(sinceTs);
+    res.json({ ok: true, days, ...stats });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
