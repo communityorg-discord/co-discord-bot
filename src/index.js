@@ -425,7 +425,7 @@ client.once('clientReady', async () => {
             await assignee.send({ embeds: [new EmbedBuilder()
               .setTitle('🔴 ESCALATION — 24+ Hours Overdue')
               .setColor(0xEF4444)
-              .setDescription(`Your assignment **"${a.title}"** is now **${Math.round(hoursOverdue)} hours overdue**. A case has been raised and this may affect your BRAG tasks grade.`)
+              .setDescription(`Your assignment **"${a.title}"** is now **${Math.round(hoursOverdue)} hours overdue**. A case has been raised and this may force a Black grade override on your Activity Points this week.`)
               .setFooter({ text: `ASN-${a.id} | Community Organisation` })
               .setTimestamp()
             ]});
