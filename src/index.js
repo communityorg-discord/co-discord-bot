@@ -564,6 +564,75 @@ client.once('clientReady', async () => {
 
   scheduleSundayCron();
 
+  // Daily 09:00 UTC — server-health digest. Walks every CO guild, checks
+  // baseline roles + AutoMod + position-role coverage, and DMs the
+  // superusers if anomalies are found. Idle DM otherwise (silent runs
+  // are fine; we don't want to spam clean days).
+  async function scheduleDailyServerHealth() {
+    const fire = async () => {
+      try {
+        const { POSITIONS } = await import('./utils/positions.js');
+        const { db: bDb } = await import('./utils/botDb.js');
+        const { SUPERUSER_IDS } = await import('./config.js');
+        const BASELINE = ['Verified', 'CO | Staff', 'Suspended', 'Under Investigation'];
+        const expected = new Set();
+        for (const list of Object.values(POSITIONS)) for (const n of list) expected.add(n);
+
+        const issues = [];
+        for (const [, g] of client.guilds.cache) {
+          const roles = await g.roles.fetch().catch(() => null);
+          if (!roles) continue;
+          const have = new Set([...roles.values()].map(r => r.name));
+          const missingBase = BASELINE.filter(n => !have.has(n));
+          const missingPos = [...expected].filter(n => !have.has(n));
+          const cfg = bDb.prepare('SELECT enabled FROM automod_config WHERE guild_id = ?').get(g.id);
+          const automodOn = cfg?.enabled === 1;
+          if (missingBase.length || !automodOn || missingPos.length > 5) {
+            issues.push({ name: g.name, missingBase, missingPos: missingPos.length, automodOn });
+          }
+        }
+        if (!issues.length) {
+          console.log('[Daily Health] All guilds clean — no DM sent');
+          return;
+        }
+        const lines = issues.map(i => {
+          const parts = [];
+          if (i.missingBase.length) parts.push(`baseline missing: ${i.missingBase.join(', ')}`);
+          if (!i.automodOn) parts.push('AutoMod OFF');
+          if (i.missingPos > 5) parts.push(`${i.missingPos} POSITION roles missing`);
+          return `**${i.name}** — ${parts.join(' · ')}`;
+        });
+        const embed = new EmbedBuilder()
+          .setTitle('🩺 Daily server-health digest — anomalies')
+          .setColor(0xf59e0b)
+          .setDescription(lines.join('\n'))
+          .setFooter({ text: 'Run /server-health for the live view' })
+          .setTimestamp();
+        for (const id of SUPERUSER_IDS) {
+          try {
+            const u = await client.users.fetch(id).catch(() => null);
+            if (u) await u.send({ embeds: [embed] }).catch(() => {});
+          } catch {}
+        }
+        console.log(`[Daily Health] Sent digest to ${SUPERUSER_IDS.length} superusers — ${issues.length} guilds had anomalies`);
+      } catch (e) {
+        console.error('[Daily Health]', e.message);
+      }
+    };
+
+    const now = new Date();
+    let next = new Date(now);
+    next.setUTCHours(9, 0, 0, 0);
+    if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
+    const delay = next - now;
+    setTimeout(async () => {
+      await fire();
+      setInterval(fire, 24 * 60 * 60 * 1000);
+    }, delay);
+    console.log(`[Daily Health] Scheduled — next 09:00 UTC in ${Math.round(delay / 60000)}m`);
+  }
+  scheduleDailyServerHealth();
+
   // ========== ACTIVITY POINTS SYNC (replaces BRAG sync) ==========
   const ACTIVITY_LOG_CH = '1487643487460659280';
 
