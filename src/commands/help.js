@@ -83,6 +83,7 @@ const CATEGORIES = [
   { name: 'Config & Info', emoji: '⚙️', commands: [
     { name: 'logspanel', desc: 'Configure log channels (auth 5+)' },
     { name: 'bot', desc: 'Bot info — version, uptime, servers' },
+    { name: 'server-health', desc: 'Per-guild role/AutoMod/baseline-role audit (auth 7+)' },
     { name: 'help', desc: 'This command' },
   ]},
 ];
