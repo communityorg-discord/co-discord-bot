@@ -262,6 +262,23 @@ db.exec(`CREATE TABLE IF NOT EXISTS command_usage (
   UNIQUE(discord_id, week_key)
 )`);
 
+// Scheduled channel posts — queued by /admin/discord-broadcast and
+// drained by the bot's cron loop. Single payload column (JSON) so we
+// can carry either content, an embed, or both without schema churn.
+db.exec(`CREATE TABLE IF NOT EXISTS scheduled_channel_posts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel_id TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  send_at TEXT NOT NULL,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  status TEXT NOT NULL DEFAULT 'pending',
+  sent_at TEXT,
+  sent_message_id TEXT,
+  error TEXT
+)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_sched_channel_pending ON scheduled_channel_posts(status, send_at)`);
+
 // /feedback submissions — stored so the portal /admin/bot-feedback
 // page can triage them and mark resolved.
 db.exec(`CREATE TABLE IF NOT EXISTS bot_feedback (
@@ -1289,6 +1306,31 @@ export function trackCommand(discordId, weekKey) {
   } else {
     db.prepare('INSERT INTO command_usage (discord_id, week_key, command_count) VALUES (?, ?, 1)').run(discordId, weekKey);
   }
+}
+
+// scheduled_channel_posts helpers
+const _insertSchedPost = db.prepare(`
+  INSERT INTO scheduled_channel_posts (channel_id, payload_json, send_at, created_by)
+  VALUES (?, ?, ?, ?)
+`);
+export function scheduleChannelPost({ channelId, payload, sendAtIso, createdBy }) {
+  const r = _insertSchedPost.run(
+    String(channelId),
+    JSON.stringify(payload),
+    String(sendAtIso),
+    createdBy ? String(createdBy) : null,
+  );
+  return r.lastInsertRowid;
+}
+export function listScheduledChannelPosts({ status, limit } = {}) {
+  const lim = Math.max(1, Math.min(200, Number(limit) || 100));
+  if (status) {
+    return db.prepare('SELECT * FROM scheduled_channel_posts WHERE status = ? ORDER BY send_at ASC LIMIT ?').all(String(status), lim);
+  }
+  return db.prepare('SELECT * FROM scheduled_channel_posts ORDER BY send_at ASC LIMIT ?').all(lim);
+}
+export function cancelScheduledChannelPost(id) {
+  return db.prepare('UPDATE scheduled_channel_posts SET status = \'cancelled\' WHERE id = ? AND status = \'pending\'').run(Number(id));
 }
 
 // /feedback persistence helpers

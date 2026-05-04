@@ -1654,6 +1654,60 @@ client.once('clientReady', async () => {
   }, 60000);
   console.log('[Scheduled DM Cron] Started — checking every 60s');
 
+  // ── Scheduled channel-post cron — check every 60 seconds ──
+  setInterval(async () => {
+    try {
+      const { db: bDb } = await import('./utils/botDb.js');
+      const due = bDb.prepare(`
+        SELECT * FROM scheduled_channel_posts
+        WHERE status = 'pending' AND send_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        ORDER BY send_at ASC LIMIT 25
+      `).all();
+      for (const post of due) {
+        try {
+          const ch = await client.channels.fetch(post.channel_id).catch(() => null);
+          if (!ch || !ch.isTextBased?.()) {
+            bDb.prepare('UPDATE scheduled_channel_posts SET status = ?, error = ?, sent_at = strftime(\'%Y-%m-%dT%H:%M:%fZ\', \'now\') WHERE id = ?')
+              .run('failed', 'channel not found', post.id);
+            continue;
+          }
+          const payload = JSON.parse(post.payload_json);
+          const sendPayload = {};
+          if (payload.content) sendPayload.content = String(payload.content).slice(0, 1900);
+          if (payload.embed) {
+            const e = new EmbedBuilder();
+            if (payload.embed.title) e.setTitle(String(payload.embed.title).slice(0, 256));
+            if (payload.embed.description) e.setDescription(String(payload.embed.description).slice(0, 4000));
+            if (payload.embed.color_hex && /^#?[0-9a-fA-F]{6}$/.test(payload.embed.color_hex)) {
+              e.setColor(parseInt(payload.embed.color_hex.replace('#', ''), 16));
+            }
+            if (payload.embed.footer) e.setFooter({ text: String(payload.embed.footer).slice(0, 2048) });
+            if (payload.embed.image_url && /^https:\/\//i.test(payload.embed.image_url)) {
+              try { e.setImage(payload.embed.image_url); } catch {}
+            }
+            e.setTimestamp();
+            sendPayload.embeds = [e];
+          }
+          const sent = await ch.send(sendPayload);
+          bDb.prepare(`
+            UPDATE scheduled_channel_posts
+            SET status = 'sent', sent_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), sent_message_id = ?
+            WHERE id = ?
+          `).run(sent.id, post.id);
+        } catch (e) {
+          console.error('[Scheduled Channel Post] Send error:', e.message);
+          bDb.prepare(`
+            UPDATE scheduled_channel_posts
+            SET status = 'failed', error = ?, sent_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            WHERE id = ?
+          `).run(e.message.slice(0, 500), post.id);
+        }
+      }
+      if (due.length > 0) console.log(`[Scheduled Channel Post] Drained ${due.length}`);
+    } catch (e) { console.error('[Scheduled Channel Post Cron]', e.message); }
+  }, 60000);
+  console.log('[Scheduled Channel Post Cron] Started — checking every 60s');
+
   // ── Weekly moderation stats — Monday 9AM ──
   scheduleAtTime(9, 0, async () => {
     // Only run on Mondays
@@ -3849,15 +3903,35 @@ webhookApp.post('/api/bot/sync-user-roles', async (req, res) => {
 });
 
 // POST /api/bot/send-channel-message — post a message in a channel.
-// Body: { channel_id, content?, embed?: { title, description, color_hex, footer, image_url } }
-// Either content, embed, or both required.
+// Body: { channel_id, content?, embed?: { title, description, color_hex, footer, image_url }, scheduled_for? }
+// Either content, embed, or both required. scheduled_for is an ISO
+// timestamp — if present and in the future, the post is queued in
+// scheduled_channel_posts and drained by the cron loop.
 webhookApp.post('/api/bot/send-channel-message', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
   try {
-    const { channel_id, content, embed } = req.body || {};
+    const { channel_id, content, embed, scheduled_for } = req.body || {};
     if (!/^[0-9]{17,20}$/.test(String(channel_id))) return res.status(400).json({ ok: false, error: 'channel_id invalid' });
     const text = String(content || '').slice(0, 1900);
     if (!text && !embed) return res.status(400).json({ ok: false, error: 'content or embed required' });
+
+    // Schedule for later instead of sending now?
+    if (scheduled_for) {
+      const sendDate = new Date(scheduled_for);
+      if (isNaN(sendDate.getTime())) return res.status(400).json({ ok: false, error: 'scheduled_for invalid date' });
+      if (sendDate.getTime() <= Date.now() + 30_000) {
+        return res.status(400).json({ ok: false, error: 'scheduled_for must be at least 30s in the future' });
+      }
+      const { scheduleChannelPost } = await import('./utils/botDb.js');
+      const id = scheduleChannelPost({
+        channelId: String(channel_id),
+        payload: { content: text, embed },
+        sendAtIso: sendDate.toISOString(),
+        createdBy: req.body?.created_by || null,
+      });
+      return res.json({ ok: true, scheduled: true, id, send_at: sendDate.toISOString() });
+    }
+
     const ch = await client.channels.fetch(String(channel_id)).catch(() => null);
     if (!ch || !ch.isTextBased?.()) return res.status(404).json({ ok: false, error: 'channel not found or not text' });
 
@@ -3881,6 +3955,33 @@ webhookApp.post('/api/bot/send-channel-message', async (req, res) => {
 
     const sent = await ch.send(payload);
     res.json({ ok: true, message_id: sent.id, channel_id: ch.id, message_url: sent.url });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// GET /api/bot/scheduled-posts?status=pending|sent|cancelled — list queued posts
+webhookApp.get('/api/bot/scheduled-posts', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { listScheduledChannelPosts } = await import('./utils/botDb.js');
+    const status = ['pending', 'sent', 'cancelled'].includes(req.query.status) ? req.query.status : null;
+    const items = listScheduledChannelPosts({ status, limit: 100 }).map(r => ({
+      ...r,
+      payload: (() => { try { return JSON.parse(r.payload_json); } catch { return null; } })(),
+      payload_json: undefined,
+    }));
+    res.json({ ok: true, items });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// POST /api/bot/scheduled-posts/:id/cancel — cancel a pending post
+webhookApp.post('/api/bot/scheduled-posts/:id/cancel', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ ok: false, error: 'bad id' });
+    const { cancelScheduledChannelPost } = await import('./utils/botDb.js');
+    const r = cancelScheduledChannelPost(id);
+    res.json({ ok: true, changed: r.changes });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
