@@ -191,7 +191,7 @@ async function setupEmailNotificationChannels(client) {
   }
 }
 
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log(`[CO Bot] Logged in as ${client.user.tag}`);
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);

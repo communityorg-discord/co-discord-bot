@@ -6,6 +6,31 @@ function generateReplyCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
+// Dedupe noisy poller errors. The poller runs every 60s; if the upstream
+// (Google Sheets config fetch, IMAP host) fails for hours, we don't want
+// 60 lines/hour of identical "Fatal error: ..." in the bot's error log.
+// Log on first occurrence, then once per 30min, then again immediately
+// when the error message changes or when we recover.
+const errorState = { last: new Map(), interval: 30 * 60 * 1000 };
+function logDedupedError(scope, message) {
+  const now = Date.now();
+  const prev = errorState.last.get(scope);
+  if (!prev || prev.message !== message || (now - prev.firstAt) >= errorState.interval) {
+    const suppressed = prev && prev.message === message ? ` (suppressed ${prev.count}× over the last ${Math.round((now - prev.firstAt) / 60000)}min)` : '';
+    console.error(`[${scope}]`, message + suppressed);
+    errorState.last.set(scope, { message, firstAt: now, count: 1 });
+  } else {
+    prev.count++;
+  }
+}
+function clearDedupedError(scope) {
+  const prev = errorState.last.get(scope);
+  if (prev) {
+    if (prev.count > 1) console.log(`[${scope}] recovered (had suppressed ${prev.count - 1}× of: ${prev.message})`);
+    errorState.last.delete(scope);
+  }
+}
+
 function buildEmailNotifEmbed(inbox, email, replies = []) {
   const from = email.headers?.from?.[0] || 'Unknown';
   const subject = email.headers?.subject?.[0] || '(no subject)';
@@ -57,6 +82,7 @@ function buildEmailNotifButtons(inboxId, uid) {
 export async function pollAllInboxes(client) {
   try {
     const config = await fetchEmailConfig();
+    clearDedupedError('Email Poller fatal');
 
     for (const [inboxId, inbox] of Object.entries(config)) {
       try {
@@ -109,7 +135,7 @@ export async function pollAllInboxes(client) {
       }
     }
   } catch (e) {
-    console.error('[Email Poller] Fatal error:', e.message);
+    logDedupedError('Email Poller fatal', e.message);
   }
 }
 
@@ -249,7 +275,7 @@ export async function pollPersonalInboxes(client) {
           console.log(`[Personal Poller] Notified ${setup.discord_id} — ${subject}`);
         }
       } catch (e) {
-        console.error(`[Personal Poller] Error for ${setup.discord_id}:`, e.message);
+        logDedupedError(`Personal Poller ${setup.discord_id}`, e.message);
         if (e.message?.toLowerCase().includes('auth') || e.message?.toLowerCase().includes('login') || e.message?.toLowerCase().includes('password')) {
           try {
             const user = await client.users.fetch(setup.discord_id).catch(() => null);
@@ -261,6 +287,6 @@ Please run \`/setup-email configure\` to update your password.`).catch(() => {})
       }
     }
   } catch (e) {
-    console.error('[Personal Poller] Fatal:', e.message);
+    logDedupedError('Personal Poller fatal', e.message);
   }
 }
