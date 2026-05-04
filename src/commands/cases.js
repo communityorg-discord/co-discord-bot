@@ -24,7 +24,18 @@ export async function execute(interaction) {
     return interaction.reply({ content: '📂 You have no cases in Case Management.', ephemeral: true });
   }
 
-  const typeEmojis = { DISCIPLINARY: '⚖️', WELLBEING: '💚', TRANSFER: '🔄', LEAVE: '🏖️', BRAG: '📊', GENERAL: '📋' };
+  const typeEmojis = {
+    DISCIPLINARY: '⚖️',
+    GENERAL_HR: '📁',
+    OFFBOARDING: '👋',
+    RETURN_TO_WORK: '🔁',
+    PERFORMANCE_ADJUSTMENT: '📈',
+    LETTER_REQUEST: '✉️',
+    LEAVE_QUERY: '🏖️',
+    APS_DISPUTE: '🎯',
+    // Legacy types still in the map for any historical rows
+    WELLBEING: '💚', TRANSFER: '🔄', LEAVE: '🏖️', BRAG: '📊', GENERAL: '📋',
+  };
 
   const embed = new EmbedBuilder()
     .setTitle(`📂 Recent Cases — ${user.display_name || user.full_name}`)
