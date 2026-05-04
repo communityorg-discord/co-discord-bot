@@ -3480,6 +3480,87 @@ webhookApp.get('/api/bot/guilds', async (req, res) => {
   }
 });
 
+// GET /api/bot/drift — per-verified-staff drift report. Tells the portal
+// which staff are missing from which guilds, and which expected position
+// roles they're missing in the guilds they ARE in. Backs the
+// /admin/discord-drift dashboard.
+webhookApp.get('/api/bot/drift', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { POSITIONS } = await import('./utils/positions.js');
+    const { db: bDb } = await import('./utils/botDb.js');
+    const verified = bDb.prepare('SELECT discord_id, position, nickname FROM verified_members').all();
+    const guilds = [...client.guilds.cache.values()];
+    // Pre-fetch every guild's member list once
+    const guildSnapshots = await Promise.all(guilds.map(async g => {
+      await g.members.fetch().catch(() => null);
+      return { id: g.id, name: g.name, guild: g };
+    }));
+
+    const out = [];
+    for (const v of verified) {
+      const expectedRoles = [...(POSITIONS[v.position] || []), 'Verified', 'CO | Staff'];
+      const guildsMissing = [];
+      const guildsWrongNick = [];
+      const rolesMissingPerGuild = []; // [{guild_name, missing: [...]}, ...]
+
+      for (const snap of guildSnapshots) {
+        const member = snap.guild.members.cache.get(v.discord_id);
+        if (!member) { guildsMissing.push(snap.name); continue; }
+
+        if (v.nickname && member.nickname && member.nickname !== v.nickname) {
+          guildsWrongNick.push({ guild: snap.name, has: member.nickname, expected: v.nickname });
+        }
+
+        const memberRoleNames = new Set([...member.roles.cache.values()].map(r => r.name));
+        const guildRoleNames = new Set([...snap.guild.roles.cache.values()].map(r => r.name));
+        const missing = expectedRoles.filter(r => guildRoleNames.has(r) && !memberRoleNames.has(r));
+        if (missing.length) rolesMissingPerGuild.push({ guild: snap.name, missing });
+      }
+
+      const driftScore = guildsMissing.length * 3 + rolesMissingPerGuild.reduce((s, g) => s + g.missing.length, 0) + guildsWrongNick.length;
+      if (driftScore > 0) {
+        out.push({
+          discord_id: v.discord_id,
+          position: v.position,
+          nickname: v.nickname,
+          drift_score: driftScore,
+          guilds_missing: guildsMissing,
+          roles_missing_per_guild: rolesMissingPerGuild,
+          wrong_nicknames: guildsWrongNick,
+        });
+      }
+    }
+
+    out.sort((a, b) => b.drift_score - a.drift_score);
+
+    // Reverse view: members in any guild with CO|Staff role but NO verified_members row
+    const verifiedIds = new Set(verified.map(v => v.discord_id));
+    const ghostStaff = new Map(); // discord_id → { username, guilds: [...] }
+    for (const snap of guildSnapshots) {
+      const staffRole = [...snap.guild.roles.cache.values()].find(r => r.name === 'CO | Staff');
+      if (!staffRole) continue;
+      for (const [, member] of staffRole.members) {
+        if (verifiedIds.has(member.id) || member.user.bot) continue;
+        const prev = ghostStaff.get(member.id);
+        if (prev) prev.guilds.push(snap.name);
+        else ghostStaff.set(member.id, { discord_id: member.id, username: member.user.username, guilds: [snap.name] });
+      }
+    }
+
+    res.json({
+      ok: true,
+      total_verified: verified.length,
+      total_guilds: guilds.length,
+      drifted: out,
+      ghost_staff: [...ghostStaff.values()],
+    });
+  } catch (e) {
+    console.error('[/api/bot/drift]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // GET /api/bot/commands — every known command + its documented fallback.
 webhookApp.get('/api/bot/commands', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
