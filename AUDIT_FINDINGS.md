@@ -1,6 +1,6 @@
 # Discord Server Audit — 2026-05-04
 
-Read-only audit of all 9 CO guilds the bot is in. **Status update 05:46 UTC: 7/8 findings actioned (commit 7b7935b). #6 still needs human intent.**
+Read-only audit of all 9 CO guilds the bot is in. **Status update 07:30 UTC: ALL 8 findings closed (#6 documented as intentional, see section 6).** Loop continued past the audit into ~20 follow-on features — see git log on bot + portal repos.
 
 ## Already fixed in code
 
@@ -15,7 +15,7 @@ Read-only audit of all 9 CO guilds the bot is in. **Status update 05:46 UTC: 7/8
 ✅ **#3 (DONE)** — IC guild role drift reconciled: renamed `IC | International Court` → `International Court`; created `Registrar of the International Court` and `Vice-President of the International Court`.
 ✅ **#4 (DONE)** — Founder role created on the 4 guilds missing it (Communications-small, System Log Hub, Private Server, Appeals Hub).
 ✅ **#5 (DONE)** — CO | Official Account role created on Dev Server.
-⏸ **#6 (NEEDS YOUR CALL)** — Two guilds named `CO | Communications` (45 vs 8 members). Intentional split or stale duplicate? See section 6 below.
+✅ **#6 (DONE — INTENTIONAL)** — The 8-member `CO | Communications` is the private bot-ops/mod-tools server (channels: mass-unban, ban-unban, global-message, delete-message). Different purpose, different audience from the 45-member public guild. See section 6 below.
 ✅ **#7 (DONE)** — AutoMod enabled on Internal Hub (`automod_config.enabled = 1` for `1357119461957570570`).
 ✅ **#8 (DONE)** — Stale guild ID `1272007308704088074` removed from `verify.js` `EXCLUDED_WELCOME_INVITE_GUILDS`.
 
