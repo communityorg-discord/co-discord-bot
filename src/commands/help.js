@@ -7,7 +7,9 @@ const CATEGORIES = [
     { name: 'verify', desc: 'Submit a staff verification request' },
     { name: 'unverify', desc: 'Revoke a verified member\'s access (auth 5+)' },
     { name: 'onboard', desc: 'Full onboarding — credentials, roles, nickname, Drive (auth 5+)' },
+    { name: 'force-verify', desc: 'Submit a verification on behalf of another user (superuser)' },
     { name: 'authorisation-override', desc: 'Override auth level (superuser)' },
+    { name: 'gnick', desc: 'Set a nickname for a user across all servers (auth 6+)' },
   ]},
   { name: 'Moderation', emoji: '🛡️', commands: [
     { name: 'warn', desc: 'Warn a user — auto-escalates: 3 warnings = kick, 5 = ban' },
@@ -34,6 +36,8 @@ const CATEGORIES = [
     { name: 'investigate', desc: 'Start investigation (auth 5+)' },
     { name: 'terminate', desc: 'Terminate staff member (superuser)' },
     { name: 'cases', desc: 'View portal cases for a user' },
+    { name: 'case', desc: 'Look up a case by ref (e.g. CAS-2026-0001)' },
+    { name: 'caseopen', desc: 'Open a new case in Case Management' },
     { name: 'nid', desc: 'Submit non-investigational disciplinary' },
     { name: 'acting', desc: 'Assign/end acting positions (superuser)' },
   ]},
@@ -42,6 +46,7 @@ const CATEGORIES = [
     { name: 'staff', desc: 'Search staff directory' },
     { name: 'leave', desc: 'Check leave balance and requests' },
     { name: 'brag', desc: 'View latest BRAG report' },
+    { name: 'aps', desc: 'Your Activity Points System summary for this week' },
     { name: 'stats', desc: 'Organisation-wide statistics' },
   ]},
   { name: 'Security & AutoMod', emoji: '🔒', commands: [
@@ -52,6 +57,17 @@ const CATEGORIES = [
   { name: 'Assignments', emoji: '📌', commands: [
     { name: 'assign', desc: 'Create task assignment for staff' },
     { name: 'remind', desc: 'Set a timed reminder' },
+    { name: 'schedule-dm', desc: 'Schedule a DM to be sent later (auth 5+)' },
+    { name: 'poll', desc: 'Create a poll' },
+  ]},
+  { name: 'Voice & Recording', emoji: '🎙️', commands: [
+    { name: 'office', desc: 'Manage voice-channel access control (superuser)' },
+    { name: 'record', desc: 'Start/stop a voice-channel recording session' },
+  ]},
+  { name: 'Channels & Logs', emoji: '📡', commands: [
+    { name: 'orglogs', desc: 'Configure organisation-wide log channels' },
+    { name: 'privatelogs', desc: 'Configure private log channels (per-server)' },
+    { name: 'counting', desc: 'Manage counting channels (auth 5+)' },
   ]},
   { name: 'Tickets & Email', emoji: '📧', commands: [
     { name: 'create-ticket-panel', desc: 'Create ticket panel (auth 7+)' },
@@ -59,7 +75,10 @@ const CATEGORIES = [
     { name: 'delete-ticket-panel', desc: 'Delete ticket panel (auth 7+)' },
     { name: 'ticket-options', desc: 'Configure ticket options (auth 7+)' },
     { name: 'inbox', desc: 'Access team email inboxes' },
+    { name: 'inbox-reply', desc: 'View a sent inbox reply by code' },
+    { name: 'compose', desc: 'Compose a new personal email from your CO address' },
     { name: 'setup-email', desc: 'Configure personal email' },
+    { name: 'helpdesk', desc: 'Interact with the CO IT Help Desk' },
   ]},
   { name: 'Config & Info', emoji: '⚙️', commands: [
     { name: 'logspanel', desc: 'Configure log channels (auth 5+)' },
