@@ -12,6 +12,49 @@ function isOfficialBypass(discordId) {
   return OFFICIAL_BYPASS_IDS.includes(discordId);
 }
 
+// One source of truth for the post-verification welcome DM. Was duplicated
+// across the new-verify and resend paths — any wording change had to land
+// in two places (this is what kept the stale BRAG copy alive long after
+// the system was retired).
+const EXCLUDED_WELCOME_INVITE_GUILDS = new Set([
+  '1272007308704088074', '1485422910972760176', '1485423163817988186',
+  '1485423682980675729', '1485423935569920135', '1485424535405723729',
+]);
+const WELCOME_DESCRIPTION = "Hello and welcome to Community Organisation! We're delighted to have you on board. Here's key info to help you settle in:\n\n**Onboarding**\nPlease ensure your supervisor has your current email. We recommend a Google account email (@gmail.com), as we use Google Drive for documentation and policies.\n\nTo get your CO email set up, please contact a member of the EOB team directly.\n\nThe DMSPC Email (**dmspc@communityorg.co.uk**) is your contact for accessing and updating your personnel file.\n\n**CO Utilities**\nAll staff are required to use the Staff Portal for leave requests, Activity Points tracking, and accessing your staff records.\n\n**Policies**\nBy joining, you agree to follow all Community Organisation policies, available on Google Drive and CO Utilities. If unsure, ask your supervisor. You are also expected to:\n• Check for policy updates regularly\n• Read all official communications\n\nLinked below are invites to all servers you are required to join. **These invites will expire in 7 days.**";
+
+async function gatherWelcomeInvites(client) {
+  const inviteLines = [];
+  for (const [, guild] of client.guilds.cache) {
+    if (EXCLUDED_WELCOME_INVITE_GUILDS.has(guild.id)) continue;
+    try {
+      const channel = guild.channels.cache.filter(c => c.isTextBased() && c.permissionsFor(guild.members.me)?.has('CreateInstantInvite')).first();
+      if (channel) {
+        const invite = await channel.createInvite({ maxAge: 604800, maxUses: 1, reason: 'Verification approved — 7-day invite' });
+        inviteLines.push('[' + guild.name + '](' + invite.url + ')');
+      }
+    } catch {}
+  }
+  return inviteLines;
+}
+
+async function sendWelcomeDM(client, discordUser, entry, approvedBy) {
+  const inviteLines = await gatherWelcomeInvites(client);
+  await discordUser.send({
+    embeds: [new EmbedBuilder()
+      .setTitle('🏛️ Welcome to the Community Organisation!')
+      .setColor(0x22C55E)
+      .setDescription(WELCOME_DESCRIPTION)
+      .addFields(
+        { name: '📌 Server Invites', value: inviteLines.join('\n') || 'No invites available', inline: false },
+        { name: 'Your Position', value: entry.position, inline: true },
+        { name: 'Approved By', value: `<@${approvedBy}>`, inline: true },
+      )
+      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setTimestamp()
+    ]
+  });
+}
+
 export const data = new SlashCommandBuilder()
   .setName('verify')
   .setDescription('Verify your CO staff identity and apply your roles across all servers');
@@ -289,32 +332,7 @@ export async function handleButton(interaction) {
     // DM the user
     try {
       const user = await interaction.client.users.fetch(entry.discord_id);
-      const inviteLines = [];
-      const EXCLUDED_GUILDS = ['1272007308704088074', '1485422910972760176', '1485423163817988186', '1485423682980675729', '1485423935569920135', '1485424535405723729'];
-      for (const [, guild] of interaction.client.guilds.cache) {
-        if (EXCLUDED_GUILDS.includes(guild.id)) continue;
-        try {
-          const channel = guild.channels.cache.filter(c => c.isTextBased() && c.permissionsFor(guild.members.me)?.has("CreateInstantInvite")).first();
-          if (channel) {
-            const invite = await channel.createInvite({ maxAge: 604800, maxUses: 1, reason: "Verification approved — 7-day invite" });
-            inviteLines.push("[" + guild.name + "](" + invite.url + ")");
-          }
-        } catch {}
-      }
-      await user.send({
-        embeds: [new EmbedBuilder()
-          .setTitle("🏛️ Welcome to the Community Organisation!")
-          .setColor(0x22C55E)
-          .setDescription("Hello and welcome to Community Organisation! We're delighted to have you on board. Here's key info to help you settle in:\n\n**Onboarding**\nPlease ensure your supervisor has your current email. We recommend a Google account email (@gmail.com), as we use Google Drive for documentation and policies.\n\nTo get your CO email set up, please contact a member of the EOB team directly.\n\nThe DMSPC Email (**dmspc@communityorg.co.uk**) is your contact for accessing and updating your personnel file.\n\n**CO Utilities**\nAll staff are required to use the Staff Portal for leave requests, Activity Points tracking, and accessing your staff records.\n\n**Policies**\nBy joining, you agree to follow all Community Organisation policies, available on Google Drive and CO Utilities. If unsure, ask your supervisor. You are also expected to:\n• Check for policy updates regularly\n• Read all official communications\n\nLinked below are invites to all servers you are required to join. **These invites will expire in 7 days.**")
-          .addFields(
-            { name: "📌 Server Invites", value: inviteLines.join("\n") || "No invites available", inline: false },
-            { name: "Your Position", value: entry.position, inline: true },
-            { name: "Approved By", value: `<@${interaction.user.id}>`, inline: true },
-          )
-          .setFooter({ text: "Community Organisation | Staff Assistant" })
-          .setTimestamp()
-        ]
-      });
+      await sendWelcomeDM(interaction.client, user, entry, interaction.user.id);
     } catch (e) {
       console.warn("[Verify] Could not DM user:", e.message);
     }
@@ -537,32 +555,7 @@ export async function handleModal(interaction) {
     // DM the user — welcome message with 7-day invite links
     try {
       const user = await interaction.client.users.fetch(entry.discord_id);
-      const inviteLines = [];
-      const EXCLUDED_GUILDS = ['1272007308704088074', '1485422910972760176', '1485423163817988186', '1485423682980675729', '1485423935569920135', '1485424535405723729'];
-      for (const [, guild] of interaction.client.guilds.cache) {
-        if (EXCLUDED_GUILDS.includes(guild.id)) continue;
-        try {
-          const channel = guild.channels.cache.filter(c => c.isTextBased() && c.permissionsFor(guild.members.me)?.has("CreateInstantInvite")).first();
-          if (channel) {
-            const invite = await channel.createInvite({ maxAge: 604800, maxUses: 1, reason: "Verification approved — 7-day invite" });
-            inviteLines.push("[" + guild.name + "](" + invite.url + ")");
-          }
-        } catch {}
-      }
-      await user.send({
-        embeds: [new EmbedBuilder()
-          .setTitle("🏛️ Welcome to the Community Organisation!")
-          .setColor(0x22C55E)
-          .setDescription("Hello and welcome to Community Organisation! We're delighted to have you on board. Here's key info to help you settle in:\n\n**Onboarding**\nPlease ensure your supervisor has your current email. We recommend a Google account email (@gmail.com), as we use Google Drive for documentation and policies.\n\nTo get your CO email set up, please contact a member of the EOB team directly.\n\nThe DMSPC Email (**dmspc@communityorg.co.uk**) is your contact for accessing and updating your personnel file.\n\n**CO Utilities**\nAll staff are required to use the Staff Portal for leave requests, Activity Points tracking, and accessing your staff records.\n\n**Policies**\nBy joining, you agree to follow all Community Organisation policies, available on Google Drive and CO Utilities. If unsure, ask your supervisor. You are also expected to:\n• Check for policy updates regularly\n• Read all official communications\n\nLinked below are invites to all servers you are required to join. **These invites will expire in 7 days.**")
-          .addFields(
-            { name: "📌 Server Invites", value: inviteLines.join("\n") || "No invites available", inline: false },
-            { name: "Your Position", value: entry.position, inline: true },
-            { name: "Approved By", value: `<@${interaction.user.id}>`, inline: true },
-          )
-          .setFooter({ text: "Community Organisation | Staff Assistant" })
-          .setTimestamp()
-        ]
-      });
+      await sendWelcomeDM(interaction.client, user, entry, interaction.user.id);
     } catch (e) {
       console.warn("[Verify] Could not DM user:", e.message);
     }
