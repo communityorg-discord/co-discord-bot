@@ -2360,6 +2360,40 @@ client.on('guildMemberRemove', async (member) => {
   try { await automod.checkMemberLeave(member); } catch (e) { console.error('[AutoMod guildMemberRemove]', e.message); }
 });
 
+// guildCreate — fired when the bot is invited to a new server. Ensure
+// the four baseline roles exist (Verified, CO | Staff, Suspended,
+// Under Investigation) so the verify auto-flow + suspend/investigate
+// commands work immediately without an admin needing to set them up
+// manually. Idempotent — skip if a role with the same name is present.
+client.on('guildCreate', async (guild) => {
+  console.log(`[guildCreate] Bot added to '${guild.name}' (id=${guild.id}) — provisioning baseline roles`);
+  const BASELINE = [
+    { name: 'Verified',            mentionable: false, reason: 'CO Bot baseline — granted on /verify approval' },
+    { name: 'CO | Staff',          mentionable: false, reason: 'CO Bot baseline — applied to every verified staff member' },
+    { name: 'Suspended',           mentionable: false, reason: 'CO Bot baseline — applied during /suspend' },
+    { name: 'Under Investigation', mentionable: false, reason: 'CO Bot baseline — applied during /investigate' },
+  ];
+  let created = 0, skipped = 0;
+  try {
+    const roles = await guild.roles.fetch();
+    const have = new Set([...roles.values()].map(r => r.name));
+    for (const b of BASELINE) {
+      if (have.has(b.name)) { skipped++; continue; }
+      try {
+        const r = await guild.roles.create({ name: b.name, mentionable: b.mentionable, reason: b.reason });
+        console.log(`[guildCreate] Created '${b.name}' on ${guild.name} (id=${r.id})`);
+        created++;
+      } catch (e) {
+        console.warn(`[guildCreate] Failed to create '${b.name}' on ${guild.name}: ${e.message}`);
+      }
+      await new Promise(rs => setTimeout(rs, 300));
+    }
+    console.log(`[guildCreate] ${guild.name}: ${created} created, ${skipped} already present (${BASELINE.length} baseline)`);
+  } catch (e) {
+    console.error(`[guildCreate] Error provisioning ${guild.name}:`, e.message);
+  }
+});
+
 // AutoMod message handler + counting + BRAG message tracking
 client.on('messageCreate', async (message) => {
   // Cache every message in the Log Hub for audit trail
