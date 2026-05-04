@@ -17,8 +17,13 @@ function isOfficialBypass(discordId) {
 // in two places (this is what kept the stale BRAG copy alive long after
 // the system was retired).
 const EXCLUDED_WELCOME_INVITE_GUILDS = new Set([
-  '1272007308704088074', '1485422910972760176', '1485423163817988186',
-  '1485423682980675729', '1485423935569920135', '1485424535405723729',
+  // 1272007308704088074 was here historically — bot is no longer in
+  // that guild so the entry was a no-op. Removed in the AUDIT cleanup.
+  '1485422910972760176', // CO | Staff HQ — gated behind verify role, no public invite
+  '1485423163817988186', // CO | System Log Hub — internal logging mirror
+  '1485423682980675729', // CO | Private Server — restricted access
+  '1485423935569920135', // CO | Communications (small/internal mirror)
+  '1485424535405723729', // CO | Appeals Hub — only joined via appeal flow
 ]);
 const WELCOME_DESCRIPTION = "Hello and welcome to Community Organisation! We're delighted to have you on board. Here's key info to help you settle in:\n\n**Onboarding**\nPlease ensure your supervisor has your current email. We recommend a Google account email (@gmail.com), as we use Google Drive for documentation and policies.\n\nTo get your CO email set up, please contact a member of the EOB team directly.\n\nThe DMSPC Email (**dmspc@communityorg.co.uk**) is your contact for accessing and updating your personnel file.\n\n**CO Utilities**\nAll staff are required to use the Staff Portal for leave requests, Activity Points tracking, and accessing your staff records.\n\n**Policies**\nBy joining, you agree to follow all Community Organisation policies, available on Google Drive and CO Utilities. If unsure, ask your supervisor. You are also expected to:\n• Check for policy updates regularly\n• Read all official communications\n\nLinked below are invites to all servers you are required to join. **These invites will expire in 7 days.**";
 
