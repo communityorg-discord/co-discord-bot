@@ -10,6 +10,7 @@ const CATEGORIES = [
     { name: 'force-verify', desc: 'Submit a verification on behalf of another user (superuser)' },
     { name: 'authorisation-override', desc: 'Override auth level (superuser)' },
     { name: 'gnick', desc: 'Set a nickname for a user across all servers (auth 6+)' },
+    { name: 'sync-roles', desc: 'Re-apply position roles for a user across every guild (auth 7+)' },
   ]},
   { name: 'Moderation', emoji: '🛡️', commands: [
     { name: 'warn', desc: 'Warn a user — auto-escalates: 3 warnings = kick, 5 = ban' },
