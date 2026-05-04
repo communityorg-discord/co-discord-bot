@@ -95,6 +95,7 @@ import * as ping from './commands/ping.js';
 import * as staffOnline from './commands/staff-online.js';
 import * as timezone from './commands/timezone.js';
 import * as randomPick from './commands/random-pick.js';
+import * as standup from './commands/standup.js';
 import { handleButton as officeButton, enforceJoin as officeEnforceJoin, getOffice as officeGetOffice, getWaitingRoom as officeGetWaitingRoom, handleWaitingRoomJoin as officeHandleWRJoin, handleWaitingRoomLeave as officeHandleWRLeave } from './services/officeManager.js';
 
 config();
@@ -140,7 +141,7 @@ const welcomeTracker     = new Map(); // discord_id → count this week
 const ATLAS_DISCORD_USER_ID = '1465559216172568812';
 const ATLAS_GATE_NOTICE_COOLDOWN_MS = 5 * 60_000; // 5m per user
 const atlasGateNoticeCooldown = new Map(); // discord_id → last notice ms
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm, serverHealth, syncRoles, whois, leaderboard, myroles, roleInfo, serverinfo, channelInfo, syncAllRoles, findUser, auditLog, botPerms, feedback, embedCmd, whoIsHere, quote, snippet, ping, staffOnline, timezone, randomPick];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm, serverHealth, syncRoles, whois, leaderboard, myroles, roleInfo, serverinfo, channelInfo, syncAllRoles, findUser, auditLog, botPerms, feedback, embedCmd, whoIsHere, quote, snippet, ping, staffOnline, timezone, randomPick, standup];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -2365,6 +2366,12 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId?.startsWith('snippet_save:')) {
       try { const handled = await snippet.handleModalSubmit(interaction); if (handled) return; }
       catch(e) { console.error('[snippet modal error]', e.message); throw e; }
+    }
+
+    // /standup post modal
+    if (interaction.customId?.startsWith('standup_modal:')) {
+      try { const handled = await standup.handleModalSubmit(interaction); if (handled) return; }
+      catch(e) { console.error('[standup modal error]', e.message); throw e; }
     }
 
     if (interaction.customId.startsWith('verify_nickname_')) return verifyModal(interaction);
