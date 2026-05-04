@@ -3877,6 +3877,62 @@ webhookApp.post('/api/bot/role-assign', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// POST /api/bot/sync-all-roles — bulk variant of sync-user-roles.
+// Walks every verified_member × every guild, applies missing position
+// + Verified + CO | Staff roles. Body: { dry_run? }. Returns aggregate
+// counts so the portal /admin/discord-drift page can trigger this in
+// one click instead of typing /sync-all-roles in Discord.
+webhookApp.post('/api/bot/sync-all-roles', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const dryRun = !!req.body?.dry_run;
+    const { POSITIONS } = await import('./utils/positions.js');
+    const { db: bDb } = await import('./utils/botDb.js');
+    const verified = bDb.prepare('SELECT discord_id, position, nickname FROM verified_members').all();
+
+    let totalGranted = 0, totalAlready = 0, totalFailed = 0;
+    const userResults = [];
+    const reason = `Portal sync-all-roles${dryRun ? ' (dry-run)' : ''}`;
+
+    for (const v of verified) {
+      const expectedRoleNames = [...(POSITIONS[v.position] || []), 'Verified', 'CO | Staff'];
+      let userGranted = 0, userAlready = 0, userFailed = 0;
+
+      for (const [, guild] of client.guilds.cache) {
+        const member = await guild.members.fetch(v.discord_id).catch(() => null);
+        if (!member) continue;
+        for (const roleName of expectedRoleNames) {
+          const role = guild.roles.cache.find(r => r.name === roleName);
+          if (!role) continue;
+          if (member.roles.cache.has(role.id)) { userAlready++; continue; }
+          if (dryRun) { userGranted++; continue; }
+          try { await member.roles.add(role, reason); userGranted++; }
+          catch { userFailed++; }
+        }
+      }
+      totalGranted += userGranted;
+      totalAlready += userAlready;
+      totalFailed += userFailed;
+      if (userGranted > 0 || userFailed > 0) {
+        userResults.push({ discord_id: v.discord_id, position: v.position, granted: userGranted, failed: userFailed });
+      }
+    }
+
+    res.json({
+      ok: true,
+      dry_run: dryRun,
+      walked: verified.length,
+      total_granted: totalGranted,
+      total_already: totalAlready,
+      total_failed: totalFailed,
+      affected_users: userResults,
+    });
+  } catch (e) {
+    console.error('[/api/bot/sync-all-roles]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // POST /api/bot/sync-user-roles — re-apply expected position roles for
 // a single verified member across every CO guild. Body: { discord_id, dry_run? }.
 // Returns granted/already/failed counts per guild.
