@@ -49,6 +49,7 @@ const CATEGORIES = [
     { name: 'brag', desc: 'View latest BRAG report' },
     { name: 'aps', desc: 'Your Activity Points System summary for this week' },
     { name: 'whois', desc: 'Aggregate everything bot + portal know about a Discord user (auth 5+)' },
+    { name: 'leaderboard', desc: 'Top staff this week — voice or messages' },
     { name: 'stats', desc: 'Organisation-wide statistics' },
   ]},
   { name: 'Security & AutoMod', emoji: '🔒', commands: [
