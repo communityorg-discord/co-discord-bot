@@ -23,11 +23,27 @@ export async function removeAllStaffRoles(client, discordId, reason = 'Staff act
   return results;
 }
 
+// Resolve a role on a guild — env-provided ID first (fast path), then
+// fall back to looking up by name. Returns null if neither matches —
+// caller should log + no-op rather than crash on undefined.
+function resolveRole(guild, envId, fallbackName) {
+  if (envId) {
+    const byId = guild.roles.cache.get(envId);
+    if (byId) return byId;
+  }
+  if (fallbackName) {
+    return guild.roles.cache.find(r => r.name === fallbackName) || null;
+  }
+  return null;
+}
+
 export async function addSuspendedRole(client, discordId) {
   try {
     const guild = await client.guilds.fetch(getEffectiveStaffHqId(client));
     const member = await guild.members.fetch(discordId);
-    await member.roles.add(SUSPENDED_ROLE_ID, 'Suspension applied');
+    const role = resolveRole(guild, SUSPENDED_ROLE_ID, 'Suspended');
+    if (!role) { console.warn('[RoleManager] addSuspendedRole: no Suspended role on', guild.name); return false; }
+    await member.roles.add(role, 'Suspension applied');
     return true;
   } catch (e) {
     console.error('[RoleManager] addSuspendedRole error:', e.message);
@@ -39,7 +55,9 @@ export async function removeSuspendedRole(client, discordId) {
   try {
     const guild = await client.guilds.fetch(getEffectiveStaffHqId(client));
     const member = await guild.members.fetch(discordId);
-    await member.roles.remove(SUSPENDED_ROLE_ID, 'Suspension lifted');
+    const role = resolveRole(guild, SUSPENDED_ROLE_ID, 'Suspended');
+    if (!role) { console.warn('[RoleManager] removeSuspendedRole: no Suspended role on', guild.name); return false; }
+    await member.roles.remove(role, 'Suspension lifted');
     return true;
   } catch (e) {
     console.error('[RoleManager] removeSuspendedRole error:', e.message);
@@ -51,7 +69,9 @@ export async function addInvestigationRole(client, discordId) {
   try {
     const guild = await client.guilds.fetch(getEffectiveStaffHqId(client));
     const member = await guild.members.fetch(discordId);
-    await member.roles.add(UNDER_INVESTIGATION_ROLE_ID, 'Investigation started');
+    const role = resolveRole(guild, UNDER_INVESTIGATION_ROLE_ID, 'Under Investigation');
+    if (!role) { console.warn('[RoleManager] addInvestigationRole: no "Under Investigation" role on', guild.name, '— create it manually if you want this flow to apply a role'); return false; }
+    await member.roles.add(role, 'Investigation started');
     return true;
   } catch (e) {
     console.error('[RoleManager] addInvestigationRole error:', e.message);
@@ -63,7 +83,9 @@ export async function removeInvestigationRole(client, discordId) {
   try {
     const guild = await client.guilds.fetch(getEffectiveStaffHqId(client));
     const member = await guild.members.fetch(discordId);
-    await member.roles.remove(UNDER_INVESTIGATION_ROLE_ID, 'Investigation ended');
+    const role = resolveRole(guild, UNDER_INVESTIGATION_ROLE_ID, 'Under Investigation');
+    if (!role) { console.warn('[RoleManager] removeInvestigationRole: no "Under Investigation" role on', guild.name); return false; }
+    await member.roles.remove(role, 'Investigation ended');
     return true;
   } catch (e) {
     console.error('[RoleManager] removeInvestigationRole error:', e.message);
