@@ -2326,7 +2326,16 @@ client.on('guildMemberAdd', async (member) => {
     const { POSITIONS, ALL_MANAGED_ROLES } = await import('./utils/positions.js');
     const roleNames = [...(POSITIONS[verified.position] || []), 'Verified', 'CO Staff'];
     const toAssign = member.guild.roles.cache.filter(r => roleNames.includes(r.name));
-    if (toAssign.size > 0) await member.roles.add(toAssign).catch(e => console.warn('[Verify Auto] Roles failed:', e.message));
+    // Add roles one-at-a-time so a single permission-denied role (above the
+    // bot's hierarchy) doesn't block the rest. Discord's bulk-edit is
+    // all-or-nothing — losing all roles because of one is a worse
+    // outcome than losing one.
+    let granted = 0; const failed = [];
+    for (const [, role] of toAssign) {
+      try { await member.roles.add(role, 'Auto-applied on join (verified)'); granted++; }
+      catch (e) { failed.push(`${role.name}: ${e.message}`); }
+    }
+    if (failed.length) console.warn(`[Verify Auto] ${member.user.tag} on ${member.guild.name} — granted ${granted}/${toAssign.size}, failed:`, failed.join('; '));
 
     // Set nickname globally
     if (verified.nickname) {
