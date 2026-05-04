@@ -73,6 +73,7 @@ const CATEGORIES = [
     { name: 'poll', desc: 'Create a poll' },
     { name: 'random-pick', desc: 'Pick N random members from a role (online-only filter optional)' },
     { name: 'standup', desc: 'Post a quick standup (yesterday / today / blockers) to the current channel' },
+    { name: 'thanks', desc: 'Public kudos to a colleague — posts in channel + DMs them' },
   ]},
   { name: 'Voice & Recording', emoji: '🎙️', commands: [
     { name: 'office', desc: 'Manage voice-channel access control (superuser)' },

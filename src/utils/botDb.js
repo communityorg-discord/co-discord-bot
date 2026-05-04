@@ -262,6 +262,20 @@ db.exec(`CREATE TABLE IF NOT EXISTS command_usage (
   UNIQUE(discord_id, week_key)
 )`);
 
+// Peer recognition — /thanks logs every kudo so we can show a
+// recipient leaderboard later. No deletion path.
+db.exec(`CREATE TABLE IF NOT EXISTS kudos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  from_discord_id TEXT NOT NULL,
+  to_discord_id TEXT NOT NULL,
+  message TEXT NOT NULL,
+  guild_id TEXT,
+  channel_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_kudos_to ON kudos(to_discord_id, created_at)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_kudos_from ON kudos(from_discord_id, created_at)`);
+
 // Reusable text snippets — save common responses for quick recall.
 // Personal scope (owner_id) or shared (owner_id NULL). Name unique per scope.
 db.exec(`CREATE TABLE IF NOT EXISTS snippets (
