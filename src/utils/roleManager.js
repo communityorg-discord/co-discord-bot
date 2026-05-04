@@ -1,8 +1,9 @@
-import { ALL_SERVER_IDS, STAFF_HQ_ID, SUSPENDED_ROLE_ID, UNDER_INVESTIGATION_ROLE_ID } from '../config.js';
+import { ALL_SERVER_IDS, STAFF_HQ_ID, SUSPENDED_ROLE_ID, UNDER_INVESTIGATION_ROLE_ID,
+  getEffectiveAllServerIds, getEffectiveStaffHqId } from '../config.js';
 
 export async function removeAllStaffRoles(client, discordId, reason = 'Staff action') {
   const results = [];
-  for (const serverId of ALL_SERVER_IDS) {
+  for (const serverId of getEffectiveAllServerIds(client)) {
     try {
       const guild = await client.guilds.fetch(serverId).catch(() => null);
       if (!guild) continue;
@@ -24,7 +25,7 @@ export async function removeAllStaffRoles(client, discordId, reason = 'Staff act
 
 export async function addSuspendedRole(client, discordId) {
   try {
-    const guild = await client.guilds.fetch(STAFF_HQ_ID);
+    const guild = await client.guilds.fetch(getEffectiveStaffHqId(client));
     const member = await guild.members.fetch(discordId);
     await member.roles.add(SUSPENDED_ROLE_ID, 'Suspension applied');
     return true;
@@ -36,7 +37,7 @@ export async function addSuspendedRole(client, discordId) {
 
 export async function removeSuspendedRole(client, discordId) {
   try {
-    const guild = await client.guilds.fetch(STAFF_HQ_ID);
+    const guild = await client.guilds.fetch(getEffectiveStaffHqId(client));
     const member = await guild.members.fetch(discordId);
     await member.roles.remove(SUSPENDED_ROLE_ID, 'Suspension lifted');
     return true;
@@ -48,7 +49,7 @@ export async function removeSuspendedRole(client, discordId) {
 
 export async function addInvestigationRole(client, discordId) {
   try {
-    const guild = await client.guilds.fetch(STAFF_HQ_ID);
+    const guild = await client.guilds.fetch(getEffectiveStaffHqId(client));
     const member = await guild.members.fetch(discordId);
     await member.roles.add(UNDER_INVESTIGATION_ROLE_ID, 'Investigation started');
     return true;
@@ -60,7 +61,7 @@ export async function addInvestigationRole(client, discordId) {
 
 export async function removeInvestigationRole(client, discordId) {
   try {
-    const guild = await client.guilds.fetch(STAFF_HQ_ID);
+    const guild = await client.guilds.fetch(getEffectiveStaffHqId(client));
     const member = await guild.members.fetch(discordId);
     await member.roles.remove(UNDER_INVESTIGATION_ROLE_ID, 'Investigation ended');
     return true;
@@ -74,7 +75,7 @@ export async function restorePositionRoles(client, discordId, position) {
   const { POSITIONS } = await import('./positions.js');
   const roleNames = POSITIONS[position] || [];
   if (!roleNames.length) return;
-  for (const serverId of ALL_SERVER_IDS) {
+  for (const serverId of getEffectiveAllServerIds(client)) {
     try {
       const guild = await client.guilds.fetch(serverId).catch(() => null);
       if (!guild) continue;
@@ -91,7 +92,7 @@ export async function restorePositionRoles(client, discordId, position) {
 }
 
 export async function kickFromAllServers(client, discordId, reason) {
-  for (const serverId of ALL_SERVER_IDS) {
+  for (const serverId of getEffectiveAllServerIds(client)) {
     try {
       const guild = await client.guilds.fetch(serverId).catch(() => null);
       if (!guild) continue;

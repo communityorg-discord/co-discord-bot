@@ -215,6 +215,11 @@ client.once('clientReady', async () => {
   const { default: db, getActiveSuspension, liftSuspension, getActiveGlobalBan } = await import('./utils/botDb.js');
   const { unsuspendAcrossGuilds } = await import('./utils/roleManager.js');
   const { EmbedBuilder } = await import('discord.js');
+  // ALL_SERVER_IDS reference below was previously unimported — would
+  // throw ReferenceError on the first expired-temp-ban tick. Use the
+  // env-or-fallback helper so the loop iterates the bot's actual
+  // guild set when env vars aren't configured.
+  const { getEffectiveAllServerIds } = await import('./config.js');
 
   // Suspensions
   const activeSuspensions = db.prepare("SELECT * FROM suspensions WHERE expires_at IS NOT NULL AND active = 1").all();
@@ -249,7 +254,7 @@ client.once('clientReady', async () => {
       setTimeout(async () => {
         try {
           
-          for (const gid of ALL_SERVER_IDS) {
+          for (const gid of getEffectiveAllServerIds(client)) {
             const g = await client.guilds.fetch(gid).catch(() => null);
             if (g) await g.members.unban(ban.discord_id, 'Temporary ban expired').catch(() => {});
           }
@@ -274,8 +279,8 @@ client.once('clientReady', async () => {
       }
       const expiredBans = db.prepare("SELECT * FROM banned_users WHERE unban_at IS NOT NULL AND active = 1 AND unban_at <= ?").all(new Date(now).toISOString());
       for (const ban of expiredBans) {
-        
-        for (const gid of ALL_SERVER_IDS) {
+
+        for (const gid of getEffectiveAllServerIds(client)) {
           const g = await client.guilds.fetch(gid).catch(() => null);
           if (g) await g.members.unban(ban.discord_id, 'Temporary ban expired').catch(() => {});
         }
@@ -4058,7 +4063,8 @@ webhookApp.post('/bot/disciplinary', async (req, res) => {
     const { addInfraction } = await import('./utils/botDb.js');
     const { logAction } = await import('./utils/logger.js');
     const { POSITIONS, ALL_MANAGED_ROLES } = await import('./utils/positions.js');
-    const { ALL_SERVER_IDS } = await import('./config.js');
+    const { getEffectiveAllServerIds } = await import('./config.js');
+    const ALL_SERVER_IDS = getEffectiveAllServerIds(client);
 
     // Log infraction to bot DB
     if (caseRef) {
@@ -4699,7 +4705,8 @@ function pickRoleColour(roleName) {
 // list and do N round-trips.
 async function resolveTargetGuilds(all_servers, guild_id) {
   if (all_servers) {
-    const { ALL_SERVER_IDS } = await import('./config.js');
+    const { getEffectiveAllServerIds } = await import('./config.js');
+    const ALL_SERVER_IDS = getEffectiveAllServerIds(client);
     // Prefer the env-configured list. If empty, fall back to every
     // guild the bot is currently a member of — this covers cases
     // where the env vars weren't set (early deployments) but the bot
