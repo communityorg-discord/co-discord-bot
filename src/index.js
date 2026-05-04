@@ -3577,6 +3577,31 @@ webhookApp.get('/api/bot/commands', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// GET /api/bot/feedback?status=open|resolved&limit=N — list feedback rows.
+// Backs /admin/bot-feedback.
+webhookApp.get('/api/bot/feedback', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { listFeedback } = await import('./utils/botDb.js');
+    const status = req.query.status === 'open' || req.query.status === 'resolved' ? req.query.status : null;
+    const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 100));
+    res.json({ ok: true, items: listFeedback({ status, limit }) });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// POST /api/bot/feedback/:id/resolve — body: { resolved_by, note? }
+webhookApp.post('/api/bot/feedback/:id/resolve', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ ok: false, error: 'bad id' });
+    const { resolvedBy, note } = { resolvedBy: req.body?.resolved_by, note: req.body?.note };
+    const { resolveFeedback } = await import('./utils/botDb.js');
+    const r = resolveFeedback({ id, resolvedBy, note });
+    res.json({ ok: true, changed: r.changes });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // GET /api/bot/command-stats?days=N — aggregated invocation stats for the
 // /admin/discord-command-stats portal page. Default 7 days, max 90.
 webhookApp.get('/api/bot/command-stats', async (req, res) => {

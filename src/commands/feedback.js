@@ -84,6 +84,23 @@ export async function handleModalSubmit(interaction) {
 
   await interaction.deferReply({ ephemeral: true });
 
+  // Persist for portal /admin/bot-feedback before doing anything else
+  try {
+    const { logFeedback } = await import('../utils/botDb.js');
+    logFeedback({
+      discordId: interaction.user.id,
+      username: interaction.user.username,
+      kind,
+      summary,
+      detail,
+      guildId: interaction.guildId,
+      guildName: interaction.guild?.name,
+      channelId: interaction.channel?.id,
+    });
+  } catch (e) {
+    console.error('[feedback persist]', e.message);
+  }
+
   const guildName = interaction.guild?.name || 'DM';
   const embed = new EmbedBuilder()
     .setTitle(`${KIND_LABEL[kind] || kind} — ${summary}`)

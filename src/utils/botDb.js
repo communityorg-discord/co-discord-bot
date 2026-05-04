@@ -262,6 +262,26 @@ db.exec(`CREATE TABLE IF NOT EXISTS command_usage (
   UNIQUE(discord_id, week_key)
 )`);
 
+// /feedback submissions — stored so the portal /admin/bot-feedback
+// page can triage them and mark resolved.
+db.exec(`CREATE TABLE IF NOT EXISTS bot_feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  discord_id TEXT NOT NULL,
+  username TEXT,
+  kind TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  detail TEXT NOT NULL,
+  guild_id TEXT,
+  guild_name TEXT,
+  channel_id TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  resolved_at TEXT,
+  resolved_by TEXT,
+  resolved_note TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_botfb_status ON bot_feedback(status, created_at)`);
+
 // Per-invocation slash-command log — separate from command_usage's
 // weekly aggregates because we want timeline + per-command breakdowns
 // for the portal /admin/discord-command-stats page.
@@ -1269,6 +1289,45 @@ export function trackCommand(discordId, weekKey) {
   } else {
     db.prepare('INSERT INTO command_usage (discord_id, week_key, command_count) VALUES (?, ?, 1)').run(discordId, weekKey);
   }
+}
+
+// /feedback persistence helpers
+const _insertFeedback = db.prepare(`
+  INSERT INTO bot_feedback (discord_id, username, kind, summary, detail, guild_id, guild_name, channel_id)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`);
+export function logFeedback({ discordId, username, kind, summary, detail, guildId, guildName, channelId }) {
+  try {
+    const r = _insertFeedback.run(
+      String(discordId),
+      username ? String(username) : null,
+      String(kind),
+      String(summary).slice(0, 500),
+      String(detail).slice(0, 4000),
+      guildId ? String(guildId) : null,
+      guildName ? String(guildName) : null,
+      channelId ? String(channelId) : null,
+    );
+    return r.lastInsertRowid;
+  } catch (e) {
+    console.error('[logFeedback]', e.message);
+    return null;
+  }
+}
+export function listFeedback({ status, limit } = {}) {
+  const lim = Math.max(1, Math.min(200, Number(limit) || 100));
+  if (status) {
+    return db.prepare('SELECT * FROM bot_feedback WHERE status = ? ORDER BY created_at DESC LIMIT ?').all(String(status), lim);
+  }
+  return db.prepare('SELECT * FROM bot_feedback ORDER BY created_at DESC LIMIT ?').all(lim);
+}
+export function resolveFeedback({ id, resolvedBy, note }) {
+  return db.prepare(`
+    UPDATE bot_feedback
+    SET status = 'resolved', resolved_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+        resolved_by = ?, resolved_note = ?
+    WHERE id = ? AND status != 'resolved'
+  `).run(resolvedBy ? String(resolvedBy) : null, note ? String(note).slice(0, 500) : null, Number(id));
 }
 
 // Per-invocation logger — drop-in for the interactionCreate handler.
