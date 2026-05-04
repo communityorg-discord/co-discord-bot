@@ -51,6 +51,7 @@ const CATEGORIES = [
     { name: 'aps', desc: 'Your Activity Points System summary for this week' },
     { name: 'whois', desc: 'Aggregate everything bot + portal know about a Discord user (auth 5+)' },
     { name: 'find-user', desc: 'Cross-guild fuzzy search for users by name fragment (auth 5+)' },
+    { name: 'staff-online', desc: 'Verified staff who are currently online — sourced from Staff HQ presence' },
     { name: 'leaderboard', desc: 'Top staff this week — voice or messages' },
     { name: 'myroles', desc: 'Show your roles across every CO server' },
     { name: 'role-info', desc: 'Detailed info on a Discord role — members, perms, colour' },
