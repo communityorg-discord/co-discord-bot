@@ -3657,6 +3657,52 @@ webhookApp.get('/api/bot/commands', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// GET /api/bot/runtime — system-status snapshot for /admin/bot-runtime.
+// Process/uptime/memory + counts from key tables + recent error rate
+// from command_invocations.
+webhookApp.get('/api/bot/runtime', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { db: bDb } = await import('./utils/botDb.js');
+    const since24h = new Date(Date.now() - 24 * 3600_000).toISOString();
+    const sinceWeek = new Date(Date.now() - 7 * 86400_000).toISOString();
+
+    const todayInv = bDb.prepare('SELECT COUNT(*) c, SUM(success) s FROM command_invocations WHERE created_at >= ?').get(since24h);
+    const weekInv = bDb.prepare('SELECT COUNT(*) c, SUM(success) s FROM command_invocations WHERE created_at >= ?').get(sinceWeek);
+    const recentErrs = bDb.prepare(`
+      SELECT command_name, error_message, created_at, discord_id
+      FROM command_invocations WHERE success = 0 ORDER BY created_at DESC LIMIT 5
+    `).all();
+    const pendingPosts = bDb.prepare("SELECT COUNT(*) c FROM scheduled_channel_posts WHERE status = 'pending'").get();
+    const openFeedback = bDb.prepare("SELECT COUNT(*) c FROM bot_feedback WHERE status = 'open'").get();
+    const verifiedCount = bDb.prepare('SELECT COUNT(*) c FROM verified_members').get();
+    const snippetsCount = bDb.prepare('SELECT COUNT(*) c FROM snippets').get();
+    const mem = process.memoryUsage();
+
+    res.json({
+      ok: true,
+      uptime_seconds: process.uptime(),
+      ws_ping_ms: client?.ws?.ping ?? null,
+      guilds: client?.guilds?.cache?.size ?? 0,
+      total_members: [...(client?.guilds?.cache?.values() || [])].reduce((s, g) => s + (g.memberCount || 0), 0),
+      memory_rss_bytes: mem.rss,
+      memory_heap_used_bytes: mem.heapUsed,
+      node_version: process.version,
+      verified_count: verifiedCount.c,
+      snippets_count: snippetsCount.c,
+      open_feedback_count: openFeedback.c,
+      pending_scheduled_posts: pendingPosts.c,
+      invocations_24h: { total: todayInv.c, success: todayInv.s ?? 0 },
+      invocations_7d: { total: weekInv.c, success: weekInv.s ?? 0 },
+      recent_errors: recentErrs,
+      generated_at: new Date().toISOString(),
+    });
+  } catch (e) {
+    console.error('[/api/bot/runtime]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // GET /api/bot/snippets — list every snippet (shared + personal) for
 // the /admin/bot-snippets page. Auth-gated by the bot secret; the
 // portal-side route gates by username.
