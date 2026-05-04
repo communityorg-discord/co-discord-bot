@@ -67,6 +67,7 @@ const CATEGORIES = [
   { name: 'Assignments', emoji: '📌', commands: [
     { name: 'assign', desc: 'Create task assignment for staff' },
     { name: 'remind', desc: 'Set a timed reminder' },
+    { name: 'snippet', desc: 'Save and reuse text snippets — save / use / list / delete' },
     { name: 'schedule-dm', desc: 'Schedule a DM to be sent later (auth 5+)' },
     { name: 'poll', desc: 'Create a poll' },
   ]},

@@ -262,6 +262,20 @@ db.exec(`CREATE TABLE IF NOT EXISTS command_usage (
   UNIQUE(discord_id, week_key)
 )`);
 
+// Reusable text snippets — save common responses for quick recall.
+// Personal scope (owner_id) or shared (owner_id NULL). Name unique per scope.
+db.exec(`CREATE TABLE IF NOT EXISTS snippets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_id TEXT,
+  name TEXT NOT NULL,
+  content TEXT NOT NULL,
+  use_count INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+)`);
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_snippets_personal ON snippets(owner_id, name) WHERE owner_id IS NOT NULL`);
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_snippets_shared ON snippets(name) WHERE owner_id IS NULL`);
+
 // Scheduled channel posts — queued by /admin/discord-broadcast and
 // drained by the bot's cron loop. Single payload column (JSON) so we
 // can carry either content, an embed, or both without schema churn.
