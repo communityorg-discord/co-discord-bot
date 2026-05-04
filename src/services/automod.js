@@ -1,11 +1,15 @@
 import { EmbedBuilder, AuditLogEvent, PermissionFlagsBits } from 'discord.js';
 import { db } from '../utils/botDb.js';
 import { getUserByDiscordId } from '../db.js';
+import { SUPERUSER_IDS as REAL_SUPERUSERS, OFFICIAL_BYPASS_IDS } from '../config.js';
 
 const INVITE_REGEX = /(discord\.gg|discord\.com\/invite|discordapp\.com\/invite)\/[a-zA-Z0-9]+/gi;
 const SEVERITY_COLORS = { low: 0x3B82F6, medium: 0xF59E0B, high: 0xEF4444, critical: 0x7F1D1D };
 const SEVERITY_EMOJIS = { low: '🔵', medium: '🟡', high: '🔴', critical: '💀' };
-const SUPERUSER_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'];
+// Trusted accounts immune to AutoMod = real superusers + the official-account
+// bypass IDs. Was previously a 5-element hardcoded list duplicating both
+// upstream sources — now derived so a config.js edit propagates here.
+const SUPERUSER_IDS = Array.from(new Set([...REAL_SUPERUSERS, ...OFFICIAL_BYPASS_IDS]));
 
 export class AutoMod {
   constructor() {
@@ -77,10 +81,10 @@ export class AutoMod {
       if (ch) await ch.send({ embeds: [embed] }).catch(() => {});
     }
 
-    // DM superusers only for high/critical
+    // DM superusers only for high/critical — same trusted-accounts set
+    // as the immune list (real superusers + official-account bypass IDs).
     if (severity === 'high' || severity === 'critical') {
-      const NOTIFY_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'];
-      for (const id of NOTIFY_IDS) {
+      for (const id of SUPERUSER_IDS) {
         try {
           const user = await this.client?.users.fetch(id).catch(() => null);
           if (user) await user.send({ embeds: [embed] }).catch(() => {});
