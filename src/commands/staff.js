@@ -26,7 +26,8 @@ export async function execute(interaction) {
     return interaction.reply({ content: `❌ No staff found matching "${query}"`, ephemeral: true });
   }
 
-  const embeds = results.map(s => new EmbedBuilder()
+  const SHOWN = 3;
+  const embeds = results.slice(0, SHOWN).map(s => new EmbedBuilder()
     .setTitle(`👤 ${s.display_name || s.full_name || s.username}`)
     .setColor(0x5865F2)
     .addFields(
@@ -34,10 +35,12 @@ export async function execute(interaction) {
       { name: 'Department', value: s.department || 'N/A', inline: true },
       { name: 'Discord', value: s.discord_id ? `<@${s.discord_id}>` : 'Not linked', inline: true }
     )
-    .setFooter({ text: 'Community Organisation | Staff Directory' })
+    .setFooter({ text: results.length > SHOWN
+      ? `Showing ${SHOWN} of ${results.length} matches — refine your search to narrow down`
+      : 'Community Organisation | Staff Directory' })
   );
 
-  await interaction.reply({ embeds: embeds.slice(0, 3), ephemeral: true });
+  await interaction.reply({ embeds, ephemeral: true });
   } catch (err) {
     console.error('[staff] Error:', err);
     const msg = { content: 'An error occurred. Please try again.', flags: 64 };
