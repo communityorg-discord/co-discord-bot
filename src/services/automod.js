@@ -193,6 +193,16 @@ export class AutoMod {
     const config = this.getConfig(member.guild.id);
     if (!config.enabled) return;
 
+    // Always log the join — checkMemberLeave's mass-DM heuristic reads this
+    // table regardless of raid_detection_enabled, so a guild with raid
+    // detection off would otherwise never ban the join+leave×3 pattern.
+    // Cleanup window is the wider of: raid window, or 1h (mass-DM lookback).
+    try {
+      db.prepare('INSERT INTO join_rate_log (guild_id, discord_id) VALUES (?, ?)').run(member.guild.id, member.id);
+      const cutoffSec = Math.max(Number(config.raid_join_window_seconds) || 0, 3600);
+      db.prepare("DELETE FROM join_rate_log WHERE guild_id = ? AND joined_at < datetime('now', '-' || ? || ' seconds')").run(member.guild.id, cutoffSec);
+    } catch (e) { console.warn('[AutoMod] join_rate_log insert failed:', e.message); }
+
     await this._checkNewAccount(member, config);
     await this._checkRaidJoin(member, config);
 
@@ -382,10 +392,9 @@ export class AutoMod {
   async _checkRaidJoin(member, config) {
     if (!config.raid_detection_enabled) return;
 
-    db.prepare('INSERT INTO join_rate_log (guild_id, discord_id) VALUES (?, ?)').run(member.guild.id, member.id);
-    db.prepare("DELETE FROM join_rate_log WHERE guild_id = ? AND joined_at < datetime('now', '-' || ? || ' seconds')").run(member.guild.id, config.raid_join_window_seconds);
-
-    const count = db.prepare('SELECT COUNT(*) as c FROM join_rate_log WHERE guild_id = ?').get(member.guild.id).c;
+    // Insert + cleanup now happens unconditionally in checkMemberAdd above —
+    // we only do the threshold check here.
+    const count = db.prepare("SELECT COUNT(*) as c FROM join_rate_log WHERE guild_id = ? AND joined_at > datetime('now', '-' || ? || ' seconds')").get(member.guild.id, config.raid_join_window_seconds).c;
     if (count >= config.raid_join_threshold) {
       console.warn(`[AutoMod] RAID DETECTED in ${member.guild.name}: ${count} joins in ${config.raid_join_window_seconds}s`);
       if (config.raid_action === 'lockdown') await this.triggerRaidLockdown(member.guild, `Raid: ${count} joins in ${config.raid_join_window_seconds}s`);
