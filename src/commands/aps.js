@@ -3,14 +3,17 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import db, { getUserByDiscordId } from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
 
-// ISO week key helper (matches portal's getWeekKey)
+// Monday-anchored week key — matches portal getWeekKey() and bot getBragWeekKey().
+// Format: YYYY-MM-DD of the Monday at the start of the week. Previously this
+// helper returned the ISO YYYY-Www format ("2026-W18"), which doesn't match
+// any value in activity_point_records — every /aps query returned zero rows.
 function weekKey(d = new Date()) {
-  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  const dayNum = t.getUTCDay() || 7;
-  t.setUTCDate(t.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
-  const weekNo = Math.ceil((((t - yearStart) / 86400000) + 1) / 7);
-  return `${t.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+  const t = new Date(d);
+  const day = t.getDay();
+  const diff = (day === 0 ? -6 : 1) - day;
+  t.setDate(t.getDate() + diff);
+  t.setHours(0, 0, 0, 0);
+  return t.toISOString().slice(0, 10);
 }
 
 const CATEGORY_LABEL = {
