@@ -57,7 +57,7 @@ export async function execute(interaction) {
     new ButtonBuilder().setCustomId('nid_cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary)
   );
 
-  await interaction.reply({ embeds: [embed], components: [row] });
+  await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
   } catch (err) {
     console.error('[nid] Error:', err);
     const msg = { content: 'An error occurred. Please try again.', flags: 64 };
