@@ -262,6 +262,22 @@ db.exec(`CREATE TABLE IF NOT EXISTS command_usage (
   UNIQUE(discord_id, week_key)
 )`);
 
+// /idea crowdsourced suggestions — staff post ideas, others upvote.
+db.exec(`CREATE TABLE IF NOT EXISTS ideas (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_discord_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+)`);
+db.exec(`CREATE TABLE IF NOT EXISTS idea_votes (
+  idea_id INTEGER NOT NULL,
+  voter_discord_id TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  PRIMARY KEY (idea_id, voter_discord_id),
+  FOREIGN KEY (idea_id) REFERENCES ideas(id) ON DELETE CASCADE
+)`);
+
 // Personal task list — /todo. Per-user only; no sharing.
 db.exec(`CREATE TABLE IF NOT EXISTS todos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

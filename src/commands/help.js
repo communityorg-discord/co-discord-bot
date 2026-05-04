@@ -110,6 +110,7 @@ const CATEGORIES = [
     { name: 'server-health', desc: 'Per-guild role/AutoMod/baseline-role audit (auth 7+)' },
     { name: 'bot-perms', desc: 'Per-channel audit of missing bot perms in this server (auth 5+)' },
     { name: 'feedback', desc: 'Send a bug report, feature request, or feedback to maintainers' },
+    { name: 'idea', desc: 'Crowdsourced suggestions board — post / list / vote / unvote' },
     { name: 'embed', desc: 'Compose and post a rich embed to any channel via the bot (auth 5+)' },
     { name: 'links', desc: 'Quick-access list of important CO portal pages' },
     { name: 'help', desc: 'This command' },
