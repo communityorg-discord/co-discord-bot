@@ -490,10 +490,14 @@ client.once('clientReady', async () => {
       await sendBragReminders();
       setInterval(sendBragReminders, 7 * 86400000);
     }, delay);
-    console.log(`[BRAG Reminder] Scheduled — next Sunday 10AM in ${Math.round(delay / 60000)}m`);
+    console.log(`[APS Reminder] Scheduled — next Sunday 10AM in ${Math.round(delay / 60000)}m`);
   }
 
   async function sendBragReminders() {
+    // BRAG was retired in 2026-04-26 — reminder now nudges anyone who
+    // hasn't accrued any Activity Points this week. Reads from
+    // activity_point_records (live sum) instead of the retired
+    // brag_reports table; copy reflects APS, not BRAG self-assessment.
     try {
       const Database = (await import('better-sqlite3')).default;
       const portalDb = new Database(process.env.PORTAL_DB_PATH, { readonly: true });
@@ -505,13 +509,17 @@ client.once('clientReady', async () => {
       d.setHours(0, 0, 0, 0);
       const weekKey = d.toISOString().slice(0, 10);
 
-      const notSubmitted = portalDb.prepare(
+      // Active staff with Discord linked who have zero APS points this
+      // week — and aren't carrying an APS exemption.
+      const noPoints = portalDb.prepare(
         `SELECT u.discord_id, u.display_name, u.full_name
          FROM users u
-         LEFT JOIN brag_reports br ON br.user_id = u.id AND br.week_key = ?
          WHERE lower(u.account_status) = 'active'
            AND u.discord_id IS NOT NULL AND u.discord_id != ''
-           AND br.id IS NULL
+           AND COALESCE(
+             (SELECT SUM(points) FROM activity_point_records WHERE user_id = u.id AND week_key = ?),
+             0
+           ) = 0
            AND NOT EXISTS (
              SELECT 1 FROM performance_adjustments pa
              WHERE pa.user_id = u.id AND pa.adjustment_type = 'full_brag_exemption'
@@ -520,29 +528,29 @@ client.once('clientReady', async () => {
            )`
       ).all(weekKey);
 
-      console.log(`[BRAG Reminder] Sending to ${notSubmitted.length} staff`);
+      console.log(`[APS Reminder] Sending to ${noPoints.length} staff`);
 
-      for (const staff of notSubmitted) {
+      for (const staff of noPoints) {
         try {
           const user = await client.users.fetch(staff.discord_id);
           await user.send({ embeds: [new EmbedBuilder()
             .setColor(0xF59E0B)
-            .setTitle('⏰ BRAG Report Due Today')
-            .setDescription(`Hi ${staff.display_name || staff.full_name}!\n\nYour weekly BRAG self-assessment is due by **12PM today (Sunday)**.\n\nFailure to submit will result in an automatic **Black** rating for Tasks and Contact this week per policy §3.2.`)
-            .addFields({ name: 'Submit via', value: '[portal.communityorg.co.uk](https://portal.communityorg.co.uk/performance?tab=brag)', inline: false })
-            .setFooter({ text: 'Community Organisation | BRAG System' })
+            .setTitle('⏰ No Activity Points yet — week closes today')
+            .setDescription(`Hi ${staff.display_name || staff.full_name}!\n\nYou haven't accrued any Activity Points this week. The week closes at **midnight UTC tonight (Sunday)** and a zero week defaults to a **Black** grade.\n\nQuick wins: send some messages, join voice for 30 min, or submit a tasks/co-work claim from the Performance page.`)
+            .addFields({ name: 'Open', value: '[portal.communityorg.co.uk/performance](https://portal.communityorg.co.uk/performance?tab=activity)', inline: false })
+            .setFooter({ text: 'Community Organisation | Activity Points' })
             .setTimestamp()
           ]});
           await new Promise(r => setTimeout(r, 500));
         } catch (e) {
-          console.error(`[BRAG Reminder] Failed for ${staff.discord_id}:`, e.message);
+          console.error(`[APS Reminder] Failed for ${staff.discord_id}:`, e.message);
         }
       }
 
       portalDb.close();
-      console.log(`[BRAG Reminder] Complete — sent to ${notSubmitted.length} staff`);
+      console.log(`[APS Reminder] Complete — sent to ${noPoints.length} staff`);
     } catch (e) {
-      console.error('[BRAG Reminder]', e.message);
+      console.error('[APS Reminder]', e.message);
     }
   }
 
