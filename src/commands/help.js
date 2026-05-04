@@ -73,6 +73,7 @@ const CATEGORIES = [
   { name: 'Voice & Recording', emoji: '🎙️', commands: [
     { name: 'office', desc: 'Manage voice-channel access control (superuser)' },
     { name: 'record', desc: 'Start/stop a voice-channel recording session' },
+    { name: 'who-is-here', desc: 'See who\'s currently in voice channels (this server or all)' },
   ]},
   { name: 'Channels & Logs', emoji: '📡', commands: [
     { name: 'orglogs', desc: 'Configure organisation-wide log channels' },
