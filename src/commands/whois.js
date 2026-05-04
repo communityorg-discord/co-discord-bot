@@ -72,6 +72,21 @@ export async function execute(interaction) {
       { name: 'Infractions', value: `${infrCount} total · ${activeWarns} active warning${activeWarns === 1 ? '' : 's'}`, inline: false },
     );
 
+  // Kudos snapshot — receivers + givers stats. Cheap query, useful
+  // sentiment signal alongside the moderation flags.
+  try {
+    const kReceived = botDb.prepare('SELECT COUNT(*) c FROM kudos WHERE to_discord_id = ?').get(targetId).c;
+    const kGiven = botDb.prepare('SELECT COUNT(*) c FROM kudos WHERE from_discord_id = ?').get(targetId).c;
+    const kRecent = botDb.prepare(`SELECT COUNT(*) c FROM kudos WHERE to_discord_id = ? AND created_at >= datetime('now', '-30 days')`).get(targetId).c;
+    if (kReceived || kGiven) {
+      embed.addFields({
+        name: 'Kudos',
+        value: `🙏 **${kReceived}** received (all-time, ${kRecent} in last 30d) · 🤝 **${kGiven}** given`,
+        inline: false,
+      });
+    }
+  } catch { /* kudos table might not exist on older dbs */ }
+
   // Per-guild presence — compact format, capped to fit embed limits
   const presLines = presence.map(p => {
     if (!p.member) return `❌ **${p.name}** — not a member`;
