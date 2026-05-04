@@ -1334,6 +1334,15 @@ export function rolloverStaleSessions(currentWeekKey, currentlyInVoice = new Set
         .run(elapsedToBoundary, row.id);
       closed++;
 
+      // Carry only when the stale row is the immediate predecessor of the
+      // current week. Orphan rows from multiple weeks back (e.g. session_start
+      // left set on 2026-04-12 when we're now in week 2026-05-04) get closed at
+      // their own boundary but do NOT forward time to the current week's row —
+      // otherwise the gap (currentSession - olderWeekEnd) credits multiple
+      // entire weeks of phantom voice time.
+      const currentWeekStart = Date.parse(currentWeekKey + 'T00:00:00Z');
+      if (wkEnd !== currentWeekStart) continue;
+
       if (!currentlyInVoice.has(String(row.discord_id))) continue;
 
       const wkBoundaryIso = new Date(wkEnd).toISOString().replace('T', ' ').slice(0, 19);
