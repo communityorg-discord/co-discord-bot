@@ -737,9 +737,14 @@ client.once('clientReady', async () => {
         records.push({ discord_id: discordId, category: 'daily_activity', points: 5 });
       }
 
-      // Check availability via presence for active users
-      const STAFF_HQ = '1357119461957570570';
-      const guild = client.guilds.cache.get(STAFF_HQ);
+      // Check availability via presence for active users.
+      // PRESENCE_GUILD = CO | Internal Hub (1357119461957570570). The
+      // actual "Staff HQ" guild is 1485422910972760176, but Internal Hub
+      // is where staff are most active so it gives a better presence
+      // signal — kept under the original ID, just renamed the local so
+      // the misleading "STAFF_HQ" label doesn't confuse readers.
+      const PRESENCE_GUILD = '1357119461957570570';
+      const guild = client.guilds.cache.get(PRESENCE_GUILD);
       if (guild) {
         for (const discordId of dailyActiveUsers) {
           if (!staffCache.has(discordId)) continue;
@@ -4626,8 +4631,9 @@ webhookApp.post('/api/discord-presence', async (req, res) => {
     if (!Array.isArray(discordIds)) return res.status(400).json({ ok: false, error: 'discordIds array required' });
 
     const presences = {};
-    const STAFF_HQ = '1357119461957570570';
-    const guild = client.guilds.cache.get(STAFF_HQ);
+    // Same PRESENCE_GUILD = Internal Hub note as the daily-activity sync above.
+    const PRESENCE_GUILD = '1357119461957570570';
+    const guild = client.guilds.cache.get(PRESENCE_GUILD);
     if (guild) {
       for (const id of discordIds) {
         try {
