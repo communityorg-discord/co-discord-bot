@@ -3410,6 +3410,58 @@ webhookApp.post('/webhook/notify', async (req, res) => {
 // Read/write the command_permissions table from the portal's Access
 // Control → Bot Permissions tab. All gated by x-bot-secret.
 
+// GET /api/bot/guilds — list every guild the bot is in with health
+// stats (member count, role count, AutoMod state, baseline-role
+// presence, position-role coverage). Backs the portal's
+// /admin/discord-servers admin page.
+webhookApp.get('/api/bot/guilds', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { POSITIONS } = await import('./utils/positions.js');
+    const { db: bDb } = await import('./utils/botDb.js');
+    const BASELINE = ['Verified', 'CO | Staff', 'Suspended', 'Under Investigation'];
+    const expected = new Set();
+    for (const list of Object.values(POSITIONS)) for (const n of list) expected.add(n);
+
+    const out = [];
+    for (const [, g] of client.guilds.cache) {
+      const me = g.members.me;
+      const roles = await g.roles.fetch().catch(() => null);
+      const have = roles ? new Set([...roles.values()].map(r => r.name)) : new Set();
+      const cfg = bDb.prepare('SELECT enabled FROM automod_config WHERE guild_id = ?').get(g.id);
+      out.push({
+        id: g.id,
+        name: g.name,
+        owner_id: g.ownerId,
+        member_count: g.memberCount || 0,
+        role_count: roles?.size || 0,
+        bot_role_position: me?.roles.highest.position || null,
+        bot_perms: {
+          manage_channels: !!me?.permissions.has('ManageChannels'),
+          manage_roles: !!me?.permissions.has('ManageRoles'),
+          ban_members: !!me?.permissions.has('BanMembers'),
+          kick_members: !!me?.permissions.has('KickMembers'),
+          manage_guild: !!me?.permissions.has('ManageGuild'),
+        },
+        automod_enabled: cfg?.enabled === 1,
+        baseline_present: BASELINE.filter(n => have.has(n)),
+        baseline_missing: BASELINE.filter(n => !have.has(n)),
+        position_role_coverage: {
+          present: [...expected].filter(n => have.has(n)).length,
+          total: expected.size,
+          missing_sample: [...expected].filter(n => !have.has(n)).slice(0, 5),
+        },
+        created_at: g.createdAt?.toISOString() || null,
+      });
+    }
+    out.sort((a, b) => b.member_count - a.member_count);
+    res.json({ ok: true, count: out.length, guilds: out });
+  } catch (e) {
+    console.error('[/api/bot/guilds]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // GET /api/bot/commands — every known command + its documented fallback.
 webhookApp.get('/api/bot/commands', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
