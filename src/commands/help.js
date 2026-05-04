@@ -91,14 +91,42 @@ const CATEGORIES = [
 
 export const data = new SlashCommandBuilder()
   .setName('help')
-  .setDescription('Show all bot commands grouped by category');
+  .setDescription('Show all bot commands grouped by category')
+  .addBooleanOption(opt => opt
+    .setName('mine')
+    .setDescription('Filter to commands you can run based on your portal auth level'));
+
+// Parse '(auth N+)' or '(superuser)' out of a description; returns the
+// minimum auth level required, or null if the description doesn't say.
+function requiredAuthLevel(desc) {
+  const m = desc.match(/auth\s*(\d+)\+/i);
+  if (m) return Number(m[1]);
+  if (/superuser/i.test(desc)) return 99;
+  return null;
+}
 
 export async function execute(interaction) {
   const perm = await canUseCommand('help', interaction);
   if (!perm.allowed) {
     return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
   }
-  const totalCmds = CATEGORIES.reduce((s, c) => s + c.commands.length, 0);
+  const filterMine = interaction.options.getBoolean('mine') || false;
+  let myAuth = 1;
+  if (filterMine) {
+    try {
+      const { getUserByDiscordId } = await import('../db.js');
+      const portalUser = getUserByDiscordId(interaction.user.id);
+      if (portalUser?.auth_level) myAuth = Number(portalUser.auth_level);
+    } catch {}
+  }
+  const visible = CATEGORIES.map(cat => ({
+    ...cat,
+    commands: filterMine ? cat.commands.filter(c => {
+      const min = requiredAuthLevel(c.desc);
+      return min === null || myAuth >= min;
+    }) : cat.commands,
+  })).filter(cat => cat.commands.length > 0);
+  const totalCmds = visible.reduce((s, c) => s + c.commands.length, 0);
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
@@ -107,7 +135,7 @@ export async function execute(interaction) {
     .setFooter({ text: 'Community Organisation | Staff Assistant' })
     .setTimestamp();
 
-  for (const cat of CATEGORIES) {
+  for (const cat of visible) {
     embed.addFields({ name: `${cat.emoji} ${cat.name}`, value: cat.commands.map(c => `\`/${c.name}\` — ${c.desc}`).join('\n') + '\n\u200b', inline: false });
   }
 
