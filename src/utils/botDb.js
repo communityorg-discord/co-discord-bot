@@ -262,6 +262,17 @@ db.exec(`CREATE TABLE IF NOT EXISTS command_usage (
   UNIQUE(discord_id, week_key)
 )`);
 
+// Personal task list — /todo. Per-user only; no sharing.
+db.exec(`CREATE TABLE IF NOT EXISTS todos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  done INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  completed_at TEXT
+)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_todos_owner ON todos(owner_id, done, created_at)`);
+
 // Peer recognition — /thanks logs every kudo so we can show a
 // recipient leaderboard later. No deletion path.
 db.exec(`CREATE TABLE IF NOT EXISTS kudos (
