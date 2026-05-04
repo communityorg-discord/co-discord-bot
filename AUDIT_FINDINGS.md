@@ -1,6 +1,6 @@
 # Discord Server Audit — 2026-05-04
 
-Read-only audit of all 9 CO guilds the bot is in. Findings flagged for human review before any Discord-state change.
+Read-only audit of all 9 CO guilds the bot is in. **Status update 05:46 UTC: 7/8 findings actioned (commit 7b7935b). #6 still needs human intent.**
 
 ## Already fixed in code
 
@@ -8,7 +8,20 @@ Read-only audit of all 9 CO guilds the bot is in. Findings flagged for human rev
 - ✅ Empty env vars (`STAFF_HQ_ID`, `NETWORK_SERVER_IDS`, `SUSPENDED_ROLE_ID`, `UNDER_INVESTIGATION_ROLE_ID`) — added runtime fallbacks (96b51a3) and name-based role lookup (57a77c1).
 - ✅ Bulk role-add was all-or-nothing — switched to one-at-a-time so one denied role doesn't block the rest (f515b4d).
 
-## Discord-state findings (need human sign-off)
+## Discord-state findings — 7/8 done
+
+✅ **#1 (DONE)** — Bot Developer role created in all 9 guilds.
+✅ **#2 (DONE)** — Under Investigation role created on Staff HQ.
+✅ **#3 (DONE)** — IC guild role drift reconciled: renamed `IC | International Court` → `International Court`; created `Registrar of the International Court` and `Vice-President of the International Court`.
+✅ **#4 (DONE)** — Founder role created on the 4 guilds missing it (Communications-small, System Log Hub, Private Server, Appeals Hub).
+✅ **#5 (DONE)** — CO | Official Account role created on Dev Server.
+⏸ **#6 (NEEDS YOUR CALL)** — Two guilds named `CO | Communications` (45 vs 8 members). Intentional split or stale duplicate? See section 6 below.
+✅ **#7 (DONE)** — AutoMod enabled on Internal Hub (`automod_config.enabled = 1` for `1357119461957570570`).
+✅ **#8 (DONE)** — Stale guild ID `1272007308704088074` removed from `verify.js` `EXCLUDED_WELCOME_INVITE_GUILDS`.
+
+Net Discord state change: **17 roles created, 1 role renamed, 1 automod row updated**. All operations idempotent (skip-if-exists).
+
+## Original finding details (kept for reference)
 
 ### 1. "Bot Developer" role missing everywhere
 
