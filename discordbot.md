@@ -3,7 +3,7 @@
 ## Paths
 - **Bot path:** `/home/vpcommunityorganisation/clawd/services/co-discord-bot`
 - **Portal path:** `/home/vpcommunityorganisation/clawd/services/onboarding-portal`
-- **PM2 bot process:** ID 1, name `co-discord-bot`
+- **PM2 bot process:** name `co-discord-bot` (ID drifts across restarts — always reference by name, e.g. `pm2 restart co-discord-bot`)
 - **GitHub:** `https://github.com/communityorg-discord/co-discord-bot` (push to `main`)
 
 ## Stack
@@ -16,7 +16,10 @@
 - Portal API base: `http://localhost:3016/api` — use header `x-bot-secret: process.env.BOT_WEBHOOK_SECRET`
 
 ## Standard Commands
-`bot.js`, `brag.js`, `cases.js`, `dm.js`, `gban.js`, `gunban.js`, `infractions.js`, `investigate.js`, `leave.js`, `nid.js`, `purge.js`, `scribe.js`, `staff.js`, `strike.js`, `suspend.js`, `terminate.js`, `unsuspend.js`, `unverify.js`, `user.js`, `verify.js`
+
+The bot exposes 60+ slash commands. The full list is auto-catalogued at the portal endpoint `GET /api/docs/bot-commands`, which scans `src/commands/*.js` and returns each command's name + description + permission fallback. Use that endpoint as the source of truth — this doc deliberately doesn't enumerate them inline because the count drifts.
+
+For a category-grouped overview see `/docs/bot/commands-reference` in the portal docs site, or the `/help` slash command itself in any CO server.
 
 ## Critical Rules
 1. **ESM only** — never `require()`, never CommonJS patterns
