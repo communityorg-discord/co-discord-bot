@@ -104,6 +104,9 @@ const CATEGORIES = [
 export const data = new SlashCommandBuilder()
   .setName('help')
   .setDescription('Show all bot commands grouped by category')
+  .addStringOption(opt => opt
+    .setName('search')
+    .setDescription('Filter to commands whose name or description matches this text'))
   .addBooleanOption(opt => opt
     .setName('mine')
     .setDescription('Filter to commands you can run based on your portal auth level'));
@@ -123,6 +126,7 @@ export async function execute(interaction) {
     return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
   }
   const filterMine = interaction.options.getBoolean('mine') || false;
+  const search = (interaction.options.getString('search') || '').trim().toLowerCase();
   let myAuth = 1;
   if (filterMine) {
     try {
@@ -133,17 +137,27 @@ export async function execute(interaction) {
   }
   const visible = CATEGORIES.map(cat => ({
     ...cat,
-    commands: filterMine ? cat.commands.filter(c => {
-      const min = requiredAuthLevel(c.desc);
-      return min === null || myAuth >= min;
-    }) : cat.commands,
+    commands: cat.commands.filter(c => {
+      if (filterMine) {
+        const min = requiredAuthLevel(c.desc);
+        if (min !== null && myAuth < min) return false;
+      }
+      if (search) {
+        return c.name.toLowerCase().includes(search) || c.desc.toLowerCase().includes(search);
+      }
+      return true;
+    }),
   })).filter(cat => cat.commands.length > 0);
   const totalCmds = visible.reduce((s, c) => s + c.commands.length, 0);
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
     .setTitle('📚 CO Bot — Command Reference')
-    .setDescription(`**${totalCmds} commands** across ${CATEGORIES.length} categories\n\u200b`)
+    .setDescription(
+      search
+        ? `**${totalCmds} match${totalCmds === 1 ? '' : 'es'}** for \`${search}\`\n\u200b`
+        : `**${totalCmds} commands** across ${CATEGORIES.length} categories\n\u200b`
+    )
     .setFooter({ text: 'Community Organisation | Staff Assistant' })
     .setTimestamp();
 
