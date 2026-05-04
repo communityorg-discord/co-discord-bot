@@ -76,6 +76,7 @@ const CATEGORIES = [
     { name: 'standup', desc: 'Post a quick standup (yesterday / today / blockers) to the current channel' },
     { name: 'thanks', desc: 'Public kudos to a colleague — posts in channel + DMs them' },
     { name: 'kudos-leaderboard', desc: 'Top recipients of /thanks kudos (week / month / all-time)' },
+    { name: 'my-kudos', desc: 'Personal kudos history — received + given counts + recent messages' },
     { name: 'todo', desc: 'Personal todo list — add / list / done / undo / remove / clear' },
   ]},
   { name: 'Voice & Recording', emoji: '🎙️', commands: [
