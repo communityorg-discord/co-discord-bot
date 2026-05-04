@@ -1,78 +1,85 @@
 // COMMAND_PERMISSION_FALLBACK: everyone
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
-const startTime = Date.now();
-const botVersion = 'v1.1.0';
-const botPhase = 'V1.0-1.1';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+let cachedVersion = null;
+function getBotVersion() {
+  if (cachedVersion) return cachedVersion;
+  try {
+    const pkg = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf8'));
+    cachedVersion = pkg.version || '0.0.0';
+  } catch { cachedVersion = '?'; }
+  return cachedVersion;
+}
 
-const STAFF_IDS = [
-  '723199054514749450', // Dion M.
-  '415922272956710912', // Evan S.
-  '1013486189891817563', // penguin
-  '1355367209249148928',
-  '878775920180228127',
+function fmtBytes(n) {
+  const mb = n / (1024 * 1024);
+  return mb < 1024 ? `${mb.toFixed(1)} MB` : `${(mb / 1024).toFixed(2)} GB`;
+}
+
+function fmtUptime(seconds) {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const parts = [];
+  if (d) parts.push(`${d}d`);
+  if (h || d) parts.push(`${h}h`);
+  parts.push(`${m}m`);
+  return parts.join(' ');
+}
+
+const MAINTAINERS = [
+  '723199054514749450', // dionm — Deputy Secretary-General
+  '415922272956710912', // evans — Secretary-General
+  '1013486189891817563', // haydend — Senior Advisor to the Secretariat
 ];
 
 export const data = new SlashCommandBuilder()
   .setName('bot')
-  .setDescription('Information about the CO Bot');
+  .setDescription('Information about the CO Bot — version, uptime, servers, maintainers');
 
 export async function execute(interaction) {
-  await interaction.deferReply();
-
   const perm = await canUseCommand('bot', interaction);
   if (!perm.allowed) {
-    return interaction.editReply({ content: `❌ ${perm.reason}` });
+    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
   }
 
-  const uptimeSeconds = Math.floor((Date.now() - startTime) / 1000);
-  const startTimestamp = Math.floor(startTime / 1000);
+  await interaction.deferReply();
 
-  // Fetch all members concurrently
-  const memberMap = await fetchMembers(interaction, STAFF_IDS);
+  const client = interaction.client;
+  const procStart = Math.floor((Date.now() - process.uptime() * 1000) / 1000);
+  const guilds = [...client.guilds.cache.values()];
+  const totalMembers = guilds.reduce((s, g) => s + (g.memberCount || 0), 0);
+  const guildList = guilds
+    .sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0))
+    .slice(0, 10)
+    .map(g => `• ${g.name} — ${g.memberCount} members`)
+    .join('\n') || '_None_';
+  const moreGuilds = guilds.length > 10 ? `\n_+${guilds.length - 10} more_` : '';
 
-  const formatMember = (id) => {
-    const member = memberMap.get(id);
-    const nickname = member?.displayName || member?.user?.globalName || member?.user?.username || `Unknown`;
-    return `<@${id}> '${id}'`;
-  };
-
-  // All three users in every category
-  const staffList = STAFF_IDS.map(id => formatMember(id)).join('\n');
+  const mem = process.memoryUsage();
+  const maintainerLines = MAINTAINERS.map(id => `<@${id}>`).join(' · ');
 
   const embed = new EmbedBuilder()
-    .setTitle('Bot Information')
-    .setColor(0x000000)
-    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setTitle('🤖 CO Bot — system info')
+    .setColor(0x5865F2)
+    .setThumbnail(client.user.displayAvatarURL())
     .addFields(
-      { name: 'Version', value: botVersion, inline: true },
-      { name: 'Uptime', value: `<t:${startTimestamp}:R>`, inline: true },
-      { name: '\u200B', value: '\u200B', inline: false },
-      { name: 'Developer', value: staffList, inline: false },
-      { name: 'Internal Bot Management', value: staffList, inline: false },
-      { name: 'Superusers', value: staffList, inline: false },
-      { name: 'Internal Bot Staff', value: staffList, inline: false },
-      { name: 'Total Staff Count', value: String(STAFF_IDS.length), inline: false }
+      { name: 'Version', value: `\`v${getBotVersion()}\``, inline: true },
+      { name: 'Uptime', value: `${fmtUptime(process.uptime())} (started <t:${procStart}:R>)`, inline: true },
+      { name: 'Node', value: `\`${process.version}\``, inline: true },
+      { name: 'Servers', value: String(guilds.length), inline: true },
+      { name: 'Total members', value: String(totalMembers), inline: true },
+      { name: 'Memory', value: `${fmtBytes(mem.rss)} RSS`, inline: true },
+      { name: 'Top servers', value: guildList + moreGuilds, inline: false },
+      { name: 'Maintainers', value: maintainerLines, inline: false },
     )
-    .setFooter({ text: 'Community Organisation | Internal Bot' })
+    .setFooter({ text: 'Community Organisation · Staff Assistant' })
     .setTimestamp();
 
   await interaction.editReply({ embeds: [embed] });
-}
-
-async function fetchMembers(interaction, ids) {
-  const memberMap = new Map();
-  const uniqueIds = [...new Set(ids)];
-
-  const fetches = uniqueIds.map(id =>
-    interaction.guild.members.fetch(id).catch(() => null)
-  );
-
-  const results = await Promise.all(fetches);
-  results.forEach((member, i) => {
-    if (member) memberMap.set(uniqueIds[i], member);
-  });
-
-  return memberMap;
 }
