@@ -3767,6 +3767,47 @@ webhookApp.post('/api/bot/role-assign', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// POST /api/bot/sync-user-roles — re-apply expected position roles for
+// a single verified member across every CO guild. Body: { discord_id, dry_run? }.
+// Returns granted/already/failed counts per guild.
+webhookApp.post('/api/bot/sync-user-roles', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { discord_id, dry_run } = req.body || {};
+    if (!/^[0-9]{17,20}$/.test(String(discord_id || ''))) {
+      return res.status(400).json({ ok: false, error: 'discord_id invalid' });
+    }
+    const { POSITIONS } = await import('./utils/positions.js');
+    const { db: bDb } = await import('./utils/botDb.js');
+    const v = bDb.prepare('SELECT discord_id, position, nickname FROM verified_members WHERE discord_id = ?').get(String(discord_id));
+    if (!v) return res.status(404).json({ ok: false, error: 'not in verified_members' });
+
+    const expectedRoleNames = [...(POSITIONS[v.position] || []), 'Verified', 'CO | Staff'];
+    const perGuild = [];
+    let granted = 0, already = 0, failed = 0;
+    const reason = `Portal sync-user-roles${dry_run ? ' (dry-run)' : ''}`;
+
+    for (const [, guild] of client.guilds.cache) {
+      const member = await guild.members.fetch(String(discord_id)).catch(() => null);
+      if (!member) { perGuild.push({ guild: guild.name, status: 'not in guild' }); continue; }
+      let g = 0, a = 0, f = 0;
+      const errors = [];
+      for (const roleName of expectedRoleNames) {
+        const role = guild.roles.cache.find(r => r.name === roleName);
+        if (!role) continue;
+        if (member.roles.cache.has(role.id)) { a++; continue; }
+        if (dry_run) { g++; continue; }
+        try { await member.roles.add(role, reason); g++; }
+        catch (e) { f++; errors.push(`${roleName}: ${e.message}`); }
+      }
+      granted += g; already += a; failed += f;
+      perGuild.push({ guild: guild.name, granted: g, already: a, failed: f, errors });
+    }
+
+    res.json({ ok: true, discord_id, position: v.position, dry_run: !!dry_run, granted, already, failed, per_guild: perGuild });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // POST /api/bot/send-channel-message — post a message in a channel.
 // Body: { channel_id, content }
 webhookApp.post('/api/bot/send-channel-message', async (req, res) => {
