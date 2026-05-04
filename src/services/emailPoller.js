@@ -31,6 +31,29 @@ function clearDedupedError(scope) {
   }
 }
 
+// Exponential backoff state for the team inbox poller. If the upstream
+// keeps failing (e.g. Google Sheets API permission issue), increase the
+// gap between attempts so we don't burn quota / log noise. Resets on
+// the first successful poll.
+const backoff = { fails: 0, nextAt: 0 };
+function backoffShouldSkip() {
+  return Date.now() < backoff.nextAt;
+}
+function backoffOnFailure() {
+  backoff.fails++;
+  // Steps: 1=60s, 2=60s, 3=5min, 5=30min, 10=2h, capped
+  const delays = [60_000, 60_000, 5 * 60_000, 5 * 60_000, 30 * 60_000, 30 * 60_000, 30 * 60_000, 30 * 60_000, 30 * 60_000, 2 * 3600_000];
+  const delay = delays[Math.min(backoff.fails - 1, delays.length - 1)];
+  backoff.nextAt = Date.now() + delay;
+}
+function backoffOnSuccess() {
+  if (backoff.fails > 0) {
+    console.log(`[Email Poller] Recovered after ${backoff.fails} failures — resetting backoff`);
+  }
+  backoff.fails = 0;
+  backoff.nextAt = 0;
+}
+
 function buildEmailNotifEmbed(inbox, email, replies = []) {
   const from = email.headers?.from?.[0] || 'Unknown';
   const subject = email.headers?.subject?.[0] || '(no subject)';
@@ -80,9 +103,11 @@ function buildEmailNotifButtons(inboxId, uid) {
 }
 
 export async function pollAllInboxes(client) {
+  if (backoffShouldSkip()) return;
   try {
     const config = await fetchEmailConfig();
     clearDedupedError('Email Poller fatal');
+    backoffOnSuccess();
 
     for (const [inboxId, inbox] of Object.entries(config)) {
       try {
@@ -135,7 +160,8 @@ export async function pollAllInboxes(client) {
       }
     }
   } catch (e) {
-    logDedupedError('Email Poller fatal', e.message);
+    backoffOnFailure();
+    logDedupedError('Email Poller fatal', `${e.message} — backing off (fails=${backoff.fails}, next attempt at ${new Date(backoff.nextAt).toISOString()})`);
   }
 }
 
