@@ -14,14 +14,18 @@ export function getUserById(userId) {
 }
 
 export function getBragStatus(userId) {
-  // brag_reports uses discord_id not user_id — get user first
-  const user = db.prepare('SELECT discord_id FROM users WHERE id = ?').get(userId);
-  if (!user) return null;
+  // BRAG was retired in the 2026-04-26 APS migration. Returns the latest
+  // activity_weekly_grades row for the user, with column aliases that
+  // map onto the legacy shape (final_grade, message_count) so anything
+  // still consuming this helper keeps working.
   return db.prepare(`
-    SELECT * FROM brag_reports 
-    WHERE discord_id = ? 
-    ORDER BY submitted_at DESC LIMIT 1
-  `).get(user.discord_id);
+    SELECT week_key, total_points AS message_count, grade AS final_grade,
+           grade AS messages_grade, grade AS tasks_grade, grade AS contact_grade,
+           calculated_at AS submitted_at
+    FROM activity_weekly_grades
+    WHERE user_id = ?
+    ORDER BY week_key DESC LIMIT 1
+  `).get(userId);
 }
 
 export function getLeaveBalance(userId) {
