@@ -7,7 +7,10 @@ import Database from 'better-sqlite3';
 
 config({ path: new URL('../.env', import.meta.url).pathname });
 
-const STAFF_HQ_GUILD_ID = '1357119461957570570';
+// CO | Staff HQ guild = 1485422910972760176. Was previously hardcoded as
+// 1357119461957570570 (CO | Internal Hub) — wrong guild, the script was
+// probing presence in the Hub instead of Staff HQ. Falls back to env if set.
+const STAFF_HQ_GUILD_ID = process.env.STAFF_HQ_ID || '1485422910972760176';
 const TOKEN = process.env.DISCORD_BOT_TOKEN;
 const PORTAL_DB_PATH = process.env.PORTAL_DB_PATH;
 
