@@ -7,7 +7,11 @@ import db, { getAuthOverride } from './botDb.js';
  * Returns detailed per-guild results showing roles added/removed and any failures.
  */
 export async function applyVerification(client, discordId, position, nickname, { isProbation = false, overrideAuthLevel = null } = {}) {
-  const baseRoles = [...(POSITIONS[position] || []), 'Verified', 'CO Staff'];
+  // 'CO | Staff' (with pipe) is the canonical role name in every guild —
+  // 'CO Staff' (no pipe) was a typo that caused every applyVerification
+  // call to skip the staff baseline role. See 928a535 for the same fix
+  // in the auto-on-join path.
+  const baseRoles = [...(POSITIONS[position] || []), 'Verified', 'CO | Staff'];
 
   // Check for a persistent auth override in the DB (set via /authorisation-override)
   const storedOverride = getAuthOverride(discordId);
