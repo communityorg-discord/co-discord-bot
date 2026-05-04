@@ -28,11 +28,17 @@ export async function execute(interaction) {
   const openCases = portalDb?.prepare("SELECT COUNT(*) as c FROM cases WHERE lower(status) IN ('open','new','pending')").get()?.c || 0;
   const pendingLeave = portalDb?.prepare("SELECT COUNT(*) as c FROM leave_requests WHERE lower(status) = 'pending'").get()?.c || 0;
 
-  // BRAG this week
+  // Activity Points this week (replaced BRAG in 2026-04-26 migration —
+  // brag_reports is gone; query activity_point_records instead).
   const d = new Date(); const day = d.getDay(); const diff = (day === 0 ? -6 : 1) - day;
   d.setDate(d.getDate() + diff); d.setHours(0, 0, 0, 0);
   const weekKey = d.toISOString().slice(0, 10);
-  const bragSubmitted = portalDb?.prepare("SELECT COUNT(*) as c FROM brag_reports WHERE week_key = ?").get(weekKey)?.c || 0;
+  const apsActive = portalDb?.prepare(
+    "SELECT COUNT(DISTINCT user_id) as c FROM activity_point_records WHERE week_key = ?"
+  ).get(weekKey)?.c || 0;
+  const apsTotalPoints = portalDb?.prepare(
+    "SELECT COALESCE(SUM(points), 0) as p FROM activity_point_records WHERE week_key = ?"
+  ).get(weekKey)?.p || 0;
 
   // Bot stats
   const totalInfractions = db.prepare("SELECT COUNT(*) as c FROM infractions WHERE deleted = 0").get().c;
@@ -64,7 +70,7 @@ export async function execute(interaction) {
       { name: '📋 Cases & Leave', value: [
         `**Open Cases:** ${openCases}`,
         `**Pending Leave:** ${pendingLeave}`,
-        `**BRAG Submitted:** ${bragSubmitted} (w/c ${weekKey})`,
+        `**APS Active:** ${apsActive} staff (${apsTotalPoints} pts, w/c ${weekKey})`,
       ].join('\n'), inline: true },
       { name: '🛡️ Moderation', value: [
         `**Total Infractions:** ${totalInfractions}`,
