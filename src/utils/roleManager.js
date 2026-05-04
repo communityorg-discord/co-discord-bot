@@ -253,7 +253,7 @@ export async function unsuspendAcrossGuilds(client, discordId, botDb) {
           : `[Unsuspend] ${guild.name} — restored ${added.ok.length}/${roleIds.length} snapshotted role(s)`;
         if (added.failed.length) console.warn(label); else console.log(label);
       } else if (verified) {
-        const roleNames = [...(POSITIONS[verified.position] || []), 'Verified', 'CO Staff'];
+        const roleNames = [...(POSITIONS[verified.position] || []), 'Verified', 'CO | Staff'];
         const toAdd = guild.roles.cache.filter(r => roleNames.includes(r.name));
         const added = await addRolesIndividually(member, toAdd, 'Reactivation — position fallback');
         try { await member.setNickname(verified.nickname || null, 'Reactivation').catch(() => {}); } catch {}
@@ -275,7 +275,7 @@ const KEEP_SERVERS = ['1485423935569920135', '1485424535405723729'];
 
 export async function terminateAcrossGuilds(client, discordId, botDb) {
   const { ALL_MANAGED_ROLES } = await import('./positions.js');
-  const allManaged = [...ALL_MANAGED_ROLES, 'Verified', 'CO Staff', 'Suspended'];
+  const allManaged = [...ALL_MANAGED_ROLES, 'Verified', 'CO | Staff', 'Suspended'];
 
   for (const [guildId, guild] of client.guilds.cache) {
     try {
