@@ -98,6 +98,7 @@ const CATEGORIES = [
     { name: 'logspanel', desc: 'Configure log channels (auth 5+)' },
     { name: 'bot', desc: 'Bot info — version, uptime, servers' },
     { name: 'ping', desc: 'Bot ↔ Discord gateway ↔ portal latency check' },
+    { name: 'timezone', desc: 'Show current time in common staff timezones (with optional in-Xh offset)' },
     { name: 'server-health', desc: 'Per-guild role/AutoMod/baseline-role audit (auth 7+)' },
     { name: 'bot-perms', desc: 'Per-channel audit of missing bot perms in this server (auth 5+)' },
     { name: 'feedback', desc: 'Send a bug report, feature request, or feedback to maintainers' },
