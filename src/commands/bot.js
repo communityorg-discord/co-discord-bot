@@ -35,7 +35,6 @@ function fmtUptime(seconds) {
 const MAINTAINERS = [
   '723199054514749450', // dionm — Deputy Secretary-General
   '415922272956710912', // evans — Secretary-General
-  '1013486189891817563', // haydend — Senior Advisor to the Secretariat
 ];
 
 export const data = new SlashCommandBuilder()

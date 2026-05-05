@@ -7,7 +7,7 @@ import { logAction } from '../utils/logger.js';
 import fetch from 'node-fetch';
 
 const ASSIGNMENTS_CHANNEL_ID = '1487630065008115824';
-const SUPERUSER_IDS = ['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'];
+const SUPERUSER_IDS = ['723199054514749450', '415922272956710912', '1355367209249148928', '878775920180228127'];
 
 const TEAMS = {
   'executive_operations_board': 'Executive Operations Board',

@@ -16,7 +16,6 @@ import { canUseCommand } from '../utils/permissions.js';
 const MAINTAINER_IDS = [
   '723199054514749450', // dionm
   '415922272956710912', // evans
-  '1013486189891817563', // haydend
 ];
 
 const KIND_LABEL = {

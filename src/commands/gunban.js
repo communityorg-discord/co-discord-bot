@@ -47,14 +47,19 @@ export async function execute(interaction) {
 
   const serverList = serverResults.map(s => `${s.success ? '🟢' : '🔴'} ${s.name}`).join('\n');
 
+  // Discord field-value cap is 1024 chars — long reasons overflow & 500
+  // the whole embed. Truncate; full reason persists in infractions table.
+  const safeReason = reason.length > 1000
+    ? reason.slice(0, 1000) + '… [truncated for embed; full reason in /portal cases]'
+    : reason;
   await logAction(interaction.client, {
     action: 'Global Unban',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: userId, name: userId },
-    reason, color: 0x22C55E,
+    reason: safeReason, color: 0x22C55E,
     fields: [
       { name: 'Servers Unbanned', value: String(unbannedCount), inline: true },
-      { name: 'Servers', value: serverList, inline: false }
+      { name: 'Servers', value: serverList.slice(0, 1000), inline: false }
     ],
     specificChannelId: GBAN_UNGBAN_LOG_CHANNEL_ID,
     guildId: interaction.guildId,

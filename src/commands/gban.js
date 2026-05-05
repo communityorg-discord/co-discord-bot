@@ -68,15 +68,22 @@ export async function execute(interaction) {
 
   const serverList = serverResults.map(s => `${s.success ? '🟢' : '🔴'} ${s.name}`).join('\n');
 
+  // Discord caps field-value at 1024 chars; long disciplinary citations
+  // overflow and the whole embed gets rejected with an AggregateError.
+  // Truncate the reason for the log embed (the full reason is preserved
+  // in the global_bans + infractions tables).
+  const safeReason = reason.length > 1000
+    ? reason.slice(0, 1000) + '… [truncated for embed; full reason in /portal cases]'
+    : reason;
   await logAction(interaction.client, {
     action: 'Global Ban',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: target.id, name: getUserByDiscordId(target.id)?.display_name || target.username },
-    reason, color: 0x7F1D1D,
+    reason: safeReason, color: 0x7F1D1D,
     fields: [
       { name: 'Servers Banned', value: String(bannedCount), inline: true },
       { name: 'Appealable', value: appealable ? 'Yes' : 'No', inline: true },
-      { name: 'Servers', value: serverList, inline: false }
+      { name: 'Servers', value: serverList.slice(0, 1000), inline: false }
     ],
     specificChannelId: GBAN_UNGBAN_LOG_CHANNEL_ID,
     guildId: interaction.guildId,

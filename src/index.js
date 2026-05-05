@@ -1814,7 +1814,7 @@ client.once('clientReady', async () => {
 
 const COMMAND_CHANNEL_ID = '1487636502593798255';
 const COMMAND_CHANNEL_GUILD = '1357119461957570570';
-const COMMAND_SUPERUSERS = ['723199054514749450', '415922272956710912', '1013486189891817563', '1355367209249148928', '878775920180228127'];
+const COMMAND_SUPERUSERS = ['723199054514749450', '415922272956710912', '1355367209249148928', '878775920180228127'];
 const VERIFICATION_CHANNEL_ID = '1487631939103100969';
 
 client.on('interactionCreate', async interaction => {
@@ -1871,6 +1871,8 @@ client.on('interactionCreate', async interaction => {
     } catch (e) {
       commandError = e.message;
       console.error(`[CO Bot] Command error (${interaction.commandName}):`, e.message);
+      console.error(`[CO Bot] Stack:`, e.stack);
+      if (e.errors) for (const sub of e.errors) console.error(`[CO Bot] sub-error:`, sub?.message, sub?.stack);
       const msg = { content: '❌ An error occurred. Please try again or contact an administrator.', ephemeral: true };
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp(msg).catch(() => {});
@@ -2923,7 +2925,6 @@ const PUBLIC_SERVERS = [
 const SUPERUSER_INVITE_IDS = [
   '723199054514749450',  // dionm
   '415922272956710912',  // evans
-  '1013486189891817563', // haydend
   '1355367209249148928', // CO | Ownership
   '878775920180228127',  // CO | IAC
 ];
