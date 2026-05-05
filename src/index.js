@@ -66,6 +66,9 @@ import * as lockdown from './commands/lockdown.js';
 import * as automodCmd from './commands/automod.js';
 import { automod } from './services/automod.js';
 import { handleInteraction as automodPanelHandler } from './services/automodPanels.js';
+// Defence-in-depth watchers (incident 2026-05-03 — Hayden D. termination)
+import { setupHaydenWatcher } from './services/haydenWatcher.js';
+import { setupDestructionWatcher } from './services/destructionWatcher.js';
 import * as officeSetup from './commands/officeSetup.js';
 import * as counting from './commands/counting.js';
 import * as forceVerify from './commands/forceVerify.js';
@@ -126,10 +129,14 @@ function getBragWeekKey(ts = Date.now()) {
 
 const client = new Client({
   partials: [Partials.Channel, Partials.Message, Partials.Reaction],
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildPresences, GatewayIntentBits.GuildInvites, GatewayIntentBits.GuildMessageReactions]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildPresences, GatewayIntentBits.GuildInvites, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.GuildModeration]
 });
 
 client.commands = new Collection();
+
+// Defence-in-depth watchers (incident 2026-05-03)
+setupHaydenWatcher(client);
+setupDestructionWatcher(client);
 
 // Module-scope tracking sets — shared by the 'ready' handler that
 // reads/syncs them and the top-level voiceStateUpdate / messageCreate
