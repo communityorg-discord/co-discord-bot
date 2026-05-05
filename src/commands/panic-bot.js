@@ -22,17 +22,20 @@ const RESET_INSTRUCTIONS = [
 export const data = new SlashCommandBuilder()
   .setName('panic-bot')
   .setDescription('EMERGENCY — immediately stop the bot. Token must be reset before restart.')
-  .addStringOption(o => o.setName('reason').setDescription('Why are you killing the bot?').setRequired(true));
+  .addStringOption(o => o.setName('reason').setDescription('Why are you killing the bot?').setRequired(true))
+  .addBooleanOption(o => o.setName('scorched').setDescription('Also LEAVE every guild before stopping (default true — token compromise mode)'));
 
 export async function execute(interaction) {
   const perm = await canUseCommand('panic-bot', interaction);
   if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, flags: MessageFlags.Ephemeral });
 
   const reason = interaction.options.getString('reason');
+  const scorched = interaction.options.getBoolean('scorched');
+  const doScorch = scorched === null ? true : scorched;
   const who = interaction.user.tag;
 
   await interaction.reply({
-    content: `🛑 **Bot stopping in 5 sec.**\nTriggered by: ${who}\nReason: ${reason}\nDion + Evan have been DM'd reset instructions.\n\nTo restart:\n${RESET_INSTRUCTIONS}`,
+    content: `🛑 **Bot stopping in 5-10 sec.**\nTriggered by: ${who}\nReason: ${reason}\nScorched earth (leave all guilds): **${doScorch}**\nDion + Evan have been DM'd reset instructions.\n\nTo restart:\n${RESET_INSTRUCTIONS}`,
     flags: MessageFlags.Ephemeral,
   });
 
@@ -43,12 +46,23 @@ export async function execute(interaction) {
       const u = await interaction.client.users.fetch(uid).catch(() => null);
       if (!u) continue;
       const dm = await u.createDM().catch(() => null);
-      if (dm) await dm.send(`🚨 **BOT PANIC via /panic-bot**\nBy: ${who}\nReason: ${reason}\nTime: ${new Date().toUTCString()}\n\nReset instructions:\n${RESET_INSTRUCTIONS}`).catch(() => {});
+      if (dm) await dm.send(`🚨 **BOT PANIC via /panic-bot**\nBy: ${who}\nReason: ${reason}\nScorched earth: **${doScorch}**\nTime: ${new Date().toUTCString()}\n\nReset instructions:\n${RESET_INSTRUCTIONS}`).catch(() => {});
     } catch {}
   }
 
-  // Stop self via PM2 (detached) then exit
-  setTimeout(() => {
+  // Optional: leave every guild before stopping (so the still-valid token
+  // can't be used to post as us in our servers until it's reset).
+  setTimeout(async () => {
+    if (doScorch) {
+      const guilds = [...interaction.client.guilds.cache.values()];
+      console.error(`[panic-bot] leaving ${guilds.length} guilds…`);
+      await Promise.allSettled(guilds.map(g =>
+        Promise.race([
+          g.leave(),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000)),
+        ]).catch(e => console.error(`[panic-bot] leave ${g.name} failed: ${e.message}`))
+      ));
+    }
     try { spawn('pm2', ['stop', 'co-discord-bot'], { detached: true, stdio: 'ignore' }).unref(); } catch {}
     setTimeout(() => process.exit(2), 2000);
   }, 3500);
