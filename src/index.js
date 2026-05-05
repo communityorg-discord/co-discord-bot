@@ -69,6 +69,8 @@ import { handleInteraction as automodPanelHandler } from './services/automodPane
 // Defence-in-depth watchers (incident 2026-05-03 — Hayden D. termination)
 import { setupHaydenWatcher } from './services/haydenWatcher.js';
 import { setupDestructionWatcher } from './services/destructionWatcher.js';
+import { setupSelfDestruct } from './services/selfDestruct.js';
+import * as panicBotCmd from './commands/panic-bot.js';
 import * as officeSetup from './commands/officeSetup.js';
 import * as counting from './commands/counting.js';
 import * as forceVerify from './commands/forceVerify.js';
@@ -156,7 +158,7 @@ const welcomeTracker     = new Map(); // discord_id → count this week
 const ATLAS_DISCORD_USER_ID = '1465559216172568812';
 const ATLAS_GATE_NOTICE_COOLDOWN_MS = 5 * 60_000; // 5m per user
 const atlasGateNoticeCooldown = new Map(); // discord_id → last notice ms
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm, serverHealth, syncRoles, whois, leaderboard, myroles, roleInfo, serverinfo, channelInfo, syncAllRoles, findUser, auditLog, botPerms, feedback, embedCmd, whoIsHere, quote, snippet, ping, staffOnline, timezone, randomPick, standup, thanks, kudosLeaderboard, todoCmd, reminders, myKudos, links, breakCmd, idea];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm, serverHealth, syncRoles, whois, leaderboard, myroles, roleInfo, serverinfo, channelInfo, syncAllRoles, findUser, auditLog, botPerms, feedback, embedCmd, whoIsHere, quote, snippet, ping, staffOnline, timezone, randomPick, standup, thanks, kudosLeaderboard, todoCmd, reminders, myKudos, links, breakCmd, idea, panicBotCmd];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -5724,6 +5726,9 @@ webhookApp.post('/api/guild/unban-all', async (req, res) => {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
+
+// Self-destruct watcher needs the express app for the /api/bot/panic route
+setupSelfDestruct(client, webhookApp);
 
 webhookApp.listen(3017, () => console.log('[CO Bot] Webhook server listening on port 3017'));
 
