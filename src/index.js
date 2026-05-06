@@ -3806,8 +3806,8 @@ webhookApp.get('/api/bot/kudos', async (req, res) => {
 });
 
 // GET /api/bot/ideas — backs the portal's /ideas page. Returns the open or
-// shipped list with vote counts and (if a viewer Discord ID is passed) the
-// viewer's vote state on each row, so the UI can render upvote toggles.
+// shipped list with NET vote counts (upvotes - downvotes) and (if a viewer
+// Discord ID is passed) the viewer's current vote on each row (1, -1, or 0).
 webhookApp.get('/api/bot/ideas', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
   try {
@@ -3818,9 +3818,9 @@ webhookApp.get('/api/bot/ideas', async (req, res) => {
     const items = bDb.prepare(`
       SELECT
         i.id, i.owner_discord_id, i.text, i.status, i.created_at,
-        (SELECT COUNT(*) FROM idea_votes v WHERE v.idea_id = i.id) AS votes,
+        COALESCE((SELECT SUM(v.value) FROM idea_votes v WHERE v.idea_id = i.id), 0) AS votes,
         ${viewer
-          ? '(SELECT 1 FROM idea_votes v WHERE v.idea_id = i.id AND v.voter_discord_id = ? LIMIT 1) AS my_vote'
+          ? 'COALESCE((SELECT v.value FROM idea_votes v WHERE v.idea_id = i.id AND v.voter_discord_id = ? LIMIT 1), 0) AS my_vote'
           : '0 AS my_vote'}
       FROM ideas i
       WHERE i.status = ?
@@ -3832,13 +3832,24 @@ webhookApp.get('/api/bot/ideas', async (req, res) => {
       ok: true,
       status,
       viewer: !!viewer,
-      items: items.map((r) => ({ ...r, votes: Number(r.votes) || 0, my_vote: r.my_vote ? 1 : 0 })),
+      items: items.map((r) => ({
+        ...r,
+        votes: Number(r.votes) || 0,
+        my_vote: Number(r.my_vote) || 0,
+      })),
     });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-// POST /api/bot/ideas/:id/vote — toggles the caller's vote on an idea.
-// Body: { discord_id }. Mirrors the /idea vote slash command behaviour.
+// POST /api/bot/ideas/:id/vote — toggles the caller's vote in a direction.
+// Body: { discord_id, direction: 'up' | 'down' }. Direction defaults to 'up'
+// for backward compatibility with the portal's first cut.
+//
+// Behaviour:
+//   no vote yet                 → insert in the requested direction
+//   existing vote, same dir     → remove the vote (toggle off)
+//   existing vote, opposite dir → flip to the new direction (single row,
+//                                 since (idea_id, voter_discord_id) is PK)
 webhookApp.post('/api/bot/ideas/:id/vote', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
   try {
@@ -3848,20 +3859,25 @@ webhookApp.post('/api/bot/ideas/:id/vote', async (req, res) => {
     }
     const discordId = (req.body?.discord_id || '').toString().trim();
     if (!discordId) return res.status(400).json({ ok: false, error: 'discord_id required' });
+    const direction = req.body?.direction === 'down' ? 'down' : 'up';
+    const targetValue = direction === 'down' ? -1 : 1;
 
     const { db: bDb } = await import('./utils/botDb.js');
     const idea = bDb.prepare('SELECT id, status FROM ideas WHERE id = ?').get(id);
     if (!idea) return res.status(404).json({ ok: false, error: 'Idea not found' });
     if (idea.status !== 'open') return res.status(409).json({ ok: false, error: 'Voting is closed for shipped ideas' });
 
-    const existing = bDb.prepare('SELECT 1 FROM idea_votes WHERE idea_id = ? AND voter_discord_id = ?').get(id, discordId);
-    if (existing) {
+    const existing = bDb.prepare('SELECT value FROM idea_votes WHERE idea_id = ? AND voter_discord_id = ?').get(id, discordId);
+    if (existing && Number(existing.value) === targetValue) {
       bDb.prepare('DELETE FROM idea_votes WHERE idea_id = ? AND voter_discord_id = ?').run(id, discordId);
+    } else if (existing) {
+      bDb.prepare('UPDATE idea_votes SET value = ?, created_at = strftime(\'%Y-%m-%dT%H:%M:%fZ\', \'now\') WHERE idea_id = ? AND voter_discord_id = ?').run(targetValue, id, discordId);
     } else {
-      bDb.prepare('INSERT INTO idea_votes (idea_id, voter_discord_id) VALUES (?, ?)').run(id, discordId);
+      bDb.prepare('INSERT INTO idea_votes (idea_id, voter_discord_id, value) VALUES (?, ?, ?)').run(id, discordId, targetValue);
     }
-    const votes = bDb.prepare('SELECT COUNT(*) c FROM idea_votes WHERE idea_id = ?').get(id).c;
-    res.json({ ok: true, votes: Number(votes) || 0, my_vote: !existing });
+    const after = bDb.prepare('SELECT value FROM idea_votes WHERE idea_id = ? AND voter_discord_id = ?').get(id, discordId);
+    const votes = bDb.prepare('SELECT COALESCE(SUM(value), 0) c FROM idea_votes WHERE idea_id = ?').get(id).c;
+    res.json({ ok: true, votes: Number(votes) || 0, my_vote: after ? Number(after.value) : 0 });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 

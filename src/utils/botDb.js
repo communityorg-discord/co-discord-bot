@@ -278,6 +278,13 @@ db.exec(`CREATE TABLE IF NOT EXISTS idea_votes (
   FOREIGN KEY (idea_id) REFERENCES ideas(id) ON DELETE CASCADE
 )`);
 
+// Direction column for downvote support (added later). Idempotent: SQLite
+// has no ADD COLUMN IF NOT EXISTS so we swallow the duplicate-column error.
+// Existing rows backfill to 1 (upvote) via the DEFAULT.
+try { db.exec(`ALTER TABLE idea_votes ADD COLUMN value INTEGER NOT NULL DEFAULT 1`); } catch (e) {
+  if (!/duplicate column/i.test(e.message)) throw e;
+}
+
 // Personal task list — /todo. Per-user only; no sharing.
 db.exec(`CREATE TABLE IF NOT EXISTS todos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
