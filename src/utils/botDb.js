@@ -367,6 +367,40 @@ db.exec(`CREATE TABLE IF NOT EXISTS command_invocations (
   latency_ms INTEGER,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 )`);
+
+// Atlas-originated bot actions (DM, channel message, embed, etc.)
+// Written by the /atlas-webhook handler in src/index.js. Mirrors the
+// portal-side atlas_actions row so a single Atlas action that touches
+// both portal + Discord can be reconstructed end-to-end.
+db.exec(`CREATE TABLE IF NOT EXISTS atlas_bot_actions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  action TEXT NOT NULL,
+  target_id TEXT,
+  payload_json TEXT,
+  result_status TEXT NOT NULL,
+  error TEXT,
+  message_id TEXT
+)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_atlas_bot_actions_created ON atlas_bot_actions(created_at)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_atlas_bot_actions_action  ON atlas_bot_actions(action, created_at)`);
+
+export function logAtlasBotAction({ action, target_id, payload, result_status, error, message_id }) {
+  try {
+    db.prepare(`INSERT INTO atlas_bot_actions
+      (action, target_id, payload_json, result_status, error, message_id)
+      VALUES (?, ?, ?, ?, ?, ?)`).run(
+        String(action || 'unknown'),
+        target_id ? String(target_id) : null,
+        payload ? JSON.stringify(payload) : null,
+        String(result_status || 'unknown'),
+        error ? String(error).slice(0, 1000) : null,
+        message_id ? String(message_id) : null,
+      );
+  } catch (e) {
+    console.error('[atlas-webhook] failed to log atlas_bot_actions row:', e.message);
+  }
+}
 db.exec(`CREATE INDEX IF NOT EXISTS idx_cmdinv_created  ON command_invocations(created_at)`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_cmdinv_command  ON command_invocations(command_name, created_at)`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_cmdinv_user     ON command_invocations(discord_id, created_at)`);

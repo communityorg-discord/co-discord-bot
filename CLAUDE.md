@@ -10,6 +10,45 @@ Discord.js v14 bot for the CO Staff network. Lives alongside the staff portal (`
 - Bot-specific config DB: `bot-data.db` (command_permissions, log channel routing, etc.) — created lazily by `src/utils/botDb.js`
 - 91 slash commands in `src/commands/` (see `src/index.js` imports for the full list)
 
+## Atlas integration (`POST /atlas-webhook`, added 2026-05-06)
+
+The bot exposes one webhook for portal-side Atlas to send Discord
+side-effects. **Atlas must never reach the Discord API directly** —
+every DM, channel post, and embed goes through here so it's logged
+to `atlas_bot_actions` for audit.
+
+- **Endpoint:** `POST /atlas-webhook` on port 3017
+- **Auth:** standard `x-bot-secret` header (same `BOT_WEBHOOK_SECRET`
+  the portal uses for every other inbound webhook). Validated via
+  `verifyBotSecret(req, res)`.
+- **Body:** `{ action, ...args }` where `action` is one of:
+  - `"dm"` — args: `user_discord_id`, `message`. Sent as an embed
+    with the CO branding colour and "Community Organisation · Atlas"
+    footer; truncates message at 4000 chars.
+  - `"channel_message"` — args: `channel_id`, `content`. Plain text;
+    truncates at 2000 chars.
+  - `"embed"` — args: `channel_id`, `embed: { title?, description?, color?, fields?, footer? }`.
+    `fields` capped at 25; each field truncated to Discord's per-field
+    limits.
+- **Response:** `{ ok: true, message_id }` on success; standard 4xx/5xx
+  with `{error}` otherwise.
+
+Audit table: `atlas_bot_actions` in `bot-data.db` (created in
+`src/utils/botDb.js`). Columns: `created_at, action, target_id,
+payload_json, result_status, error, message_id`. Helper:
+`logAtlasBotAction({...})` — exported from `botDb.js` and called
+from every code path in the `/atlas-webhook` handler (success, 4xx,
+5xx). Indexed on `(created_at)` and `(action, created_at)`.
+
+The portal-side counterpart (full request body, on-behalf-of, etc.)
+lives in `atlas_actions` in the portal DB; cross-reference by
+timestamp + target_id.
+
+### Rules for new Atlas Discord actions
+- Add a new `case` to the switch in the `/atlas-webhook` handler. Don't open a new endpoint — the auth + audit story is set up here.
+- Always call `logAtlasBotAction({...})` in BOTH success and failure paths so the audit trail is complete.
+- The bot must remain `BOT_WEBHOOK_SECRET`-only for inbound Atlas; do not introduce a separate Atlas key on the bot side. The portal carries the Atlas key; the bot trusts the portal.
+
 ## Cross-Service Contract (with onboarding-portal)
 - Portal runs on port 3016. Bot reaches it via `PORTAL_HTTP` (default `http://localhost:3016`).
 - All HTTP calls in BOTH directions carry `x-bot-secret: ${BOT_WEBHOOK_SECRET}` — same secret, both `.env` files. Mismatched secret = 401 from either side.

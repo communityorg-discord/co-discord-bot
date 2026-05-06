@@ -3,7 +3,7 @@ import multer from 'multer';
 import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, EmbedBuilder, Partials } from 'discord.js';
 import { config } from 'dotenv';
 import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID } from './config.js';
-import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent } from './utils/botDb.js';
+import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent, logAtlasBotAction } from './utils/botDb.js';
 import { sendToWatchedUsers } from './utils/logger.js';
 import { getUserByDiscordId } from './db.js';
 import * as brag from './commands/brag.js';
@@ -3334,6 +3334,102 @@ webhookApp.get('/api/health', (_req, res) => {
     guilds: client?.guilds?.cache?.size ?? 0,
     ping: client?.ws?.ping ?? null,
   });
+});
+
+// POST /atlas-webhook — single entrypoint for portal-side Atlas actions
+// that need to touch Discord (DMs, channel posts, embeds). Auth: same
+// x-bot-secret as every other inbound webhook. The portal's atlasAgent
+// route is the ONLY caller — Atlas must never reach the Discord API
+// directly. Each call is logged to atlas_bot_actions for audit.
+//
+// Body: { action, ...args }
+//   action="dm"             { user_discord_id, message }
+//   action="channel_message"{ channel_id, content }
+//   action="embed"          { channel_id, embed: { title, description,
+//                                                  color, fields, footer } }
+webhookApp.post('/atlas-webhook', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  const { action } = req.body || {};
+  if (!action) {
+    logAtlasBotAction({ action: 'unknown', payload: req.body, result_status: 'rejected', error: 'missing action' });
+    return res.status(400).json({ error: 'action required' });
+  }
+  try {
+    switch (action) {
+      case 'dm': {
+        const { user_discord_id, message } = req.body;
+        if (!user_discord_id || !message) {
+          logAtlasBotAction({ action, target_id: user_discord_id, payload: req.body, result_status: 'rejected', error: 'missing user_discord_id or message' });
+          return res.status(400).json({ error: 'user_discord_id and message required' });
+        }
+        const user = await client.users.fetch(String(user_discord_id)).catch(() => null);
+        if (!user) {
+          logAtlasBotAction({ action, target_id: user_discord_id, payload: { message_len: String(message).length }, result_status: 'failed', error: 'user not found' });
+          return res.status(404).json({ error: 'user not found' });
+        }
+        const embed = new EmbedBuilder()
+          .setColor(0x0B1F3A)
+          .setDescription(String(message).slice(0, 4000))
+          .setFooter({ text: 'Community Organisation · Atlas' })
+          .setTimestamp();
+        const sent = await user.send({ embeds: [embed] });
+        logAtlasBotAction({ action, target_id: user_discord_id, payload: { message_len: String(message).length }, result_status: 'sent', message_id: sent.id });
+        return res.json({ ok: true, message_id: sent.id });
+      }
+
+      case 'channel_message': {
+        const { channel_id, content } = req.body;
+        if (!channel_id || !content) {
+          logAtlasBotAction({ action, target_id: channel_id, payload: req.body, result_status: 'rejected', error: 'missing channel_id or content' });
+          return res.status(400).json({ error: 'channel_id and content required' });
+        }
+        const ch = await client.channels.fetch(String(channel_id)).catch(() => null);
+        if (!ch || !ch.isTextBased?.()) {
+          logAtlasBotAction({ action, target_id: channel_id, payload: { content_len: String(content).length }, result_status: 'failed', error: 'channel not found or not text-based' });
+          return res.status(404).json({ error: 'channel not found' });
+        }
+        const sent = await ch.send({ content: String(content).slice(0, 2000) });
+        logAtlasBotAction({ action, target_id: channel_id, payload: { content_len: String(content).length }, result_status: 'sent', message_id: sent.id });
+        return res.json({ ok: true, message_id: sent.id });
+      }
+
+      case 'embed': {
+        const { channel_id, embed: e } = req.body;
+        if (!channel_id || !e || typeof e !== 'object') {
+          logAtlasBotAction({ action, target_id: channel_id, payload: req.body, result_status: 'rejected', error: 'missing channel_id or embed' });
+          return res.status(400).json({ error: 'channel_id and embed object required' });
+        }
+        const ch = await client.channels.fetch(String(channel_id)).catch(() => null);
+        if (!ch || !ch.isTextBased?.()) {
+          logAtlasBotAction({ action, target_id: channel_id, payload: { has_embed: true }, result_status: 'failed', error: 'channel not found or not text-based' });
+          return res.status(404).json({ error: 'channel not found' });
+        }
+        const builder = new EmbedBuilder();
+        if (e.title)       builder.setTitle(String(e.title).slice(0, 256));
+        if (e.description) builder.setDescription(String(e.description).slice(0, 4000));
+        if (typeof e.color === 'number') builder.setColor(e.color);
+        if (Array.isArray(e.fields)) {
+          builder.addFields(e.fields.slice(0, 25).map(f => ({
+            name:   String(f.name || '').slice(0, 256),
+            value:  String(f.value || '').slice(0, 1024),
+            inline: !!f.inline,
+          })));
+        }
+        if (e.footer) builder.setFooter({ text: String(e.footer).slice(0, 2048) });
+        builder.setTimestamp();
+        const sent = await ch.send({ embeds: [builder] });
+        logAtlasBotAction({ action, target_id: channel_id, payload: { fields: e.fields?.length || 0 }, result_status: 'sent', message_id: sent.id });
+        return res.json({ ok: true, message_id: sent.id });
+      }
+
+      default:
+        logAtlasBotAction({ action, payload: req.body, result_status: 'rejected', error: `unknown action: ${action}` });
+        return res.status(400).json({ error: `unknown action: ${action}` });
+    }
+  } catch (e) {
+    logAtlasBotAction({ action, payload: { keys: Object.keys(req.body || {}) }, result_status: 'error', error: e.message });
+    return res.status(500).json({ error: e.message || String(e) });
+  }
 });
 
 // POST /webhook/leave-start — swap a user's roles for the LOA role
