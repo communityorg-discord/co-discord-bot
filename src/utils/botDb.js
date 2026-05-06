@@ -285,6 +285,20 @@ try { db.exec(`ALTER TABLE idea_votes ADD COLUMN value INTEGER NOT NULL DEFAULT 
   if (!/duplicate column/i.test(e.message)) throw e;
 }
 
+// Admin moderation surface — superusers can respond to ideas, change status,
+// etc. via the portal admin page (the legacy /idea shipped slash command was
+// retired). Status values used by the app: open / planned / in_progress /
+// shipped / declined. admin_response is a public-to-board reply.
+try { db.exec(`ALTER TABLE ideas ADD COLUMN admin_response TEXT`); } catch (e) {
+  if (!/duplicate column/i.test(e.message)) throw e;
+}
+try { db.exec(`ALTER TABLE ideas ADD COLUMN status_changed_at TEXT`); } catch (e) {
+  if (!/duplicate column/i.test(e.message)) throw e;
+}
+try { db.exec(`ALTER TABLE ideas ADD COLUMN status_changed_by TEXT`); } catch (e) {
+  if (!/duplicate column/i.test(e.message)) throw e;
+}
+
 // Personal task list — /todo. Per-user only; no sharing.
 db.exec(`CREATE TABLE IF NOT EXISTS todos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

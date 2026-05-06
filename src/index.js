@@ -3805,32 +3805,39 @@ webhookApp.get('/api/bot/kudos', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-// GET /api/bot/ideas — backs the portal's /ideas page. Returns the open or
-// shipped list with NET vote counts (upvotes - downvotes) and (if a viewer
-// Discord ID is passed) the viewer's current vote on each row (1, -1, or 0).
+// GET /api/bot/ideas — backs the portal's /ideas page. Returns ideas with
+// NET vote counts (upvotes - downvotes) and (if a viewer Discord ID is
+// passed) the viewer's current vote on each row (1, -1, or 0).
+//
+// status: open | planned | in_progress | shipped | declined | all (admin)
+const VALID_STATUSES = ['open', 'planned', 'in_progress', 'shipped', 'declined'];
 webhookApp.get('/api/bot/ideas', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
   try {
     const { db: bDb } = await import('./utils/botDb.js');
-    const status = ['open', 'shipped'].includes(req.query.status) ? req.query.status : 'open';
+    const rawStatus = (req.query.status || 'open').toString();
+    const status = rawStatus === 'all' ? null
+      : VALID_STATUSES.includes(rawStatus) ? rawStatus
+      : 'open';
     const viewer = (req.query.viewer || '').toString().trim() || null;
 
     const items = bDb.prepare(`
       SELECT
         i.id, i.owner_discord_id, i.text, i.status, i.created_at,
+        i.admin_response, i.status_changed_at, i.status_changed_by,
         COALESCE((SELECT SUM(v.value) FROM idea_votes v WHERE v.idea_id = i.id), 0) AS votes,
         ${viewer
           ? 'COALESCE((SELECT v.value FROM idea_votes v WHERE v.idea_id = i.id AND v.voter_discord_id = ? LIMIT 1), 0) AS my_vote'
           : '0 AS my_vote'}
       FROM ideas i
-      WHERE i.status = ?
+      ${status ? 'WHERE i.status = ?' : ''}
       ORDER BY votes DESC, i.created_at DESC
-      LIMIT 200
-    `).all(...(viewer ? [viewer, status] : [status]));
+      LIMIT 500
+    `).all(...[viewer, status].filter((v) => v !== null));
 
     res.json({
       ok: true,
-      status,
+      status: status || 'all',
       viewer: !!viewer,
       items: items.map((r) => ({
         ...r,
@@ -3838,6 +3845,62 @@ webhookApp.get('/api/bot/ideas', async (req, res) => {
         my_vote: Number(r.my_vote) || 0,
       })),
     });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// PATCH /api/bot/ideas/:id — moderator update. Body: { status?, admin_response?, actor_discord_id }
+// Status set to one of VALID_STATUSES. Setting admin_response to '' clears it.
+webhookApp.patch('/api/bot/ideas/:id', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ ok: false, error: 'bad id' });
+    }
+    const actor = (req.body?.actor_discord_id || '').toString().trim() || null;
+    const { db: bDb } = await import('./utils/botDb.js');
+    const idea = bDb.prepare('SELECT id FROM ideas WHERE id = ?').get(id);
+    if (!idea) return res.status(404).json({ ok: false, error: 'Idea not found' });
+
+    const updates = [];
+    const params = [];
+    if (req.body?.status !== undefined) {
+      if (!VALID_STATUSES.includes(req.body.status)) {
+        return res.status(400).json({ ok: false, error: `status must be one of ${VALID_STATUSES.join(', ')}` });
+      }
+      updates.push('status = ?', `status_changed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`, 'status_changed_by = ?');
+      params.push(req.body.status, actor);
+    }
+    if (req.body?.admin_response !== undefined) {
+      const val = (req.body.admin_response || '').toString().trim();
+      updates.push('admin_response = ?');
+      params.push(val || null);
+    }
+    if (updates.length === 0) {
+      return res.status(400).json({ ok: false, error: 'Nothing to update — provide status and/or admin_response' });
+    }
+    params.push(id);
+    bDb.prepare(`UPDATE ideas SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    const row = bDb.prepare(`
+      SELECT id, owner_discord_id, text, status, created_at,
+             admin_response, status_changed_at, status_changed_by,
+             COALESCE((SELECT SUM(v.value) FROM idea_votes v WHERE v.idea_id = ideas.id), 0) AS votes
+      FROM ideas WHERE id = ?
+    `).get(id);
+    res.json({ ok: true, idea: { ...row, votes: Number(row.votes) || 0 } });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// DELETE /api/bot/ideas/:id — moderator delete. Cascades into idea_votes via FK.
+webhookApp.delete('/api/bot/ideas/:id', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ ok: false, error: 'bad id' });
+    const { db: bDb } = await import('./utils/botDb.js');
+    const r = bDb.prepare('DELETE FROM ideas WHERE id = ?').run(id);
+    if (r.changes === 0) return res.status(404).json({ ok: false, error: 'Idea not found' });
+    res.json({ ok: true, deleted: id });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
