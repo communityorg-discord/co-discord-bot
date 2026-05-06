@@ -3805,6 +3805,66 @@ webhookApp.get('/api/bot/kudos', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// GET /api/bot/ideas — backs the portal's /ideas page. Returns the open or
+// shipped list with vote counts and (if a viewer Discord ID is passed) the
+// viewer's vote state on each row, so the UI can render upvote toggles.
+webhookApp.get('/api/bot/ideas', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const { db: bDb } = await import('./utils/botDb.js');
+    const status = ['open', 'shipped'].includes(req.query.status) ? req.query.status : 'open';
+    const viewer = (req.query.viewer || '').toString().trim() || null;
+
+    const items = bDb.prepare(`
+      SELECT
+        i.id, i.owner_discord_id, i.text, i.status, i.created_at,
+        (SELECT COUNT(*) FROM idea_votes v WHERE v.idea_id = i.id) AS votes,
+        ${viewer
+          ? '(SELECT 1 FROM idea_votes v WHERE v.idea_id = i.id AND v.voter_discord_id = ? LIMIT 1) AS my_vote'
+          : '0 AS my_vote'}
+      FROM ideas i
+      WHERE i.status = ?
+      ORDER BY votes DESC, i.created_at DESC
+      LIMIT 200
+    `).all(...(viewer ? [viewer, status] : [status]));
+
+    res.json({
+      ok: true,
+      status,
+      viewer: !!viewer,
+      items: items.map((r) => ({ ...r, votes: Number(r.votes) || 0, my_vote: r.my_vote ? 1 : 0 })),
+    });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// POST /api/bot/ideas/:id/vote — toggles the caller's vote on an idea.
+// Body: { discord_id }. Mirrors the /idea vote slash command behaviour.
+webhookApp.post('/api/bot/ideas/:id/vote', async (req, res) => {
+  if (!verifyBotSecret(req, res)) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ ok: false, error: 'bad id' });
+    }
+    const discordId = (req.body?.discord_id || '').toString().trim();
+    if (!discordId) return res.status(400).json({ ok: false, error: 'discord_id required' });
+
+    const { db: bDb } = await import('./utils/botDb.js');
+    const idea = bDb.prepare('SELECT id, status FROM ideas WHERE id = ?').get(id);
+    if (!idea) return res.status(404).json({ ok: false, error: 'Idea not found' });
+    if (idea.status !== 'open') return res.status(409).json({ ok: false, error: 'Voting is closed for shipped ideas' });
+
+    const existing = bDb.prepare('SELECT 1 FROM idea_votes WHERE idea_id = ? AND voter_discord_id = ?').get(id, discordId);
+    if (existing) {
+      bDb.prepare('DELETE FROM idea_votes WHERE idea_id = ? AND voter_discord_id = ?').run(id, discordId);
+    } else {
+      bDb.prepare('INSERT INTO idea_votes (idea_id, voter_discord_id) VALUES (?, ?)').run(id, discordId);
+    }
+    const votes = bDb.prepare('SELECT COUNT(*) c FROM idea_votes WHERE idea_id = ?').get(id).c;
+    res.json({ ok: true, votes: Number(votes) || 0, my_vote: !existing });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // GET /api/bot/runtime — system-status snapshot for /admin/bot-runtime.
 // Process/uptime/memory + counts from key tables + recent error rate
 // from command_invocations.
