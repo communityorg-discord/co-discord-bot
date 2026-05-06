@@ -3809,16 +3809,28 @@ webhookApp.get('/api/bot/kudos', async (req, res) => {
 // NET vote counts (upvotes - downvotes) and (if a viewer Discord ID is
 // passed) the viewer's current vote on each row (1, -1, or 0).
 //
-// status: open | planned | in_progress | shipped | declined | all (admin)
+// status: open | planned | in_progress | shipped | declined
+//         | not_declined (everything except declined — main board view)
+//         | all
 const VALID_STATUSES = ['open', 'planned', 'in_progress', 'shipped', 'declined'];
 webhookApp.get('/api/bot/ideas', async (req, res) => {
   if (!verifyBotSecret(req, res)) return;
   try {
     const { db: bDb } = await import('./utils/botDb.js');
     const rawStatus = (req.query.status || 'open').toString();
-    const status = rawStatus === 'all' ? null
-      : VALID_STATUSES.includes(rawStatus) ? rawStatus
-      : 'open';
+    let whereClause = '';
+    const whereParams = [];
+    if (rawStatus === 'all') {
+      // no filter
+    } else if (rawStatus === 'not_declined') {
+      whereClause = `WHERE i.status != 'declined'`;
+    } else if (VALID_STATUSES.includes(rawStatus)) {
+      whereClause = 'WHERE i.status = ?';
+      whereParams.push(rawStatus);
+    } else {
+      whereClause = 'WHERE i.status = ?';
+      whereParams.push('open');
+    }
     const viewer = (req.query.viewer || '').toString().trim() || null;
 
     const items = bDb.prepare(`
@@ -3830,14 +3842,14 @@ webhookApp.get('/api/bot/ideas', async (req, res) => {
           ? 'COALESCE((SELECT v.value FROM idea_votes v WHERE v.idea_id = i.id AND v.voter_discord_id = ? LIMIT 1), 0) AS my_vote'
           : '0 AS my_vote'}
       FROM ideas i
-      ${status ? 'WHERE i.status = ?' : ''}
+      ${whereClause}
       ORDER BY votes DESC, i.created_at DESC
       LIMIT 500
-    `).all(...[viewer, status].filter((v) => v !== null));
+    `).all(...[viewer, ...whereParams].filter((v) => v !== null));
 
     res.json({
       ok: true,
-      status: status || 'all',
+      status: rawStatus,
       viewer: !!viewer,
       items: items.map((r) => ({
         ...r,
