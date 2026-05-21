@@ -1,6 +1,20 @@
 import { config } from 'dotenv';
 config();
 
+// Network registry — single source of truth for which Discord guilds
+// belong to which CO network (CO main, USGRP, future networks). Lives
+// in aspire-shared so every service in the stack imports the same
+// definition. See aspire-shared/networks.js for the conventions.
+export {
+  NETWORKS,
+  NETWORK_LIST,
+  networkForGuild,
+  networkById,
+  defaultNetwork,
+  isKnownGuild,
+  networkAllows,
+} from '../../aspire-shared/networks.js';
+
 export const STAFF_HQ_ID = process.env.STAFF_HQ_ID;
 export const NETWORK_SERVER_IDS = (process.env.NETWORK_SERVER_IDS || '').split(',').filter(Boolean);
 export const ALL_SERVER_IDS = [
