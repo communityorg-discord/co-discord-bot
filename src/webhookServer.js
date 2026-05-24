@@ -1079,6 +1079,32 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
+  // Add a custom emoji to a guild from an image URL.
+  webhookApp.post('/api/bot/emoji-create', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    try {
+      const { guild_id, name, image_url } = req.body || {};
+      const guild = client.guilds.cache.get(String(guild_id));
+      if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
+      if (!name || !image_url) return res.status(400).json({ ok: false, error: 'name and image_url required' });
+      const em = await guild.emojis.create({ attachment: String(image_url), name: String(name).replace(/[^a-zA-Z0-9_]/g, '').slice(0, 32) || 'emoji' });
+      res.json({ ok: true, emoji_id: em.id, name: em.name });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Delete a custom emoji.
+  webhookApp.post('/api/bot/emoji-delete', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    try {
+      const { guild_id, emoji_id } = req.body || {};
+      const guild = client.guilds.cache.get(String(guild_id));
+      if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
+      const em = await guild.emojis.fetch(String(emoji_id)).catch(() => null);
+      if (!em) return res.status(404).json({ ok: false, error: 'emoji not found' });
+      const name = em.name;
+      await em.delete('Deleted via Community Organisation portal');
+      res.json({ ok: true, deleted: name });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
   // Edit a guild's settings (rename for now).
   webhookApp.post('/api/bot/guild-edit', async (req, res) => {
     if (!verifyBotSecret(req, res)) return;
