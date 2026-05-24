@@ -161,7 +161,12 @@ export async function pollAllInboxes(client) {
     }
   } catch (e) {
     backoffOnFailure();
-    logDedupedError('Email Poller fatal', `${e.message} — backing off (fails=${backoff.fails}, next attempt at ${new Date(backoff.nextAt).toISOString()})`);
+    // Pass only the error message (NOT the variable fails/nextAt suffix)
+    // to the dedupe key — otherwise the message string is unique on every
+    // attempt and dedupe never matches, so the same root cause spams the
+    // log every minute. The fails/nextAt context goes into the message
+    // body, which the dedupe formatter prints once and then suppresses.
+    logDedupedError('Email Poller fatal', e.message);
   }
 }
 
