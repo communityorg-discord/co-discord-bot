@@ -1079,6 +1079,50 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
+  // Bulk-delete up to 100 recent messages in a channel.
+  webhookApp.post('/api/bot/purge', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    try {
+      const { channel_id, count } = req.body || {};
+      if (!/^[0-9]{17,20}$/.test(String(channel_id))) return res.status(400).json({ ok: false, error: 'channel_id invalid' });
+      const n = Math.max(1, Math.min(100, Number(count) || 0));
+      const ch = await client.channels.fetch(String(channel_id)).catch(() => null);
+      if (!ch || typeof ch.bulkDelete !== 'function') return res.status(404).json({ ok: false, error: 'channel not found or not text' });
+      const deleted = await ch.bulkDelete(n, true);
+      res.json({ ok: true, deleted: deleted.size });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Ban a user across every server the bot is in + record the global ban.
+  webhookApp.post('/api/bot/global-ban', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    try {
+      const { user_id, reason, moderator_id } = req.body || {};
+      if (!/^[0-9]{17,20}$/.test(String(user_id))) return res.status(400).json({ ok: false, error: 'user_id invalid' });
+      const { addGlobalBan } = await import('./utils/botDb.js');
+      let banned = 0;
+      for (const [, g] of client.guilds.cache) {
+        try { await g.bans.create(String(user_id), { reason: String(reason || 'Global ban via Community Organisation portal').slice(0, 400) }); banned++; } catch { /* not in guild / no perms */ }
+      }
+      addGlobalBan(String(user_id), String(reason || 'Global ban via portal'), String(moderator_id || 'ops'), 1);
+      res.json({ ok: true, banned_in: banned });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Lift a global ban across every server + mark it inactive.
+  webhookApp.post('/api/bot/global-unban', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    try {
+      const { user_id } = req.body || {};
+      if (!/^[0-9]{17,20}$/.test(String(user_id))) return res.status(400).json({ ok: false, error: 'user_id invalid' });
+      const { db: bDb } = await import('./utils/botDb.js');
+      let lifted = 0;
+      for (const [, g] of client.guilds.cache) {
+        try { await g.bans.remove(String(user_id), 'Global unban via portal'); lifted++; } catch { /* not banned here */ }
+      }
+      try { bDb.prepare('UPDATE global_bans SET active = 0 WHERE discord_id = ? AND active = 1').run(String(user_id)); } catch {}
+      res.json({ ok: true, lifted_in: lifted });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
   webhookApp.post('/api/bot/role-assign', async (req, res) => {
     if (!verifyBotSecret(req, res)) return;
     try {
