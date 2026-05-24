@@ -342,23 +342,13 @@ client.once('clientReady', async () => {
 
   await setupEmailNotificationChannels(client);
 
-  // Email polling — team inboxes every 60s
-  setInterval(async () => {
-    try {
-      const { pollAllInboxes } = await import('./services/emailPoller.js');
-      await pollAllInboxes(client);
-    } catch (e) { console.error('[Email Poller]', e.message); }
-  }, 60_000);
-  console.log('[Email Poller] Started — polling every 60 seconds');
-
-  // Personal email polling — per-user inboxes every 60s
-  setInterval(async () => {
-    try {
-      const { pollPersonalInboxes } = await import('./services/emailPoller.js');
-      await pollPersonalInboxes(client);
-    } catch (e) { console.error('[Personal Email Poller]', e.message); }
-  }, 60_000);
-  console.log('[Personal Email Poller] Started');
+  // Email pollers retired 2026-05-24. The team-inbox + personal-inbox
+  // pollers belonged to an older system that fetched IMAP credentials
+  // from a Google Sheet (1MuxhWRFWu9oSf3zIbwetl1fq1K1BQWVp_n6Swr4yMt8)
+  // and pushed new mail into Discord channels every 60s. The sheet
+  // permission was revoked, the system isn't needed anymore. The
+  // /inbox and /compose slash commands remain — they connect to IMAP
+  // on demand when invoked, no background polling required.
 
   // Assignment overdue checker — every 30 minutes
   setInterval(async () => {
