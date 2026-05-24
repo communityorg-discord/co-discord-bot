@@ -87,11 +87,55 @@ function formatActor(actor, fallback = 'System') {
   return name || fallback;
 }
 
+// Role log type to hardcoded channel ID map
+const ROLE_CHANNEL_MAP = {
+  role_create: ROLE_CREATE_LOG_CHANNEL_ID,
+  role_delete: ROLE_DELETE_LOG_CHANNEL_ID,
+  role_update: ROLE_UPDATE_LOG_CHANNEL_ID,
+  role_permission: ROLE_PERMISSION_LOG_CHANNEL_ID,
+  member_role_add: MEMBER_ROLE_ADD_LOG_CHANNEL_ID,
+  member_role_remove: MEMBER_ROLE_REMOVE_LOG_CHANNEL_ID,
+};
+
+/**
+ * THE single log emitter — every log in the bot funnels through here.
+ * It sends `embed` to:
+ *   1. any always-on hardcoded channels passed in `extraChannels`
+ *   2. every channel bound to (category, type) via /logs / orglogs / panels
+ *      (resolved by getLogChannelsForEvent)
+ * …and then ALWAYS DMs the watched audience (Dion + Evan).
+ *
+ * That final DM is the guarantee: if a log goes through logEvent, it reaches
+ * your DMs — no per-handler "remembered to DM" logic, no early-return gaps.
+ *
+ * @param {import('discord.js').Client} client
+ * @param {Object} o
+ * @param {import('discord.js').EmbedBuilder} o.embed
+ * @param {string} [o.category]  e.g. 'message', 'moderation', 'membership'
+ * @param {string} [o.type]      e.g. 'message_delete', 'member_join'
+ * @param {string} [o.guildId]
+ * @param {string[]} [o.extraChannels] hardcoded channel IDs to always include
+ */
+export async function logEvent(client, { embed, category, type, guildId, extraChannels = [] }) {
+  const seen = new Set();
+  const sendTo = async (channelId) => {
+    if (!channelId || seen.has(channelId)) return;
+    seen.add(channelId);
+    try {
+      const ch = await client.channels.fetch(channelId).catch(() => null);
+      if (ch && ch.send) await ch.send({ embeds: [embed] });
+    } catch (e) { console.error(`[logEvent] channel ${channelId}: ${e.message}`); }
+  };
+  for (const c of extraChannels) await sendTo(c);
+  if (category && type) for (const c of getLogChannelsForEvent(guildId || '', category, type)) await sendTo(c);
+  // The guarantee — always DM the watched audience.
+  await sendToWatchedUsers(client, embed);
+}
+
 export async function logAction(client, {
   action, moderator, target, reason,
   color = 0x5865F2, fields = [],
-  specificChannelId,
-  logType, guildId
+  specificChannelId, logType, guildId,
 }) {
   const embed = new EmbedBuilder()
     .setTitle(`📋 ${action}`)
@@ -104,67 +148,15 @@ export async function logAction(client, {
     )
     .setTimestamp()
     .setFooter({ text: 'Community Organisation | Moderation Log' });
-
-  const sendToChannel = async (channelId) => {
-    if (!channelId) return;
-    try {
-      const channel = await client.channels.fetch(channelId).catch(() => null);
-      if (channel) await channel.send({ embeds: [embed] });
-    } catch (e) {
-      console.error(`[Logger] Failed to send to channel ${channelId}:`, e.message);
-    }
-  };
-
-  const sendToWatchedUsersAsync = async () => {
-    for (const userId of WATCHED_LOG_USER_IDS) {
-      try {
-        const user = await client.users.fetch(userId).catch(() => null);
-        if (!user) { console.error(`[Logger] user ${userId} not found`); continue; }
-        const dm = await user.createDM().catch(e => null);
-        if (!dm) { console.error(`[Logger] failed to create DM with ${userId}`); continue; }
-        await dm.send({ embeds: [embed] }).catch(e => console.error(`[Logger] failed to DM ${userId}: ${e.message}`));
-      } catch (e) { console.error(`[Logger] sendToWatchedUsers error for ${userId}: ${e.message}`); }
-    }
-  };
-
-  // 1. Always log to full-mod-logs (hardcoded)
-  await sendToChannel(MOD_LOG_CHANNEL_ID || LOG_CHANNEL_ID);
-
-  // 2. Also log to hardcoded specific channel (from channels.js)
-  await sendToChannel(specificChannelId);
-
-  // 3. Use unified log channel resolution (server-scope, organisation-scope, orgwide, global)
-  if (logType) {
-    const [category, type] = logType.split('.');
-    const channelIds = getLogChannelsForEvent(guildId || '', category, type);
-    for (const chId of channelIds) {
-      await sendToChannel(chId);
-    }
-  }
-
-  // Also DM watched users
-  await sendToWatchedUsersAsync();
+  const [category, type] = (logType || '').split('.');
+  await logEvent(client, { embed, category, type, guildId, extraChannels: [MOD_LOG_CHANNEL_ID || LOG_CHANNEL_ID, specificChannelId] });
 }
 
-// Role log type to hardcoded channel ID map
-const ROLE_CHANNEL_MAP = {
-  role_create: ROLE_CREATE_LOG_CHANNEL_ID,
-  role_delete: ROLE_DELETE_LOG_CHANNEL_ID,
-  role_update: ROLE_UPDATE_LOG_CHANNEL_ID,
-  role_permission: ROLE_PERMISSION_LOG_CHANNEL_ID,
-  member_role_add: MEMBER_ROLE_ADD_LOG_CHANNEL_ID,
-  member_role_remove: MEMBER_ROLE_REMOVE_LOG_CHANNEL_ID,
-};
-
-/**
- * Send a role management log embed.
- * Routes to: all-role-management-logs + specific hardcoded channel + per-guild panel channel + global role management channel
- */
+/** Role management log — builds the embed, routes through logEvent. */
 export async function logRoleAction(client, {
   action, target, moderator,
   color = 0x9B59B6, fields = [],
-  roleLogType, // e.g. 'role_create', 'role_delete', 'member_role_add', etc.
-  guildId
+  roleLogType, guildId,
 }) {
   const embed = new EmbedBuilder()
     .setTitle(`🎭 ${action}`)
@@ -176,31 +168,5 @@ export async function logRoleAction(client, {
     )
     .setTimestamp()
     .setFooter({ text: 'Community Organisation | Role Management Log' });
-
-  const sendToChannel = async (channelId) => {
-    if (!channelId) return;
-    try {
-      const channel = await client.channels.fetch(channelId).catch(() => null);
-      if (channel) await channel.send({ embeds: [embed] });
-    } catch (e) {
-      console.error(`[Logger] Failed to send role log to ${channelId}:`, e.message);
-    }
-  };
-
-  // 1. Always log to all-role-management-logs
-  await sendToChannel(ROLE_ALL_LOG_CHANNEL_ID);
-
-  // 2. Also log to the specific hardcoded channel
-  await sendToChannel(ROLE_CHANNEL_MAP[roleLogType]);
-
-  // 3. Use unified log channel resolution (server-scope, organisation-scope, orgwide, global)
-  if (roleLogType) {
-    const channelIds = getLogChannelsForEvent(guildId || '', 'role_management', roleLogType);
-    for (const chId of channelIds) {
-      await sendToChannel(chId);
-    }
-  }
-
-  // Also DM watched users
-  await sendToWatchedUsers(client, embed);
+  await logEvent(client, { embed, category: 'role_management', type: roleLogType, guildId, extraChannels: [ROLE_ALL_LOG_CHANNEL_ID, ROLE_CHANNEL_MAP[roleLogType]] });
 }

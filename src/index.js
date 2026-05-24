@@ -5,7 +5,7 @@ import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBu
 import { config } from 'dotenv';
 import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID } from './config.js';
 import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent, logAtlasBotAction } from './utils/botDb.js';
-import { sendToWatchedUsers } from './utils/logger.js';
+import { sendToWatchedUsers, logEvent } from './utils/logger.js';
 import { getUserByDiscordId } from './db.js';
 import * as brag from './commands/brag.js';
 import * as leave from './commands/leave.js';
@@ -2566,7 +2566,7 @@ client.on('guildMemberAdd', async (member) => {
   // AutoMod checks
   try { await automod.checkMemberAdd(member); } catch (e) { console.error('[AutoMod guildMemberAdd]', e.message); }
 
-  // Member-join log → channels + watched-user DMs
+  // Member-join log
   try {
     const embed = new EmbedBuilder().setTitle('📥 Member Joined').setColor(0x22c55e)
       .addFields(
@@ -2574,27 +2574,21 @@ client.on('guildMemberAdd', async (member) => {
         { name: 'Server', value: member.guild?.name || '—', inline: true },
         { name: 'Account age', value: member.user.createdTimestamp ? `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>` : '—', inline: true },
       ).setTimestamp().setFooter({ text: 'Community Organisation | Member Log' });
-    for (const ch of getLogChannelsForEvent(member.guild?.id || '', 'membership', 'member_join')) {
-      const c = await client.channels.fetch(ch).catch(() => null); if (c) await c.send({ embeds: [embed] }).catch(() => {});
-    }
-    await sendToWatchedUsers(client, embed).catch(() => {});
+    await logEvent(client, { embed, category: 'membership', type: 'member_join', guildId: member.guild?.id });
   } catch (e) { console.error('[memberJoin log]', e.message); }
 });
 
 client.on('guildMemberRemove', async (member) => {
   try { await automod.checkMemberLeave(member); } catch (e) { console.error('[AutoMod guildMemberRemove]', e.message); }
 
-  // Member-leave log → channels + watched-user DMs
+  // Member-leave log
   try {
     const embed = new EmbedBuilder().setTitle('📤 Member Left').setColor(0xef4444)
       .addFields(
         { name: 'Member', value: `${member.user?.username || 'Unknown'} (<@${member.user?.id || member.id}>)`, inline: true },
         { name: 'Server', value: member.guild?.name || '—', inline: true },
       ).setTimestamp().setFooter({ text: 'Community Organisation | Member Log' });
-    for (const ch of getLogChannelsForEvent(member.guild?.id || '', 'membership', 'member_leave')) {
-      const c = await client.channels.fetch(ch).catch(() => null); if (c) await c.send({ embeds: [embed] }).catch(() => {});
-    }
-    await sendToWatchedUsers(client, embed).catch(() => {});
+    await logEvent(client, { embed, category: 'membership', type: 'member_leave', guildId: member.guild?.id });
   } catch (e) { console.error('[memberLeave log]', e.message); }
 });
 
@@ -2914,41 +2908,7 @@ client.on('messageDelete', async (message) => {
       .setFooter({ text: 'Community Organisation | Staff Assistant' })
       .setTimestamp();
 
-    // Dion + Evan always get this in their DMs, regardless of channel config.
-    await sendToWatchedUsers(client, embed).catch(() => {});
-
-    const deleteChannelId = MESSAGE_DELETE_LOG_CHANNEL_ID;
-    const perGuildChannelId = guildId ? getLogChannel(guildId, 'message', 'message_delete') : null;
-    const globalChannelId = getGlobalLogChannel('global_message', guildId);
-    const orgwideChannels = getLogChannelsForEvent(guildId || '', 'message', 'message_delete').filter(
-      ch => ch !== perGuildChannelId && ch !== globalChannelId && ch !== deleteChannelId && ch !== FULL_MESSAGE_LOGS_CHANNEL_ID
-    );
-
-    // Send to delete log channel
-    if (deleteChannelId) {
-      const deleteChannel = await client.channels.fetch(deleteChannelId).catch(() => null);
-      if (deleteChannel) await deleteChannel.send({ embeds: [embed] });
-    }
-    // Also send to full-message-logs
-    if (FULL_MESSAGE_LOGS_CHANNEL_ID) {
-      const fullMsgChannel = await client.channels.fetch(FULL_MESSAGE_LOGS_CHANNEL_ID).catch(() => null);
-      if (fullMsgChannel) await fullMsgChannel.send({ embeds: [embed] });
-    }
-    // Also send to per-guild configured channel
-    if (perGuildChannelId) {
-      const perGuildChannel = await client.channels.fetch(perGuildChannelId).catch(() => null);
-      if (perGuildChannel) await perGuildChannel.send({ embeds: [embed] });
-    }
-    // Also send to global message log channel
-    if (globalChannelId) {
-      const globalChannel = await client.channels.fetch(globalChannelId).catch(() => null);
-      if (globalChannel) await globalChannel.send({ embeds: [embed] });
-    }
-    // Also send to orgwide channels (/orglogs bindings)
-    for (const chId of orgwideChannels) {
-      const ch = await client.channels.fetch(chId).catch(() => null);
-      if (ch) await ch.send({ embeds: [embed] });
-    }
+    await logEvent(client, { embed, category: 'message', type: 'message_delete', guildId, extraChannels: [MESSAGE_DELETE_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID] });
   } catch (e) {
     console.error('[messageDelete log error]', e.message);
   }
@@ -3021,41 +2981,7 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
       .setFooter({ text: 'Community Organisation | Staff Assistant' })
       .setTimestamp();
 
-    // Dion + Evan always get this in their DMs, regardless of channel config.
-    await sendToWatchedUsers(client, embed).catch(() => {});
-
-    const editChannelId = MESSAGE_EDIT_LOG_CHANNEL_ID;
-    const perGuildChannelId = guildId ? getLogChannel(guildId, 'message', 'message_edit') : null;
-    const globalChannelId = getGlobalLogChannel('global_message', guildId);
-    const orgwideChannels = getLogChannelsForEvent(guildId || '', 'message', 'message_edit').filter(
-      ch => ch !== perGuildChannelId && ch !== globalChannelId && ch !== editChannelId && ch !== FULL_MESSAGE_LOGS_CHANNEL_ID
-    );
-
-    // Send to edit log channel
-    if (editChannelId) {
-      const editChannel = await client.channels.fetch(editChannelId).catch(() => null);
-      if (editChannel) await editChannel.send({ embeds: [embed] });
-    }
-    // Also send to full-message-logs
-    if (FULL_MESSAGE_LOGS_CHANNEL_ID) {
-      const fullMsgChannel = await client.channels.fetch(FULL_MESSAGE_LOGS_CHANNEL_ID).catch(() => null);
-      if (fullMsgChannel) await fullMsgChannel.send({ embeds: [embed] });
-    }
-    // Also send to per-guild configured channel
-    if (perGuildChannelId) {
-      const perGuildChannel = await client.channels.fetch(perGuildChannelId).catch(() => null);
-      if (perGuildChannel) await perGuildChannel.send({ embeds: [embed] });
-    }
-    // Also send to global message log channel
-    if (globalChannelId) {
-      const globalChannel = await client.channels.fetch(globalChannelId).catch(() => null);
-      if (globalChannel) await globalChannel.send({ embeds: [embed] });
-    }
-    // Also send to orgwide channels (/orglogs bindings)
-    for (const chId of orgwideChannels) {
-      const ch = await client.channels.fetch(chId).catch(() => null);
-      if (ch) await ch.send({ embeds: [embed] });
-    }
+    await logEvent(client, { embed, category: 'message', type: 'message_edit', guildId, extraChannels: [MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID] });
   } catch (e) {
     console.error('[messageUpdate log error]', e.message);
   }
