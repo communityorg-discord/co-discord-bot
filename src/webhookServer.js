@@ -1079,6 +1079,18 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
+  // Create an invite link for a channel.
+  webhookApp.post('/api/bot/create-invite', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    try {
+      const { channel_id, max_age, max_uses } = req.body || {};
+      if (!/^[0-9]{17,20}$/.test(String(channel_id))) return res.status(400).json({ ok: false, error: 'channel_id invalid' });
+      const ch = await client.channels.fetch(String(channel_id)).catch(() => null);
+      if (!ch || typeof ch.createInvite !== 'function') return res.status(404).json({ ok: false, error: 'channel not found or cannot host invites' });
+      const inv = await ch.createInvite({ maxAge: Math.max(0, Math.min(604800, Number(max_age) || 86400)), maxUses: Math.max(0, Math.min(100, Number(max_uses) || 0)), unique: true });
+      res.json({ ok: true, code: inv.code, url: `https://discord.gg/${inv.code}` });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
   // Set or clear a member's nickname in a guild (empty nickname resets it).
   webhookApp.post('/api/bot/set-nickname', async (req, res) => {
     if (!verifyBotSecret(req, res)) return;
