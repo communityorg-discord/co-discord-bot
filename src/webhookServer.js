@@ -1079,6 +1079,18 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
+  // Edit a guild's settings (rename for now).
+  webhookApp.post('/api/bot/guild-edit', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    try {
+      const { guild_id, name } = req.body || {};
+      const guild = client.guilds.cache.get(String(guild_id));
+      if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
+      if (!name || !String(name).trim()) return res.status(400).json({ ok: false, error: 'name required' });
+      await guild.setName(String(name).trim().slice(0, 100), 'Renamed via Community Organisation portal');
+      res.json({ ok: true, name: guild.name });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
   // Pin / unpin / edit a message.
   webhookApp.post('/api/bot/message-action', async (req, res) => {
     if (!verifyBotSecret(req, res)) return;
