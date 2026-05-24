@@ -4,7 +4,7 @@ import multer from 'multer';
 import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, EmbedBuilder, Partials } from 'discord.js';
 import { config } from 'dotenv';
 import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID } from './config.js';
-import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent, logAtlasBotAction } from './utils/botDb.js';
+import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent, logAtlasBotAction, logMessageEvent } from './utils/botDb.js';
 import { sendToWatchedUsers, logEvent } from './utils/logger.js';
 import { getUserByDiscordId } from './db.js';
 import * as brag from './commands/brag.js';
@@ -250,6 +250,9 @@ client.once('clientReady', async () => {
     } catch (e) {
       console.error('[CO Bot] Failed to register commands:', e.message);
     }
+    // One-off registration run: exit so we don't run a second full bot
+    // instance alongside the pm2-managed one.
+    process.exit(0);
   }
 
   // Initialize AutoMod
@@ -2910,6 +2913,7 @@ client.on('messageDelete', async (message) => {
       .setFooter({ text: 'Community Organisation | Staff Assistant' })
       .setTimestamp();
 
+    logMessageEvent({ guildId, channelName: message.channel?.name, authorId: message.author.id, authorTag: message.author.tag || message.author.username, type: 'delete', content: message.content || '' });
     await logEvent(client, { embed, category: 'message', type: 'message_delete', guildId, extraChannels: [MESSAGE_DELETE_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID] });
   } catch (e) {
     console.error('[messageDelete log error]', e.message);
@@ -2983,6 +2987,7 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
       .setFooter({ text: 'Community Organisation | Staff Assistant' })
       .setTimestamp();
 
+    logMessageEvent({ guildId, channelName: newMessage.channel?.name, authorId: newMessage.author.id, authorTag: newMessage.author.tag || newMessage.author.username, type: 'edit', before: oldMessage.content || '', after: newMessage.content || '' });
     await logEvent(client, { embed, category: 'message', type: 'message_edit', guildId, extraChannels: [MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID] });
   } catch (e) {
     console.error('[messageUpdate log error]', e.message);
@@ -3265,7 +3270,9 @@ client.on('messageReactionAdd', async (reaction, user) => {
 });
 
 // ============ BOT WEBHOOK SERVER ============
-startWebhookServer(client, commands, getBragWeekKey);
+// Skip during a one-off `--register` run so we don't fight the live pm2
+// instance for port 3017.
+if (!process.argv.includes('--register')) startWebhookServer(client, commands, getBragWeekKey);
 
 
 client.login(process.env.DISCORD_BOT_TOKEN);

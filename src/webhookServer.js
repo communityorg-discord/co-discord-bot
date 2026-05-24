@@ -1292,6 +1292,65 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   
+  // POST /api/bot/timeout { user_id, guild_id, minutes, reason? } — 0 minutes clears it
+  webhookApp.post('/api/bot/timeout', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    try {
+      const { user_id, guild_id, minutes, reason } = req.body || {};
+      if (!/^[0-9]{17,20}$/.test(String(user_id))) return res.status(400).json({ ok: false, error: 'user_id invalid' });
+      const guild = client.guilds.cache.get(String(guild_id));
+      if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
+      const m = await guild.members.fetch(String(user_id)).catch(() => null);
+      if (!m) return res.status(404).json({ ok: false, error: 'member not in guild' });
+      const mins = Math.max(0, Math.min(40320, Number(minutes) || 0)); // up to 28 days
+      await m.timeout(mins ? mins * 60000 : null, String(reason || 'portal — superuser').slice(0, 500));
+      res.json({ ok: true, user_id, guild_id, minutes: mins });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
+  // POST /api/bot/sync-member-roles { user_id, guild_id } — make this guild's
+  // roles match the verification role list: add the expected ones, REMOVE any
+  // others the bot can manage (skips @everyone + integration-managed roles).
+  webhookApp.post('/api/bot/sync-member-roles', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    try {
+      const { user_id, guild_id } = req.body || {};
+      if (!/^[0-9]{17,20}$/.test(String(user_id))) return res.status(400).json({ ok: false, error: 'user_id invalid' });
+      const guild = client.guilds.cache.get(String(guild_id));
+      if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
+      const m = await guild.members.fetch(String(user_id)).catch(() => null);
+      if (!m) return res.status(404).json({ ok: false, error: 'member not in guild' });
+      const { POSITIONS } = await import('./utils/positions.js');
+      const { db: bDb } = await import('./utils/botDb.js');
+      const v = bDb.prepare('SELECT position FROM verified_members WHERE discord_id = ?').get(String(user_id));
+      if (!v) return res.status(404).json({ ok: false, error: 'not in verified_members — verify them first' });
+      const expected = new Set([...(POSITIONS[v.position] || []), 'Verified', 'CO | Staff']);
+      const reason = 'Portal role sync to verification list';
+      const added = [], removed = [], skipped = [];
+      for (const [, role] of guild.roles.cache) {
+        if (!expected.has(role.name)) continue;
+        if (m.roles.cache.has(role.id)) continue;
+        if (!role.editable) { skipped.push(role.name); continue; }
+        try { await m.roles.add(role, reason); added.push(role.name); } catch { skipped.push(role.name); }
+      }
+      for (const [, role] of [...m.roles.cache.values()].map(r => [r.id, r])) {
+        if (role.id === guild.id || role.managed || expected.has(role.name)) continue;
+        if (!role.editable) { skipped.push(role.name); continue; }
+        try { await m.roles.remove(role, reason); removed.push(role.name); } catch { skipped.push(role.name); }
+      }
+      res.json({ ok: true, position: v.position, added, removed, skipped });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
+  // GET /api/bot/member-messages?guild_id&user_id — recent deleted/edited messages
+  webhookApp.get('/api/bot/member-messages', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    try {
+      const { getMemberMessages } = await import('./utils/botDb.js');
+      res.json({ ok: true, messages: getMemberMessages(req.query.guild_id ? String(req.query.guild_id) : null, String(req.query.user_id || ''), 40) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
   // POST /api/bot/thread-create { channel_id, name, message? }
   webhookApp.post('/api/bot/thread-create', async (req, res) => {
     if (!verifyBotSecret(req, res)) return;

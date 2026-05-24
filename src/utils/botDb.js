@@ -806,6 +806,25 @@ export function createEmergencyCode(generatedBy, generatedByName, ttlMs = 15 * 6
   return { code, expiresAt: now + ttlMs };
 }
 
+// Deleted/edited message history, so the dev portal can show a member's
+// recent message activity. Kept lean (last ~8000 rows).
+export function logMessageEvent({ guildId, channelName, authorId, authorTag, type, content, before, after, messageId }) {
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS message_log (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT, channel_name TEXT, author_id TEXT, author_tag TEXT, type TEXT, content TEXT, before TEXT, after TEXT, message_id TEXT, created_at INTEGER)`);
+    db.prepare(`INSERT INTO message_log (guild_id, channel_name, author_id, author_tag, type, content, before, after, message_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`)
+      .run(guildId || null, channelName || null, String(authorId || ''), authorTag || null, type, content || null, before || null, after || null, messageId || null, Date.now());
+    if (Math.random() < 0.02) db.prepare(`DELETE FROM message_log WHERE id < (SELECT MAX(id) - 8000 FROM message_log)`).run();
+  } catch (_) {}
+}
+export function getMemberMessages(guildId, authorId, limit = 40) {
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS message_log (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT, channel_name TEXT, author_id TEXT, author_tag TEXT, type TEXT, content TEXT, before TEXT, after TEXT, message_id TEXT, created_at INTEGER)`);
+    return guildId
+      ? db.prepare(`SELECT * FROM message_log WHERE author_id = ? AND guild_id = ? ORDER BY id DESC LIMIT ?`).all(String(authorId), String(guildId), limit)
+      : db.prepare(`SELECT * FROM message_log WHERE author_id = ? ORDER BY id DESC LIMIT ?`).all(String(authorId), limit);
+  } catch (_) { return []; }
+}
+
 export function removeGlobalLogChannel(category, guildId) {
   if (guildId) return db.prepare('DELETE FROM global_log_config WHERE category = ? AND guild_id = ?').run(category, guildId).changes;
   return db.prepare('DELETE FROM global_log_config WHERE category = ? AND guild_id IS NULL').run(category).changes;
