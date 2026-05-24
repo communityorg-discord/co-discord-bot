@@ -1039,6 +1039,46 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
   
   // POST /api/bot/role-assign — add or remove a role. Body:
   // { action: 'add' | 'remove', user_id, role_id, guild_id, reason? }
+  // Create a channel in a guild. type: text|voice|category|announcement|forum
+  webhookApp.post('/api/bot/channel-create', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    try {
+      const { guild_id, name, type, parent_id } = req.body || {};
+      const guild = client.guilds.cache.get(String(guild_id));
+      if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
+      if (!name) return res.status(400).json({ ok: false, error: 'name required' });
+      const typeMap = { text: 0, voice: 2, category: 4, announcement: 5, forum: 15 };
+      const ch = await guild.channels.create({ name: String(name).slice(0, 90), type: typeMap[String(type || 'text')] ?? 0, parent: /^[0-9]{17,20}$/.test(String(parent_id)) ? String(parent_id) : undefined });
+      res.json({ ok: true, channel_id: ch.id, name: ch.name });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Delete a channel.
+  webhookApp.post('/api/bot/channel-delete', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    try {
+      const { channel_id, reason } = req.body || {};
+      if (!/^[0-9]{17,20}$/.test(String(channel_id))) return res.status(400).json({ ok: false, error: 'channel_id invalid' });
+      const ch = await client.channels.fetch(String(channel_id)).catch(() => null);
+      if (!ch) return res.status(404).json({ ok: false, error: 'channel not found' });
+      const name = ch.name;
+      await ch.delete(String(reason || 'Deleted via Community Organisation portal').slice(0, 400));
+      res.json({ ok: true, deleted: name });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Rename a channel.
+  webhookApp.post('/api/bot/channel-rename', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    try {
+      const { channel_id, name } = req.body || {};
+      if (!/^[0-9]{17,20}$/.test(String(channel_id))) return res.status(400).json({ ok: false, error: 'channel_id invalid' });
+      if (!name) return res.status(400).json({ ok: false, error: 'name required' });
+      const ch = await client.channels.fetch(String(channel_id)).catch(() => null);
+      if (!ch) return res.status(404).json({ ok: false, error: 'channel not found' });
+      await ch.setName(String(name).slice(0, 90));
+      res.json({ ok: true, channel_id: ch.id, name: ch.name });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
   webhookApp.post('/api/bot/role-assign', async (req, res) => {
     if (!verifyBotSecret(req, res)) return;
     try {
