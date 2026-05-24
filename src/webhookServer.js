@@ -1079,6 +1079,20 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
+  // Set or clear a member's nickname in a guild (empty nickname resets it).
+  webhookApp.post('/api/bot/set-nickname', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    try {
+      const { user_id, guild_id, nickname } = req.body || {};
+      if (!/^[0-9]{17,20}$/.test(String(user_id))) return res.status(400).json({ ok: false, error: 'user_id invalid' });
+      const guild = client.guilds.cache.get(String(guild_id));
+      if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
+      const m = await guild.members.fetch(String(user_id)).catch(() => null);
+      if (!m) return res.status(404).json({ ok: false, error: 'member not in guild' });
+      await m.setNickname(String(nickname || '').slice(0, 32) || null, 'Set via Community Organisation portal');
+      res.json({ ok: true, nickname: m.nickname || null });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
   // Bulk-delete up to 100 recent messages in a channel.
   webhookApp.post('/api/bot/purge', async (req, res) => {
     if (!verifyBotSecret(req, res)) return;
