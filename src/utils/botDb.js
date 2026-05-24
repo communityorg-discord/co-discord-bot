@@ -794,6 +794,11 @@ export function setGlobalLogChannel(category, channelId, guildId) {
   }
 }
 
+export function removeGlobalLogChannel(category, guildId) {
+  if (guildId) return db.prepare('DELETE FROM global_log_config WHERE category = ? AND guild_id = ?').run(category, guildId).changes;
+  return db.prepare('DELETE FROM global_log_config WHERE category = ? AND guild_id IS NULL').run(category).changes;
+}
+
 export function getLogChannel(guildId, category, type) {
   const row = db.prepare('SELECT channel_id FROM log_config WHERE guild_id = ? AND category = ? AND type = ?').get(guildId, category, type);
   return row?.channel_id || null;
