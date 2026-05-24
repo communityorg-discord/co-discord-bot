@@ -2565,10 +2565,37 @@ client.on('guildMemberAdd', async (member) => {
 
   // AutoMod checks
   try { await automod.checkMemberAdd(member); } catch (e) { console.error('[AutoMod guildMemberAdd]', e.message); }
+
+  // Member-join log → channels + watched-user DMs
+  try {
+    const embed = new EmbedBuilder().setTitle('📥 Member Joined').setColor(0x22c55e)
+      .addFields(
+        { name: 'Member', value: `${member.user.username} (<@${member.user.id}>)`, inline: true },
+        { name: 'Server', value: member.guild?.name || '—', inline: true },
+        { name: 'Account age', value: member.user.createdTimestamp ? `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>` : '—', inline: true },
+      ).setTimestamp().setFooter({ text: 'Community Organisation | Member Log' });
+    for (const ch of getLogChannelsForEvent(member.guild?.id || '', 'membership', 'member_join')) {
+      const c = await client.channels.fetch(ch).catch(() => null); if (c) await c.send({ embeds: [embed] }).catch(() => {});
+    }
+    await sendToWatchedUsers(client, embed).catch(() => {});
+  } catch (e) { console.error('[memberJoin log]', e.message); }
 });
 
 client.on('guildMemberRemove', async (member) => {
   try { await automod.checkMemberLeave(member); } catch (e) { console.error('[AutoMod guildMemberRemove]', e.message); }
+
+  // Member-leave log → channels + watched-user DMs
+  try {
+    const embed = new EmbedBuilder().setTitle('📤 Member Left').setColor(0xef4444)
+      .addFields(
+        { name: 'Member', value: `${member.user?.username || 'Unknown'} (<@${member.user?.id || member.id}>)`, inline: true },
+        { name: 'Server', value: member.guild?.name || '—', inline: true },
+      ).setTimestamp().setFooter({ text: 'Community Organisation | Member Log' });
+    for (const ch of getLogChannelsForEvent(member.guild?.id || '', 'membership', 'member_leave')) {
+      const c = await client.channels.fetch(ch).catch(() => null); if (c) await c.send({ embeds: [embed] }).catch(() => {});
+    }
+    await sendToWatchedUsers(client, embed).catch(() => {});
+  } catch (e) { console.error('[memberLeave log]', e.message); }
 });
 
 // guildCreate — fired when the bot is invited to a new server. Ensure
@@ -2978,16 +3005,7 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
   if (newMessage.author?.id === newMessage.client.user.id) return;
   if (oldMessage.content === newMessage.content) return;
   try {
-    const editChannelId = MESSAGE_EDIT_LOG_CHANNEL_ID;
     const guildId = newMessage.guildId;
-    const perGuildChannelId = guildId ? getLogChannel(guildId, 'message', 'message_edit') : null;
-    const globalChannelId = getGlobalLogChannel('global_message', guildId);
-    const orgwideChannels = getLogChannelsForEvent(guildId || '', 'message', 'message_edit').filter(
-      ch => ch !== perGuildChannelId && ch !== globalChannelId && ch !== editChannelId && ch !== FULL_MESSAGE_LOGS_CHANNEL_ID
-    );
-
-    if (!editChannelId && !FULL_MESSAGE_LOGS_CHANNEL_ID && !perGuildChannelId && !globalChannelId && orgwideChannels.length === 0) return;
-
     const oldContent = oldMessage.content?.slice(0, 750) || '*No text content*';
     const newContent = newMessage.content?.slice(0, 750) || '*No text content*';
     const jumpLink = newMessage.url ? `\n🔗 [Jump to message](${newMessage.url})` : '';
@@ -3004,6 +3022,16 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
       )
       .setFooter({ text: 'Community Organisation | Staff Assistant' })
       .setTimestamp();
+
+    // Dion + Evan always get this in their DMs, regardless of channel config.
+    await sendToWatchedUsers(client, embed).catch(() => {});
+
+    const editChannelId = MESSAGE_EDIT_LOG_CHANNEL_ID;
+    const perGuildChannelId = guildId ? getLogChannel(guildId, 'message', 'message_edit') : null;
+    const globalChannelId = getGlobalLogChannel('global_message', guildId);
+    const orgwideChannels = getLogChannelsForEvent(guildId || '', 'message', 'message_edit').filter(
+      ch => ch !== perGuildChannelId && ch !== globalChannelId && ch !== editChannelId && ch !== FULL_MESSAGE_LOGS_CHANNEL_ID
+    );
 
     // Send to edit log channel
     if (editChannelId) {
