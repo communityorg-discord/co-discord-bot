@@ -1342,6 +1342,34 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
+  // GET /api/bot/member-role-diff?guild_id&user_id — read-only: what roles the
+  // member has in this guild vs. what the verification list says they should
+  // have, so the portal can preview a sync. present[] / missing[] / extra[].
+  webhookApp.get('/api/bot/member-role-diff', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    try {
+      const user_id = String(req.query.user_id || ''), guild_id = String(req.query.guild_id || '');
+      if (!/^[0-9]{17,20}$/.test(user_id)) return res.status(400).json({ ok: false, error: 'user_id invalid' });
+      const guild = client.guilds.cache.get(guild_id);
+      if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
+      const m = await guild.members.fetch(user_id).catch(() => null);
+      if (!m) return res.status(404).json({ ok: false, error: 'member not in guild' });
+      const { POSITIONS } = await import('./utils/positions.js');
+      const { db: bDb } = await import('./utils/botDb.js');
+      const v = bDb.prepare('SELECT position FROM verified_members WHERE discord_id = ?').get(user_id);
+      const expected = new Set([...((v && POSITIONS[v.position]) || []), 'Verified', 'CO | Staff']);
+      const guildRoleNames = new Set([...guild.roles.cache.values()].map(r => r.name));
+      const current = [...m.roles.cache.values()].filter(r => r.id !== guild.id).map(r => r.name);
+      const currentSet = new Set(current);
+      // expected roles that actually exist in this guild
+      const expectedHere = [...expected].filter(n => guildRoleNames.has(n));
+      const present = expectedHere.filter(n => currentSet.has(n));   // expected & has
+      const missing = expectedHere.filter(n => !currentSet.has(n));  // expected & missing → would add
+      const extra = current.filter(n => !expected.has(n));           // has & not expected → would remove
+      res.json({ ok: true, verified: !!v, position: v ? v.position : null, current, expected: expectedHere, present, missing, extra });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
   // GET /api/bot/member-messages?guild_id&user_id — recent deleted/edited messages
   webhookApp.get('/api/bot/member-messages', async (req, res) => {
     if (!verifyBotSecret(req, res)) return;
