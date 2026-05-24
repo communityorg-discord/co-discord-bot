@@ -1079,6 +1079,23 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
+  // Lock/unlock (send messages) and hide/show (view) a channel for @everyone.
+  webhookApp.post('/api/bot/channel-permission', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    try {
+      const { channel_id, locked, hidden } = req.body || {};
+      if (!/^[0-9]{17,20}$/.test(String(channel_id))) return res.status(400).json({ ok: false, error: 'channel_id invalid' });
+      const ch = await client.channels.fetch(String(channel_id)).catch(() => null);
+      if (!ch || !ch.permissionOverwrites) return res.status(404).json({ ok: false, error: 'channel not found or no permissions' });
+      const everyone = ch.guild.roles.everyone;
+      const edit = {};
+      if (locked !== undefined && locked !== null) edit.SendMessages = locked ? false : null;
+      if (hidden !== undefined && hidden !== null) edit.ViewChannel = hidden ? false : null;
+      if (!Object.keys(edit).length) return res.status(400).json({ ok: false, error: 'nothing to change' });
+      await ch.permissionOverwrites.edit(everyone, edit, { reason: 'Channel permissions via Community Organisation portal' });
+      res.json({ ok: true, channel_id: ch.id, locked: !!locked, hidden: !!hidden });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
   // Add a custom emoji to a guild from an image URL.
   webhookApp.post('/api/bot/emoji-create', async (req, res) => {
     if (!verifyBotSecret(req, res)) return;
