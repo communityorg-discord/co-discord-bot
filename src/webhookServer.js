@@ -1079,6 +1079,24 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
+  // Pin / unpin / edit a message.
+  webhookApp.post('/api/bot/message-action', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    try {
+      const { channel_id, message_id, action, content } = req.body || {};
+      if (!/^[0-9]{17,20}$/.test(String(channel_id))) return res.status(400).json({ ok: false, error: 'channel_id invalid' });
+      if (!/^[0-9]{17,20}$/.test(String(message_id))) return res.status(400).json({ ok: false, error: 'message_id invalid' });
+      const ch = await client.channels.fetch(String(channel_id)).catch(() => null);
+      if (!ch || !ch.messages) return res.status(404).json({ ok: false, error: 'channel not found' });
+      const msg = await ch.messages.fetch(String(message_id)).catch(() => null);
+      if (!msg) return res.status(404).json({ ok: false, error: 'message not found' });
+      if (action === 'pin') await msg.pin();
+      else if (action === 'unpin') await msg.unpin();
+      else if (action === 'edit') { if (msg.author.id !== client.user.id) return res.status(400).json({ ok: false, error: 'can only edit the bot’s own messages' }); await msg.edit(String(content || '').slice(0, 1900)); }
+      else return res.status(400).json({ ok: false, error: 'action must be pin, unpin or edit' });
+      res.json({ ok: true, action });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
   // Create an invite link for a channel.
   webhookApp.post('/api/bot/create-invite', async (req, res) => {
     if (!verifyBotSecret(req, res)) return;
