@@ -1,3 +1,4 @@
+import './forceDmEmbed.js'; // org rule: every DM this bot sends must be an embed — patch first
 import express from 'express';
 import multer from 'multer';
 import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, EmbedBuilder, Partials } from 'discord.js';
@@ -69,6 +70,7 @@ import { handleInteraction as automodPanelHandler } from './services/automodPane
 // Defence-in-depth watchers (incident 2026-05-03 — Hayden D. termination)
 import { setupHaydenWatcher } from './services/haydenWatcher.js';
 import { setupDestructionWatcher } from './services/destructionWatcher.js';
+import { setupAspireWebhook } from './services/aspireWebhook.js';
 import { setupSelfDestruct } from './services/selfDestruct.js';
 import * as panicBotCmd from './commands/panic-bot.js';
 import * as officeSetup from './commands/officeSetup.js';
@@ -139,6 +141,7 @@ client.commands = new Collection();
 // Defence-in-depth watchers (incident 2026-05-03)
 setupHaydenWatcher(client);
 setupDestructionWatcher(client);
+setupAspireWebhook(client);
 
 // Module-scope tracking sets — shared by the 'ready' handler that
 // reads/syncs them and the top-level voiceStateUpdate / messageCreate
