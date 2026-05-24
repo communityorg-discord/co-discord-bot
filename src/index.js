@@ -2897,16 +2897,7 @@ client.on('messageDelete', async (message) => {
   if (message.author?.id === message.client.user.id) return;
   if (!message.author) return; // Partial with no author — likely bot or system message
   try {
-    const deleteChannelId = MESSAGE_DELETE_LOG_CHANNEL_ID;
     const guildId = message.guildId;
-    const perGuildChannelId = guildId ? getLogChannel(guildId, 'message', 'message_delete') : null;
-    const globalChannelId = getGlobalLogChannel('global_message', guildId);
-    const orgwideChannels = getLogChannelsForEvent(guildId || '', 'message', 'message_delete').filter(
-      ch => ch !== perGuildChannelId && ch !== globalChannelId && ch !== deleteChannelId && ch !== FULL_MESSAGE_LOGS_CHANNEL_ID
-    );
-
-    if (!deleteChannelId && !FULL_MESSAGE_LOGS_CHANNEL_ID && !perGuildChannelId && !globalChannelId && orgwideChannels.length === 0) return;
-
     const content = message.content?.slice(0, 1500) || '*No text content*';
     const attachments = message.attachments.size > 0 ? `\n📎 ${message.attachments.size} attachment(s)` : '';
     const jumpLink = message.url ? `\n🔗 [Jump to message](${message.url})` : '';
@@ -2922,6 +2913,16 @@ client.on('messageDelete', async (message) => {
       )
       .setFooter({ text: 'Community Organisation | Staff Assistant' })
       .setTimestamp();
+
+    // Dion + Evan always get this in their DMs, regardless of channel config.
+    await sendToWatchedUsers(client, embed).catch(() => {});
+
+    const deleteChannelId = MESSAGE_DELETE_LOG_CHANNEL_ID;
+    const perGuildChannelId = guildId ? getLogChannel(guildId, 'message', 'message_delete') : null;
+    const globalChannelId = getGlobalLogChannel('global_message', guildId);
+    const orgwideChannels = getLogChannelsForEvent(guildId || '', 'message', 'message_delete').filter(
+      ch => ch !== perGuildChannelId && ch !== globalChannelId && ch !== deleteChannelId && ch !== FULL_MESSAGE_LOGS_CHANNEL_ID
+    );
 
     // Send to delete log channel
     if (deleteChannelId) {
@@ -2948,9 +2949,6 @@ client.on('messageDelete', async (message) => {
       const ch = await client.channels.fetch(chId).catch(() => null);
       if (ch) await ch.send({ embeds: [embed] });
     }
-
-    // Also DM watched users (Evan + Dion)
-    await sendToWatchedUsers(client, embed);
   } catch (e) {
     console.error('[messageDelete log error]', e.message);
   }
