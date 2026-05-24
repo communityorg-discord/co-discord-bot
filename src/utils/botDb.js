@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'url';
 import { config } from 'dotenv';
 config();
@@ -792,6 +793,17 @@ export function setGlobalLogChannel(category, channelId, guildId) {
       db.prepare('INSERT OR IGNORE INTO global_log_config (category, channel_id, guild_id, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)').run(category, channelId, null);
     }
   }
+}
+
+// Emergency override codes for the dev portal (single-use, 15-min). Stored as
+// a sha256 hash so the plaintext only ever lives in the runner's DM.
+export function createEmergencyCode(generatedBy, generatedByName, ttlMs = 15 * 60 * 1000) {
+  db.exec(`CREATE TABLE IF NOT EXISTS emergency_codes (id INTEGER PRIMARY KEY AUTOINCREMENT, code_hash TEXT NOT NULL, generated_by TEXT, generated_by_name TEXT, created_at INTEGER, expires_at INTEGER, used_at INTEGER, used_by TEXT, used_for TEXT)`);
+  const code = crypto.randomBytes(4).toString('hex').toUpperCase(); // 8 hex chars, easy to type
+  const hash = crypto.createHash('sha256').update(code).digest('hex');
+  const now = Date.now();
+  db.prepare(`INSERT INTO emergency_codes (code_hash, generated_by, generated_by_name, created_at, expires_at) VALUES (?,?,?,?,?)`).run(hash, String(generatedBy), generatedByName || null, now, now + ttlMs);
+  return { code, expiresAt: now + ttlMs };
 }
 
 export function removeGlobalLogChannel(category, guildId) {
