@@ -249,7 +249,8 @@ export async function handleTicketButton(interaction) {
       target: { discordId: interaction.user.id, name: interaction.user.username },
       moderator: null,
       color: 0x22C55E,
-      description: `Ticket created: ${ticketChannel}`,
+      fields: [{ name: 'Channel', value: String(ticketChannel) }],
+      logType: 'ticket.created',
       guildId: interaction.guildId
     });
   } catch (err) {
@@ -329,7 +330,7 @@ export async function handleTicketChannelButton(interaction) {
       target: { discordId: ticket.user_id, name: ticket.user_id },
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       color: 0xF59E0B,
-      description: `Ticket claimed by <@${interaction.user.id}>`,
+      logType: 'ticket.claimed',
       guildId: interaction.guildId
     });
   } else {
@@ -347,5 +348,15 @@ export async function handleTicketChannelButton(interaction) {
 
     const transcriptNote = transcriptUrl ? `\n📄 Transcript: ${transcriptUrl}` : '';
     await interaction.editReply({ content: `✅ Ticket has been closed.${transcriptNote}` });
+
+    await logAction(interaction.client, {
+      action: '🔴 Ticket Closed',
+      target: { discordId: ticket.user_id, name: ticket.user_id },
+      moderator: { discordId: interaction.user.id, name: interaction.user.username },
+      color: 0xEF4444,
+      fields: transcriptUrl ? [{ name: 'Transcript', value: transcriptUrl }] : [],
+      logType: 'ticket.closed',
+      guildId: interaction.guildId
+    });
   }
 }
