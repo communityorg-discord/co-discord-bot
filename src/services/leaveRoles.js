@@ -3,6 +3,7 @@ import { storeRoles, getStoredRoles, deleteStoredRoles, createActingAssignment, 
 import { getUserByDiscordId } from '../db.js';
 import { logAction } from '../utils/logger.js';
 import { ALL_SERVER_IDS } from '../config.js';
+import { E } from '../lib/emoji.js';
 
 const ON_LEAVE_ROLE_NAME = 'On Leave';
 
@@ -59,7 +60,7 @@ export async function applyLeaveRole(client, leave, portalDb) {
 
   // Log
   await logAction(client, {
-    action: '🏖️ Leave Role Applied',
+    action: 'Leave Role Applied',
     moderator: { discordId: 'SYSTEM', name: 'Leave System' },
     target: { discordId: leave.discord_id, name: leave.display_name || leave.full_name || leave.discord_id },
     reason: `${leave.leave_type} leave: ${leave.start_date} to ${leave.end_date}`,
@@ -75,9 +76,9 @@ export async function applyLeaveRole(client, leave, portalDb) {
   try {
     const user = await client.users.fetch(leave.discord_id);
     await user.send({ embeds: [{
-      title: '🏖️ Leave Started',
+      title: 'Leave Started',
       color: 0xF59E0B,
-      description: `Your **${leave.leave_type}** has started. Your Discord roles have been updated to **On Leave** across all servers.\n\nYour roles will be automatically restored when your leave ends on **${leave.end_date}**.`,
+      description: `${E.break} Your **${leave.leave_type}** has started. Your Discord roles have been updated to **On Leave** across all servers.\n\nYour roles will be automatically restored when your leave ends on **${leave.end_date}**.`,
       footer: { text: 'Community Organisation | Leave Management' },
       timestamp: new Date().toISOString()
     }]});
@@ -142,7 +143,7 @@ export async function applyActingRoles(client, actingDiscordId, position, leaveR
   // Log
   const actingUser = getUserByDiscordId(actingDiscordId);
   await logAction(client, {
-    action: '🔄 Acting Role Assigned',
+    action: 'Acting Role Assigned',
     moderator: { discordId: 'SYSTEM', name: assignedBy || 'Leave System' },
     target: { discordId: actingDiscordId, name: actingUser?.display_name || actingDiscordId },
     reason: `Acting as ${position}`,
@@ -158,9 +159,9 @@ export async function applyActingRoles(client, actingDiscordId, position, leaveR
   try {
     const user = await client.users.fetch(actingDiscordId);
     await user.send({ embeds: [{
-      title: '📌 Acting Position Assigned',
+      title: 'Acting Position Assigned',
       color: 0x22C55E,
-      description: `You have been assigned to act in the position of **${position}**.\n\nYour Discord roles have been updated. Your original roles will be restored when the acting period ends.`,
+      description: `${E.acting} You have been assigned to act in the position of **${position}**.\n\nYour Discord roles have been updated. Your original roles will be restored when the acting period ends.`,
       footer: { text: 'Community Organisation | Leave Management' },
       timestamp: new Date().toISOString()
     }]});
@@ -202,9 +203,9 @@ export async function revertLeaveRole(client, leave, portalDb) {
   try {
     const user = await client.users.fetch(leave.discord_id);
     await user.send({ embeds: [{
-      title: '✅ Welcome Back',
+      title: 'Welcome Back',
       color: 0x22C55E,
-      description: `Welcome back! Your Discord roles have been restored following your **${leave.leave_type}**.`,
+      description: `${E.check} Welcome back! Your Discord roles have been restored following your **${leave.leave_type}**.`,
       footer: { text: 'Community Organisation | Leave Management' },
       timestamp: new Date().toISOString()
     }]});
@@ -216,7 +217,7 @@ export async function revertLeaveRole(client, leave, portalDb) {
   }
 
   await logAction(client, {
-    action: '✅ Leave Role Reverted',
+    action: 'Leave Role Reverted',
     moderator: { discordId: 'SYSTEM', name: 'Leave System' },
     target: { discordId: leave.discord_id, name: leave.display_name || leave.full_name || leave.discord_id },
     reason: `Returned from ${leave.leave_type} leave`,
@@ -273,9 +274,9 @@ export async function processPendingActingAssignments(client, opts = {}) {
     try {
       const user = await client.users.fetch(a.acting_discord_id);
       await user.send({ embeds: [{
-        title: '📌 Acting Position Assigned',
+        title: 'Acting Position Assigned',
         color: 0x22C55E,
-        description: `You have been assigned to act in the position of **${a.position}**.\n\nYour Discord roles have been updated. Your original roles will be restored when the acting period ends.`,
+        description: `${E.acting} You have been assigned to act in the position of **${a.position}**.\n\nYour Discord roles have been updated. Your original roles will be restored when the acting period ends.`,
         footer: { text: 'Community Organisation | Leave Management' },
         timestamp: new Date().toISOString()
       }]});
@@ -309,7 +310,7 @@ export async function revertActingRoles(client, actingDiscordId, leaveRequestId)
   if (acting) endActingAssignment(acting.id);
 
   await logAction(client, {
-    action: '🔄 Acting Role Reverted',
+    action: 'Acting Role Reverted',
     moderator: { discordId: 'SYSTEM', name: 'Leave System' },
     target: { discordId: actingDiscordId, name: getUserByDiscordId(actingDiscordId)?.display_name || actingDiscordId },
     reason: 'Acting period ended',
@@ -416,8 +417,8 @@ export async function sendActingNominationRequests(client) {
         const leaveUser = await client.users.fetch(leave.discord_id);
         await leaveUser.send({ embeds: [{
           color: 0x5865F2,
-          title: '📋 Acting Nomination Required',
-          description: `Your **${leave.leave_type}** begins tomorrow (**${leave.start_date}**).\n\nAs you hold a management position (**${leave.position}**), please nominate someone to act in your position while you are away.\n\nReply to this message with the **@mention** or **Discord user ID** of the person you wish to nominate.\n\nType **"none"** if no acting is required.`,
+          title: 'Acting Nomination Required',
+          description: `${E.logs} Your **${leave.leave_type}** begins tomorrow (**${leave.start_date}**).\n\nAs you hold a management position (**${leave.position}**), please nominate someone to act in your position while you are away.\n\nReply to this message with the **@mention** or **Discord user ID** of the person you wish to nominate.\n\nType **"none"** if no acting is required.`,
           fields: [
             { name: 'Leave Period', value: `${leave.start_date} to ${leave.end_date}`, inline: true },
             { name: 'Your Position', value: leave.position, inline: true },
@@ -459,8 +460,8 @@ export async function sendActingNominationRequests(client) {
 
           await msg.reply({ embeds: [{
             color: 0x22C55E,
-            title: '✅ Acting Nomination Confirmed',
-            description: `<@${mentionedId}> (**${actingPortal.display_name}**) will act in your position (**${leave.position}**) from ${leave.start_date} to ${leave.end_date}.\n\nThey will receive your position roles at midnight tonight and will be notified.`,
+            title: 'Acting Nomination Confirmed',
+            description: `${E.check} <@${mentionedId}> (**${actingPortal.display_name}**) will act in your position (**${leave.position}**) from ${leave.start_date} to ${leave.end_date}.\n\nThey will receive your position roles at midnight tonight and will be notified.`,
           }]});
 
           // DM the acting person
@@ -468,8 +469,8 @@ export async function sendActingNominationRequests(client) {
             const actingUser = await client.users.fetch(mentionedId);
             await actingUser.send({ embeds: [{
               color: 0x22C55E,
-              title: '📌 Acting Position Assigned',
-              description: `You have been nominated to act in the position of **${leave.position}** while **${leave.display_name || leave.full_name}** is on leave.`,
+              title: 'Acting Position Assigned',
+              description: `${E.acting} You have been nominated to act in the position of **${leave.position}** while **${leave.display_name || leave.full_name}** is on leave.`,
               fields: [
                 { name: 'Period', value: `${leave.start_date} to ${leave.end_date}`, inline: true },
                 { name: 'Acting Position', value: leave.position, inline: true },

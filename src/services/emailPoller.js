@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { fetchEmailConfig, fetchInboxEmails } from './emailService.js';
 import { getInboxChannelId, markEmailSeen, isEmailSeen, getSeenEmail, getRepliesForEmail } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 function generateReplyCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -61,14 +62,15 @@ function buildEmailNotifEmbed(inbox, email, replies = []) {
   const to = email.headers?.to?.[0] || '';
 
   const embed = new EmbedBuilder()
-    .setTitle(`📧 ${subject.slice(0, 240)}`)
+    .setTitle(subject.slice(0, 240))
     .setColor(replies.length > 0 ? 0x22C55E : 0x1a73e8)
+    .setDescription(`${E.dm} **${subject.slice(0, 240)}**`)
     .addFields(
-      { name: '📤 From', value: from.slice(0, 100), inline: true },
-      { name: '📥 To', value: to.slice(0, 100) || inbox.imap.user, inline: true },
-      { name: '📅 Date', value: date, inline: false },
-      { name: '📬 Inbox', value: `${inbox.emoji} ${inbox.name}`, inline: true },
-      { name: '🔑 UID', value: String(email.uid), inline: true },
+      { name: 'From', value: from.slice(0, 100), inline: true },
+      { name: 'To', value: to.slice(0, 100) || inbox.imap.user, inline: true },
+      { name: 'Date', value: date, inline: false },
+      { name: 'Inbox', value: `${inbox.emoji} ${inbox.name}`, inline: true },
+      { name: 'UID', value: String(email.uid), inline: true },
     )
     .setFooter({ text: `CO Inbox System | UID: ${email.uid} | View full email at mail.communityorg.co.uk` })
     .setTimestamp();
@@ -77,9 +79,9 @@ function buildEmailNotifEmbed(inbox, email, replies = []) {
     const replyLines = replies.map(r =>
       `**${r.replied_by_name || r.replied_by_discord_id}** — <t:${Math.floor(new Date(r.replied_at).getTime() / 1000)}:R> · Code: \`${r.reply_code}\``
     ).join('\n');
-    embed.addFields({ name: `✅ Replied (${replies.length})`, value: replyLines.slice(0, 1024), inline: false });
+    embed.addFields({ name: `Replied (${replies.length})`, value: replyLines.slice(0, 1024), inline: false });
   } else {
-    embed.addFields({ name: '📭 Status', value: 'No replies yet', inline: false });
+    embed.addFields({ name: 'Status', value: 'No replies yet', inline: false });
   }
 
   return embed;
@@ -89,15 +91,15 @@ function buildEmailNotifButtons(inboxId, uid) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`inbox_notif_reply|${inboxId}|${uid}`)
-      .setLabel('↩️ Reply')
+      .setLabel('Reply')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`inbox_notif_forward|${inboxId}|${uid}`)
-      .setLabel('↪️ Forward')
+      .setLabel('Forward')
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`inbox_notif_view|${inboxId}|${uid}`)
-      .setLabel('👁️ View Email')
+      .setLabel('View Email')
       .setStyle(ButtonStyle.Secondary),
   );
 }
@@ -142,8 +144,9 @@ export async function pollAllInboxes(client) {
               const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
               if (logChannel) {
                 const logEmbed = new EmbedBuilder()
-                  .setTitle(`📧 New Email — ${inbox.emoji} ${inbox.name}`)
+                  .setTitle(`New Email — ${inbox.emoji} ${inbox.name}`)
                   .setColor(0x1a73e8)
+                  .setDescription(`${E.dm} **New Email — ${inbox.name}**`)
                   .addFields(
                     { name: 'From', value: from.slice(0, 100), inline: true },
                     { name: 'Subject', value: subject.slice(0, 100), inline: true },
@@ -275,14 +278,15 @@ export async function pollPersonalInboxes(client) {
           const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import('discord.js');
 
           const embed = new EmbedBuilder()
-            .setTitle(`📧 ${subject.slice(0, 240)}`)
+            .setTitle(subject.slice(0, 240))
             .setColor(0x1a73e8)
+            .setDescription(`${E.dm} **${subject.slice(0, 240)}**`)
             .addFields(
-              { name: '📤 From', value: from.slice(0, 100), inline: true },
-              { name: '📥 To', value: to.slice(0, 100), inline: true },
-              { name: '📅 Date', value: date, inline: false },
-              ...(bodyPreview ? [{ name: '💬 Message', value: bodyPreview.slice(0, 1024), inline: false }] : []),
-              { name: '📭 Status', value: 'No replies yet', inline: false },
+              { name: 'From', value: from.slice(0, 100), inline: true },
+              { name: 'To', value: to.slice(0, 100), inline: true },
+              { name: 'Date', value: date, inline: false },
+              ...(bodyPreview ? [{ name: 'Message', value: bodyPreview.slice(0, 1024), inline: false }] : []),
+              { name: 'Status', value: 'No replies yet', inline: false },
             )
             .setFooter({ text: `Personal Inbox | UID: ${email.uid} | View full email at mail.communityorg.co.uk` })
             .setTimestamp();
@@ -290,11 +294,11 @@ export async function pollPersonalInboxes(client) {
           const buttons = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
               .setCustomId(`inbox_personal_reply|${setup.discord_id}|${email.uid}`)
-              .setLabel('↩️ Reply')
+              .setLabel('Reply')
               .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
               .setCustomId(`inbox_personal_forward|${setup.discord_id}|${email.uid}`)
-              .setLabel('↪️ Forward')
+              .setLabel('Forward')
               .setStyle(ButtonStyle.Secondary),
           );
 
@@ -310,7 +314,7 @@ export async function pollPersonalInboxes(client) {
         if (e.message?.toLowerCase().includes('auth') || e.message?.toLowerCase().includes('login') || e.message?.toLowerCase().includes('password')) {
           try {
             const user = await client.users.fetch(setup.discord_id).catch(() => null);
-            if (user) await user.send(`⚠️ **Email monitoring error** — Could not connect to \`${setup.co_email}\`: \`${e.message}\`
+            if (user) await user.send(`${E.warning} **Email monitoring error** — Could not connect to \`${setup.co_email}\`: \`${e.message}\`
 
 Please run \`/setup-email configure\` to update your password.`).catch(() => {});
           } catch { /* ignore */ }

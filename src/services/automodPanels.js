@@ -3,6 +3,7 @@ import { db } from '../utils/botDb.js';
 import { automod } from './automod.js';
 import { isSuperuser, canRunCommand } from '../utils/permissions.js';
 import { randomBytes } from 'crypto';
+import { E } from '../lib/emoji.js';
 
 const MODULES = [
   { key: 'spam', label: 'Spam', emoji: '💬' },
@@ -51,13 +52,13 @@ function buildStatusEmbed(guildId) {
 
   const moduleList = MODULES.map(m => {
     const enabled = config[`${m.key}_enabled`];
-    return `${enabled ? '🟢' : '🔴'} ${m.label}`;
+    return `${enabled ? E.check : E.cross} ${m.label}`;
   }).join('  |  ');
 
   return new EmbedBuilder()
     .setColor(config.enabled ? 0x22C55E : 0xEF4444)
-    .setTitle('🛡️ CO | AUTOMOD CONTROL CENTRE')
-    .setDescription(`**Status:** ${config.enabled ? '🟢 ACTIVE' : '🔴 DISABLED'}  |  **Incidents today:** ${todayIncidents}  |  **Last action:** ${lastAgo}\n\n**MODULES**\n${moduleList}`)
+    .setTitle('CO | AUTOMOD CONTROL CENTRE')
+    .setDescription(`**Status:** ${config.enabled ? `${E.check} ACTIVE` : `${E.cross} DISABLED`}  |  **Incidents today:** ${todayIncidents}  |  **Last action:** ${lastAgo}\n\n**MODULES**\n${moduleList}`)
     .setFooter({ text: 'Click buttons below to manage | CO AutoMod System' })
     .setTimestamp();
 }
@@ -96,7 +97,7 @@ function buildStatusButtons(guildId) {
 function buildConfigEmbed() {
   return new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('⚙️ AUTOMOD CONFIGURATION')
+    .setTitle('AUTOMOD CONFIGURATION')
     .setDescription('Select a module from the dropdown below to view and edit its settings.')
     .setFooter({ text: 'CO AutoMod System' });
 }
@@ -122,13 +123,13 @@ function buildLockdownEmbed(guildId) {
   const allActive = [...active, ...globalActive.filter(g => g.guild_id !== guildId)];
 
   let desc = allActive.length === 0
-    ? '**Current Status:** 🟢 NO ACTIVE LOCKDOWNS'
-    : `**Current Status:** 🔴 ${allActive.length} ACTIVE LOCKDOWN(S)\n\n` +
+    ? `**Current Status:** ${E.check} NO ACTIVE LOCKDOWNS`
+    : `**Current Status:** ${E.cross} ${allActive.length} ACTIVE LOCKDOWN(S)\n\n` +
       allActive.map(l => `• **${l.lockdown_type}** in ${l.guild_id === guildId ? 'this server' : l.guild_id} — ${l.reason || 'No reason'}${l.auto_unlock_at ? ` (expires <t:${Math.floor(new Date(l.auto_unlock_at).getTime() / 1000)}:R>)` : ''}`).join('\n');
 
   return new EmbedBuilder()
     .setColor(allActive.length > 0 ? 0xEF4444 : 0x22C55E)
-    .setTitle('🔒 LOCKDOWN CONTROL')
+    .setTitle('LOCKDOWN CONTROL')
     .setDescription(desc)
     .setFooter({ text: 'CO AutoMod System' })
     .setTimestamp();
@@ -158,7 +159,7 @@ function buildImmunityEmbed(guildId) {
 
   return new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('🛡️ IMMUNITY MANAGEMENT')
+    .setTitle('IMMUNITY MANAGEMENT')
     .setDescription(`Grant immunity to users, roles, or servers from specific automod modules.\n\n**Currently Immune:**\n${list}`)
     .setFooter({ text: 'CO AutoMod System' })
     .setTimestamp();
@@ -181,7 +182,7 @@ function buildApprovalEmbed(guildId) {
 
   return new EmbedBuilder()
     .setColor(pending > 0 ? 0xF59E0B : 0x22C55E)
-    .setTitle('✅ APPROVAL REQUESTS')
+    .setTitle('APPROVAL REQUESTS')
     .setDescription(`**Pending:** ${pending}  |  **Approved today:** ${approvedToday}  |  **Denied today:** ${deniedToday}`)
     .setFooter({ text: 'CO AutoMod System' })
     .setTimestamp();
@@ -263,7 +264,7 @@ export async function handleInteraction(interaction) {
   if (!id.startsWith('automod_')) return false;
 
   if (!checkAuth(interaction)) {
-    return interaction.reply({ content: '❌ You don\'t have permission to use automod controls.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} You don't have permission to use automod controls.`, ephemeral: true });
   }
 
   // ── Module toggle ──
@@ -302,7 +303,7 @@ export async function handleInteraction(interaction) {
     const incidents = db.prepare('SELECT * FROM automod_incidents WHERE guild_id = ? ORDER BY created_at DESC LIMIT 15').all(guildId);
     if (incidents.length === 0) return interaction.reply({ content: 'No recent incidents.', ephemeral: true });
     const desc = incidents.map(i => `**${i.incident_type}** | ${i.target_discord_id ? `<@${i.target_discord_id}>` : 'N/A'} | ${i.severity} | ${i.action_taken} | <t:${Math.floor(new Date(i.created_at).getTime() / 1000)}:R>`).join('\n');
-    return interaction.reply({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('📋 Recent Incidents').setDescription(desc).setTimestamp()], ephemeral: true });
+    return interaction.reply({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Recent Incidents').setDescription(desc).setTimestamp()], ephemeral: true });
   }
 
   // ── Config select dropdown ──
@@ -314,7 +315,7 @@ export async function handleInteraction(interaction) {
     const m = MODULES.find(x => x.key === module);
 
     const fields = settings.map(s => ({ name: s.replace(/_/g, ' '), value: `\`${config[s] ?? 'default'}\``, inline: true }));
-    fields.push({ name: 'Status', value: config[`${module}_enabled`] ? '🟢 Enabled' : '🔴 Disabled', inline: true });
+    fields.push({ name: 'Status', value: config[`${module}_enabled`] ? `${E.check} Enabled` : `${E.cross} Disabled`, inline: true });
 
     const buttons = new ActionRowBuilder();
     settings.slice(0, 4).forEach(s => {
@@ -323,7 +324,7 @@ export async function handleInteraction(interaction) {
     buttons.addComponents(new ButtonBuilder().setCustomId(`automod_config_toggle_${module}_${guildId}`).setLabel('Toggle').setStyle(config[`${module}_enabled`] ? ButtonStyle.Danger : ButtonStyle.Success));
 
     await interaction.reply({
-      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(`${m?.emoji || '⚙️'} ${m?.label || module} Configuration`).addFields(...fields).setTimestamp()],
+      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(`${m?.label || module} Configuration`).setDescription(`${E.shield} **${m?.label || module} Configuration**`).addFields(...fields).setTimestamp()],
       components: [buttons],
       ephemeral: true
     });
@@ -358,7 +359,7 @@ export async function handleInteraction(interaction) {
     const setting = parts.join('_');
     const value = interaction.fields.getTextInputValue('value');
     db.prepare(`UPDATE automod_config SET ${setting} = ?, updated_at = datetime('now') WHERE guild_id = ?`).run(value, guildId);
-    await interaction.reply({ content: `✅ **${setting}** set to \`${value}\`.`, ephemeral: true });
+    await interaction.reply({ content: `${E.check} **${setting}** set to \`${value}\`.`, ephemeral: true });
     await refreshPanel(interaction.client, guildId, 'status');
     return true;
   }
@@ -372,7 +373,7 @@ export async function handleInteraction(interaction) {
     const config = automod.getConfig(guildId);
     const col = `${module}_enabled`;
     db.prepare(`UPDATE automod_config SET ${col} = ?, updated_at = datetime('now') WHERE guild_id = ?`).run(config[col] ? 0 : 1, guildId);
-    await interaction.reply({ content: `✅ **${module}** ${config[col] ? 'disabled' : 'enabled'}.`, ephemeral: true });
+    await interaction.reply({ content: `${E.check} **${module}** ${config[col] ? 'disabled' : 'enabled'}.`, ephemeral: true });
     await refreshPanel(interaction.client, guildId, 'status');
     return true;
   }
@@ -382,7 +383,7 @@ export async function handleInteraction(interaction) {
     const scope = id.includes('global') ? 'global' : id.includes('server') ? 'server' : 'channel';
     const guildId = id.split('_').pop();
     if (scope === 'global' && !isSuperuser(interaction.user.id)) {
-      return interaction.reply({ content: '❌ Global lockdown is superuser only.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Global lockdown is superuser only.`, ephemeral: true });
     }
     await interaction.showModal(new ModalBuilder()
       .setCustomId(`automod_lock_confirm_${scope}_${guildId}`)
@@ -430,7 +431,7 @@ export async function handleInteraction(interaction) {
       const prev = evOw?.allow.has('SendMessages') ? 'allow' : evOw?.deny.has('SendMessages') ? 'deny' : 'neutral';
       db.prepare(`INSERT OR REPLACE INTO lockdown_permission_snapshots (lockdown_id, guild_id, channel_id, role_id, allow_permissions, deny_permissions) VALUES (?, ?, ?, ?, ?, '')`).run(result.lastInsertRowid, guildId, channel.id, guildId, prev);
       await channel.permissionOverwrites.edit(guildId, { SendMessages: false }).catch(() => {});
-      await interaction.editReply({ content: `🔒 Channel locked. Reason: ${reason}` });
+      await interaction.editReply({ content: `${E.suspend} Channel locked. Reason: ${reason}` });
     } else {
       const guilds = scope === 'global' ? [...interaction.client.guilds.cache.values()] : [interaction.guild];
       let count = 0;
@@ -446,7 +447,7 @@ export async function handleInteraction(interaction) {
         }
         count++;
       }
-      await interaction.editReply({ content: `🔒 ${scope === 'global' ? 'Global' : 'Server'} lockdown applied across ${count} guild(s).` });
+      await interaction.editReply({ content: `${E.suspend} ${scope === 'global' ? 'Global' : 'Server'} lockdown applied across ${count} guild(s).` });
     }
     await refreshPanel(interaction.client, guildId, 'lockdown');
     return true;
@@ -460,7 +461,7 @@ export async function handleInteraction(interaction) {
 
     if (scope === 'channel') {
       const ld = db.prepare("SELECT * FROM lockdown_state WHERE guild_id = ? AND channel_id = ? AND is_active = 1").get(guildId, interaction.channelId);
-      if (!ld) return interaction.editReply({ content: '❌ No active lockdown on this channel.' });
+      if (!ld) return interaction.editReply({ content: `${E.cross} No active lockdown on this channel.` });
       // Restore from snapshot
       const snap = db.prepare('SELECT * FROM lockdown_permission_snapshots WHERE lockdown_id = ? AND channel_id = ? AND role_id = ?').get(ld.id, interaction.channelId, guildId);
       if (snap?.allow_permissions === 'allow') {
@@ -472,7 +473,7 @@ export async function handleInteraction(interaction) {
       }
       db.prepare("UPDATE lockdown_state SET is_active = 0, unlocked_at = datetime('now') WHERE id = ?").run(ld.id);
       db.prepare('DELETE FROM lockdown_permission_snapshots WHERE lockdown_id = ?').run(ld.id);
-      await interaction.editReply({ content: '🔓 Channel unlocked.' });
+      await interaction.editReply({ content: `${E.unban} Channel unlocked.` });
     } else {
       const guilds = scope === 'global' ? [...interaction.client.guilds.cache.values()] : [interaction.guild];
       for (const guild of guilds) {
@@ -494,7 +495,7 @@ export async function handleInteraction(interaction) {
           db.prepare('DELETE FROM lockdown_permission_snapshots WHERE lockdown_id = ?').run(ld.id);
         }
       }
-      await interaction.editReply({ content: `🔓 ${scope === 'global' ? 'Global' : 'Server'} unlock complete.` });
+      await interaction.editReply({ content: `${E.unban} ${scope === 'global' ? 'Global' : 'Server'} unlock complete.` });
     }
     await refreshPanel(interaction.client, guildId, 'lockdown');
     return true;
@@ -525,7 +526,7 @@ export async function handleInteraction(interaction) {
     const reason = interaction.fields.getTextInputValue('reason') || null;
     db.prepare('INSERT OR REPLACE INTO automod_immunity (guild_id, target_type, target_id, immune_from, granted_by, reason) VALUES (?, ?, ?, ?, ?, ?)')
       .run(guildId, targetType, targetId, immuneFrom, interaction.user.id, reason);
-    await interaction.reply({ content: `✅ Immunity granted: ${targetType} \`${targetId}\` immune from **${immuneFrom}**.`, ephemeral: true });
+    await interaction.reply({ content: `${E.check} Immunity granted: ${targetType} \`${targetId}\` immune from **${immuneFrom}**.`, ephemeral: true });
     await refreshPanel(interaction.client, guildId, 'immunity');
     return true;
   }
@@ -536,7 +537,7 @@ export async function handleInteraction(interaction) {
     const list = db.prepare('SELECT * FROM automod_immunity WHERE guild_id = ? OR guild_id IS NULL ORDER BY created_at DESC').all(guildId);
     if (list.length === 0) return interaction.reply({ content: 'No immunities.', ephemeral: true });
     const desc = list.map(i => `**#${i.id}** | ${i.target_type} \`${i.target_id}\` | from: **${i.immune_from}** ${i.expires_at ? `(expires <t:${Math.floor(new Date(i.expires_at).getTime() / 1000)}:R>)` : '(permanent)'}`).join('\n');
-    return interaction.reply({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🛡️ All Immunities').setDescription(desc)], ephemeral: true });
+    return interaction.reply({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('All Immunities').setDescription(desc)], ephemeral: true });
   }
 
   // ── Immunity remove → ephemeral select ──
@@ -556,7 +557,7 @@ export async function handleInteraction(interaction) {
     const guildId = id.replace('automod_immunity_delete_', '');
     const immunityId = interaction.values[0];
     db.prepare('DELETE FROM automod_immunity WHERE id = ?').run(immunityId);
-    await interaction.update({ content: `✅ Immunity #${immunityId} removed.`, components: [] });
+    await interaction.update({ content: `${E.check} Immunity #${immunityId} removed.`, components: [] });
     await refreshPanel(interaction.client, guildId, 'immunity');
     return true;
   }
@@ -589,7 +590,7 @@ export async function handleInteraction(interaction) {
     const isApprove = id.includes('approve');
     const reqId = parseInt(id.split('_').pop());
     const req = db.prepare('SELECT * FROM approval_requests WHERE id = ?').get(reqId);
-    if (!req || req.status !== 'pending') return interaction.reply({ content: '❌ Request not found or already processed.', ephemeral: true });
+    if (!req || req.status !== 'pending') return interaction.reply({ content: `${E.cross} Request not found or already processed.`, ephemeral: true });
 
     const expiresAt = isApprove ? new Date(Date.now() + 20 * 60 * 1000).toISOString() : null;
     db.prepare(`UPDATE approval_requests SET status = ?, approved_by = ?, expires_at = COALESCE(?, expires_at) WHERE id = ?`)
@@ -599,13 +600,13 @@ export async function handleInteraction(interaction) {
       const requester = await interaction.client.users.fetch(req.requester_discord_id);
       await requester.send({ embeds: [new EmbedBuilder()
         .setColor(isApprove ? 0x22C55E : 0xEF4444)
-        .setTitle(isApprove ? '✅ Approval Granted' : '❌ Approval Denied')
-        .setDescription(`Your request for **${req.action_type}** has been ${isApprove ? 'approved for 20 minutes' : 'denied'}.`)
+        .setTitle(isApprove ? 'Approval Granted' : 'Approval Denied')
+        .setDescription(`${isApprove ? E.check : E.cross} Your request for **${req.action_type}** has been ${isApprove ? 'approved for 20 minutes' : 'denied'}.`)
         .setTimestamp()
       ]}).catch(() => {});
     } catch {}
 
-    await interaction.reply({ content: `${isApprove ? '✅ Approved' : '❌ Denied'} request #${reqId}.`, ephemeral: true });
+    await interaction.reply({ content: `${isApprove ? `${E.check} Approved` : `${E.cross} Denied`} request #${reqId}.`, ephemeral: true });
     await refreshPanel(interaction.client, req.guild_id, 'approvals');
     return true;
   }
@@ -625,7 +626,7 @@ export async function handleInteraction(interaction) {
     if (incident) {
       await automod.notifyEOB(incident.guild_id, incident.incident_type, incident.target_discord_id, incident.target_username, 'critical', 'escalated', `Escalated by <@${interaction.user.id}>: ${incident.details}`);
     }
-    await interaction.reply({ content: '⬆️ Incident escalated to critical. EOB notified.', ephemeral: true });
+    await interaction.reply({ content: `${E.warning} Incident escalated to critical. EOB notified.`, ephemeral: true });
     return true;
   }
 
@@ -642,11 +643,13 @@ export async function postIncidentEmbed(client, guildId, incident) {
   if (!channel) return;
 
   const SEVERITY_COLORS = { low: 0x3B82F6, medium: 0xF59E0B, high: 0xEF4444, critical: 0x7F1D1D };
-  const SEVERITY_EMOJIS = { low: '🔵', medium: '🟡', high: '🔴', critical: '💀' };
+  const SEVERITY_EMOJIS = { low: E.info, medium: E.warning, high: E.cross, critical: E.cross };
 
+  const incidentTitle = `AUTOMOD — ${incident.incident_type.replace(/_/g, ' ').toUpperCase()}`;
   const embed = new EmbedBuilder()
     .setColor(SEVERITY_COLORS[incident.severity] || SEVERITY_COLORS.medium)
-    .setTitle(`${SEVERITY_EMOJIS[incident.severity] || '🟡'} AUTOMOD — ${incident.incident_type.replace(/_/g, ' ').toUpperCase()}`)
+    .setTitle(incidentTitle)
+    .setDescription(`${SEVERITY_EMOJIS[incident.severity] || E.warning} **${incidentTitle}**`)
     .addFields(
       { name: 'User', value: incident.target_discord_id ? `<@${incident.target_discord_id}>` : 'N/A', inline: true },
       { name: 'Action', value: incident.action_taken || 'None', inline: true },

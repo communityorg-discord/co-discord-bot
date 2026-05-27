@@ -1,5 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } from 'discord.js';
 import { db } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 import { execFile } from 'child_process';
 import { writeFile, readFile, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -260,14 +261,14 @@ export async function postDirectiveEmbed(client, data) {
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle(`📋 Secretariat Directive — ${data.directive_number}`)
-    .setDescription(`**${data.subject}**`)
+    .setTitle(`Secretariat Directive — ${data.directive_number}`)
+    .setDescription(`${E.logs} **${data.subject}**`)
     .addFields(
       { name: 'Directive', value: (data.directive_text || '').slice(0, 1000), inline: false },
       { name: 'Purpose', value: PURPOSE_LABELS[data.purpose] || data.purpose || 'Not specified', inline: true },
       { name: 'Issued By', value: `${data.issued_by_sg} (SG) & ${data.issued_by_dsg} (DSG)`, inline: true },
       { name: 'Issued At', value: `<t:${Math.floor(new Date(data.issued_at).getTime() / 1000)}:F>`, inline: true },
-      { name: 'Status', value: '🟢 **ACTIVE**', inline: true },
+      { name: 'Status', value: `${E.check} **ACTIVE**`, inline: true },
       { name: 'Dispute Window', value: 'SCSC have 2 hours to dispute from time of issue', inline: false },
     )
     .setFooter({ text: `Directive ${data.directive_number} | Immediately binding on all staff` })
@@ -342,18 +343,18 @@ export async function postMemoEmbed(client, data) {
 
   const embed = new EmbedBuilder()
     .setColor(URGENCY_COLORS[data.urgency] || URGENCY_COLORS.Medium)
-    .setTitle(`📄 SCSC Memo — ${data.memo_number}`)
-    .setDescription(`**${data.title}**`)
+    .setTitle(`SCSC Memo — ${data.memo_number}`)
+    .setDescription(`${E.logs} **${data.title}**`)
     .addFields(
       { name: 'Details', value: (data.description || 'No details provided').slice(0, 1000), inline: false },
       { name: 'Urgency', value: data.urgency || 'Medium', inline: true },
       { name: 'Issued By', value: data.issued_by || 'SCSC', inline: true },
-      { name: 'Status', value: '🟢 **ACTIVE**', inline: true },
+      { name: 'Status', value: `${E.check} **ACTIVE**`, inline: true },
     )
     .setFooter({ text: `Memo ${data.memo_number} | Standards and Compliance Sub-Committee` })
     .setTimestamp(new Date(data.created_at));
 
-  if (data.action_required) embed.addFields({ name: '⚠️ Action Required', value: data.action_required, inline: false });
+  if (data.action_required) embed.addFields({ name: 'Action Required', value: `${E.warning} ${data.action_required}`, inline: false });
 
   const embedAttachments = pdf ? [new AttachmentBuilder(pdf.buffer, { name: pdf.filename })] : [];
   const msg = await channel.send({
@@ -372,9 +373,9 @@ export async function postMemoEmbed(client, data) {
       await user.send({
         embeds: [new EmbedBuilder()
           .setColor(URGENCY_COLORS[data.urgency] || URGENCY_COLORS.Medium)
-          .setTitle(`📄 SCSC Memo Issued — ${data.memo_number}`)
-          .setDescription(`A SCSC Memo has been issued that affects you directly.\n\n**${data.title}**\n\n${(data.description || '').slice(0, 500)}`)
-          .addFields(data.action_required ? [{ name: '⚠️ Action Required', value: data.action_required }] : [])
+          .setTitle(`SCSC Memo Issued — ${data.memo_number}`)
+          .setDescription(`${E.logs} A SCSC Memo has been issued that affects you directly.\n\n**${data.title}**\n\n${(data.description || '').slice(0, 500)}`)
+          .addFields(data.action_required ? [{ name: 'Action Required', value: `${E.warning} ${data.action_required}` }] : [])
           .setFooter({ text: 'Standards and Compliance Sub-Committee' })
           .setTimestamp()
         ],
@@ -404,7 +405,7 @@ export async function revokeDirectiveEmbed(client, data) {
   const statusIdx = updatedEmbed.data.fields?.findIndex(f => f.name === 'Status');
   if (statusIdx >= 0) {
     updatedEmbed.data.fields[statusIdx] = {
-      name: 'Status', value: `🔴 **REVOKED**\nReason: ${data.revocation_reason || 'No reason'}\nRevoked by: ${data.revoked_by || 'Unknown'}`, inline: false
+      name: 'Status', value: `${E.cross} **REVOKED**\nReason: ${data.revocation_reason || 'No reason'}\nRevoked by: ${data.revoked_by || 'Unknown'}`, inline: false
     };
   }
   updatedEmbed.setFooter({ text: `Directive ${data.directive_number} | REVOKED — No longer in effect` });
@@ -429,7 +430,7 @@ export async function revokeMemoEmbed(client, data) {
   const statusIdx = updatedEmbed.data.fields?.findIndex(f => f.name === 'Status');
   if (statusIdx >= 0) {
     updatedEmbed.data.fields[statusIdx] = {
-      name: 'Status', value: `🔴 **CANCELLED**\nReason: ${data.revocation_reason || 'No reason'}`, inline: false
+      name: 'Status', value: `${E.cross} **CANCELLED**\nReason: ${data.revocation_reason || 'No reason'}`, inline: false
     };
   }
   updatedEmbed.setFooter({ text: `Memo ${data.memo_number} | CANCELLED — No longer in effect` });
@@ -449,7 +450,7 @@ export async function handleDirectiveAcknowledge(interaction) {
     }).then(r => r.ok ? r.json() : null).catch(() => null);
 
     if (!portalUser?.id) {
-      return interaction.reply({ content: '❌ Could not find your portal account. Please verify first.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Could not find your portal account. Please verify first.`, ephemeral: true });
     }
 
     await fetch(`http://localhost:3016/api/directives/${directiveId}/acknowledge`, {
@@ -458,10 +459,10 @@ export async function handleDirectiveAcknowledge(interaction) {
       body: JSON.stringify({ user_id: portalUser.id })
     });
 
-    await interaction.reply({ content: `✅ You have acknowledged this directive. This has been recorded on the portal.`, ephemeral: true });
+    await interaction.reply({ content: `${E.check} You have acknowledged this directive. This has been recorded on the portal.`, ephemeral: true });
   } catch (e) {
     console.error('[Directive Ack]', e.message);
-    await interaction.reply({ content: '❌ An error occurred. Please try again.', ephemeral: true });
+    await interaction.reply({ content: `${E.cross} An error occurred. Please try again.`, ephemeral: true });
   }
 }
 
@@ -499,9 +500,9 @@ export async function handleTransferApproved(client, data) {
   try {
     const user = await client.users.fetch(data.discord_id);
     await user.send({ embeds: [new EmbedBuilder()
-      .setTitle('🔄 Transfer Processed')
+      .setTitle('Transfer Processed')
       .setColor(0x22C55E)
-      .setDescription(`Your transfer to **${data.new_position}** has been processed. Your Discord roles have been updated.`)
+      .setDescription(`${E.processing} Your transfer to **${data.new_position}** has been processed. Your Discord roles have been updated.`)
       .addFields(
         { name: 'Old Position', value: data.old_position || 'Unknown', inline: true },
         { name: 'New Position', value: data.new_position, inline: true },
@@ -513,7 +514,7 @@ export async function handleTransferApproved(client, data) {
 
   const { logAction } = await import('../utils/logger.js');
   await logAction(client, {
-    action: '🔄 Transfer Role Sync',
+    action: 'Transfer Role Sync',
     moderator: { discordId: 'SYSTEM', name: 'Transfer System' },
     target: { discordId: data.discord_id, name: data.display_name || data.discord_id },
     reason: `${data.old_position} → ${data.new_position}`,

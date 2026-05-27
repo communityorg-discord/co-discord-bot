@@ -7,6 +7,7 @@ import { db } from '../utils/botDb.js';
 import OpusScript from 'opusscript';
 import googleTTS from 'google-tts-api';
 import ffmpegStatic from 'ffmpeg-static';
+import { E } from '../lib/emoji.js';
 
 const FFMPEG_PATH = ffmpegStatic;
 const RECORDINGS_DIR = '/home/vpcommunityorganisation/clawd/recordings';
@@ -159,15 +160,15 @@ class RecordingTimeline {
 
       const participantLines = status.participants.length > 0
         ? status.participants.map(p => {
-            const indicator = p.isSpeaking ? '🔊' : '🔇';
+            const indicator = p.isSpeaking ? E.check : E.suspend;
             return `${indicator} <@${p.userId}>`;
           }).join('\n')
         : '*Waiting for speakers...*';
 
       const embed = new EmbedBuilder()
         .setColor(0xef4444)
-        .setTitle('🔴 Recording in Progress')
-        .setDescription(`Recording active in **${this._channelName}**\nStarted by **${this._startedByTag}** — <t:${this._startTs}:R>`)
+        .setTitle('Recording in Progress')
+        .setDescription(`${E.bot} Recording active in **${this._channelName}**\nStarted by **${this._startedByTag}** — <t:${this._startTs}:R>`)
         .addFields(
           { name: `Participants (${status.speakerCount})`, value: participantLines, inline: true },
           { name: 'Duration', value: `\`${status.durationStr}\``, inline: true },

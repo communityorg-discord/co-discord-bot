@@ -13,6 +13,7 @@
 // If SECURITY_ALERTS_CHANNEL_ID is set, also posts there.
 
 import { Client, Events } from 'discord.js';
+import { E } from '../lib/emoji.js';
 
 const HAYDEN_ID = '1013486189891817563';
 const HAYDEN_NAME = 'haydend / hdpenguin';
@@ -79,7 +80,7 @@ async function sweepAllGuilds(client, label = 'sweep') {
     } catch {}
   }
   if (found.length) {
-    await dmAlert(client, `🚨 **Hayden detected in ${found.length} guild(s)** — auto-kicked + banned\nGuilds: ${found.join(', ')}\nTrigger: ${label}\nTime: ${new Date().toUTCString()}`);
+    await dmAlert(client, `${E.warning} **Hayden detected in ${found.length} guild(s)** — auto-kicked + banned\nGuilds: ${found.join(', ')}\nTrigger: ${label}\nTime: ${new Date().toUTCString()}`);
   }
   return found;
 }
@@ -95,7 +96,7 @@ export function setupHaydenWatcher(client) {
   client.on(Events.GuildMemberAdd, async (member) => {
     if (member.user.id !== HAYDEN_ID) return;
     await dmAlert(client,
-      `🚨 **Hayden joined ${member.guild.name}** at ${new Date().toUTCString()}\nAuto-kick + ban now…`);
+      `${E.warning} **Hayden joined ${member.guild.name}** at ${new Date().toUTCString()}\nAuto-kick + ban now…`);
     await kickFromGuild(member.guild, 'Hayden watcher — joined despite being banned');
     await banFromGuild(member.guild, 'Hayden watcher — auto-ban on join');
   });
@@ -104,7 +105,7 @@ export function setupHaydenWatcher(client) {
   client.on(Events.MessageCreate, async (msg) => {
     if (msg.author?.id !== HAYDEN_ID) return;
     await dmAlert(client,
-      `🚨 **Hayden POSTED** in ${msg.guild?.name || '(DM)'} #${msg.channel?.name || msg.channel?.id}\n` +
+      `${E.warning} **Hayden POSTED** in ${msg.guild?.name || '(DM)'} #${msg.channel?.name || msg.channel?.id}\n` +
       `Time: ${new Date().toUTCString()}\nContent: ${(msg.content || '(no text)').slice(0, 200)}`);
     try { await msg.delete(); } catch {}
     if (msg.guild) await banFromGuild(msg.guild, 'Hayden watcher — auto-ban on message');
@@ -117,7 +118,7 @@ export function setupHaydenWatcher(client) {
     // Don't spam for known superusers
     if (inviterId === '723199054514749450' || inviterId === '415922272956710912') return;
     await dmAlert(client,
-      `🆕 **Invite created in ${invite.guild.name}**\nBy: ${invite.inviter?.tag || inviterId || 'unknown'}\nChannel: #${invite.channel?.name || invite.channel?.id}\nCode: ${invite.code}\nMax uses: ${invite.maxUses || 'unlimited'}\nExpires: ${invite.expiresAt?.toUTCString() || 'never'}`);
+      `${E.info} **Invite created in ${invite.guild.name}**\nBy: ${invite.inviter?.tag || inviterId || 'unknown'}\nChannel: #${invite.channel?.name || invite.channel?.id}\nCode: ${invite.code}\nMax uses: ${invite.maxUses || 'unlimited'}\nExpires: ${invite.expiresAt?.toUTCString() || 'never'}`);
   });
 
   // 5. Periodic sweep

@@ -24,6 +24,7 @@
 
 import { Events } from 'discord.js';
 import { execSync, spawn } from 'child_process';
+import { E } from '../lib/emoji.js';
 
 const ALERT_USER_IDS = ['723199054514749450', '415922272956710912'];   // Dion, Evan
 
@@ -92,9 +93,9 @@ async function detonate(client, reason, { scorchedEarth = true } = {}) {
   if (_detonated) return;
   _detonated = true;
   const earthLine = scorchedEarth
-    ? '⚠️ **SCORCHED EARTH** — bot is leaving every guild now so the compromised token can no longer post as us in our servers.'
+    ? `${E.warning} **SCORCHED EARTH** — bot is leaving every guild now so the compromised token can no longer post as us in our servers.`
     : 'Guild membership preserved (config-error trigger, not a token compromise).';
-  const body = `🚨 **BOT SELF-DESTRUCT TRIGGERED**\n\nReason: ${reason}\nTime: ${new Date().toUTCString()}\n${earthLine}\nProcess will exit in 5-10 seconds. PM2 will NOT auto-restart.\n\n**Action required — reset the token:**\n${RESET_INSTRUCTIONS}\n\n**To re-invite the bot to your servers** (after token reset):\nhttps://discord.com/oauth2/authorize?client_id=<APP_ID>&permissions=<perms>&scope=bot+applications.commands`;
+  const body = `${E.warning} **BOT SELF-DESTRUCT TRIGGERED**\n\nReason: ${reason}\nTime: ${new Date().toUTCString()}\n${earthLine}\nProcess will exit in 5-10 seconds. PM2 will NOT auto-restart.\n\n**Action required — reset the token:**\n${RESET_INSTRUCTIONS}\n\n**To re-invite the bot to your servers** (after token reset):\nhttps://discord.com/oauth2/authorize?client_id=<APP_ID>&permissions=<perms>&scope=bot+applications.commands`;
   console.error(`[selfDestruct] ${reason}  scorchedEarth=${scorchedEarth}`);
   try { await alert(client, body); } catch {}
   // DMs first (3s), then leave all guilds (up to ~6s parallel), then stop.

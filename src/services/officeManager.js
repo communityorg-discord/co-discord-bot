@@ -2,6 +2,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'disc
 import db from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { SUPERUSER_IDS } from '../config.js';
+import { E } from '../lib/emoji.js';
 
 const APPROVE_WINDOW_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 10 * 60_000;
@@ -139,7 +140,7 @@ export async function enforceJoin(client, voiceState) {
   await member.voice.disconnect(`[Office] ${member.user.tag} (${member.id}) not on allowlist for #${office.channel_name || channelId}`).catch(() => {});
 
   await logAction(client, {
-    action: '🔒 Office Kick',
+    action: 'Office Kick',
     moderator: { discordId: 'SYSTEM', name: 'Office System' },
     target: { discordId: member.id, name: member.user.tag },
     reason: `Not on allowlist for ${office.channel_name || channelId}`,
@@ -151,8 +152,8 @@ export async function enforceJoin(client, voiceState) {
     await member.send({
       embeds: [new EmbedBuilder()
         .setColor(0xF59E0B)
-        .setTitle('⏳ Request already pending')
-        .setDescription(`You already have a pending request. Please wait for a response.`)
+        .setTitle('Request already pending')
+        .setDescription(`${E.pending} You already have a pending request. Please wait for a response.`)
       ]
     }).catch(() => {});
     return;
@@ -166,8 +167,8 @@ export async function enforceJoin(client, voiceState) {
   await member.send({
     embeds: [new EmbedBuilder()
       .setColor(0xEF4444)
-      .setTitle('🔒 Restricted Office')
-      .setDescription(`**${office.channel_name || 'That voice channel'}** is restricted. You're not on the allowlist.\n\nClick **Request access** to ask the people inside to let you in.`)
+      .setTitle('Restricted Office')
+      .setDescription(`${E.suspend} **${office.channel_name || 'That voice channel'}** is restricted. You're not on the allowlist.\n\nClick **Request access** to ask the people inside to let you in.`)
       .setFooter({ text: 'Approval grants 60 seconds to join. Leaving requires a new request.' })
     ],
     components: [requestBtn]
@@ -220,7 +221,7 @@ export async function handleWaitingRoomJoin(client, voiceState) {
   await postWaitingRoomRequest(client, guild, wr, requestId, member, offices);
 
   await logAction(client, {
-    action: '🛎️ Office Waiting-Room Request',
+    action: 'Office Waiting-Room Request',
     moderator: { discordId: member.id, name: member.user.tag },
     target: { discordId: channelId, name: wr.channel_name || channelId },
     reason: `Joined waiting room — request posted to feed`,
@@ -232,8 +233,8 @@ async function postWaitingRoomRequest(client, guild, wr, requestId, requester, o
   const feedChannelId = getRequestFeed(guild.id);
   if (!feedChannelId) {
     await client.users.fetch(requester.id).then(u => u.send({
-      embeds: [new EmbedBuilder().setColor(0xEF4444).setTitle('❌ No request feed configured')
-        .setDescription('Tell a superuser to run `/office feed`.')]
+      embeds: [new EmbedBuilder().setColor(0xEF4444).setTitle('No request feed configured')
+        .setDescription(`${E.cross} Tell a superuser to run \`/office feed\`.`)]
     })).catch(() => {});
     return null;
   }
@@ -242,8 +243,8 @@ async function postWaitingRoomRequest(client, guild, wr, requestId, requester, o
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('🛎️ Waiting Room — Access Request')
-    .setDescription(`<@${requester.id}> is in <#${wr.channel_id}> and is requesting access to an office.`)
+    .setTitle('Waiting Room — Access Request')
+    .setDescription(`${E.announce} <@${requester.id}> is in <#${wr.channel_id}> and is requesting access to an office.`)
     .addFields(
       { name: 'Requester', value: `${requester.user?.tag || requester.tag || requester.username} (\`${requester.id}\`)`, inline: false },
       { name: offices.length === 1 ? 'Office' : 'Available offices', value: offices.map(o => `<#${o.channel_id}>`).join('\n'), inline: false },
@@ -295,7 +296,7 @@ async function postWaitingRoomRequest(client, guild, wr, requestId, requester, o
     if (msg) {
       const m = await feedChannel.messages.fetch(msg.id).catch(() => null);
       if (m) {
-        const expEmbed = EmbedBuilder.from(m.embeds[0] || embed).setColor(0x6b7280).setTitle('⏰ Waiting-Room Request Expired');
+        const expEmbed = EmbedBuilder.from(m.embeds[0] || embed).setColor(0x6b7280).setTitle('Waiting-Room Request Expired');
         await m.edit({ embeds: [expEmbed], components: [], content: null }).catch(() => {});
       }
     }
@@ -307,8 +308,8 @@ async function postWaitingRoomRequest(client, guild, wr, requestId, requester, o
     const u = await client.users.fetch(requester.id).catch(() => null);
     if (u) {
       await u.send({
-        embeds: [new EmbedBuilder().setColor(0x6b7280).setTitle('⏰ Request Expired')
-          .setDescription('Your waiting-room request expired with no response.')]
+        embeds: [new EmbedBuilder().setColor(0x6b7280).setTitle('Request Expired')
+          .setDescription(`${E.pending} Your waiting-room request expired with no response.`)]
       }).catch(() => {});
     }
   }, REQUEST_TIMEOUT_MS);
@@ -333,7 +334,7 @@ export async function handleWaitingRoomLeave(client, voiceState) {
     if (!r?.feed_message_id) continue;
     const m = await feedChannel.messages.fetch(r.feed_message_id).catch(() => null);
     if (m) {
-      const cEmbed = EmbedBuilder.from(m.embeds[0]).setColor(0x6b7280).setTitle('🚪 Cancelled (left waiting room)');
+      const cEmbed = EmbedBuilder.from(m.embeds[0]).setColor(0x6b7280).setTitle('Cancelled (left waiting room)');
       await m.edit({ embeds: [cEmbed], components: [], content: null }).catch(() => {});
     }
   }
@@ -365,8 +366,8 @@ async function postRequestToFeed(client, guild, office, requestId, requesterUser
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('🔓 Office Access Request')
-    .setDescription(`<@${requesterUser.id}> is requesting access to <#${office.channel_id}>.`)
+    .setTitle('Office Access Request')
+    .setDescription(`${E.unban} <@${requesterUser.id}> is requesting access to <#${office.channel_id}>.`)
     .addFields(
       { name: 'Requester', value: `${requesterUser.tag || requesterUser.username} (\`${requesterUser.id}\`)`, inline: false },
       { name: 'Office', value: `<#${office.channel_id}>`, inline: true },
@@ -398,15 +399,15 @@ async function postRequestToFeed(client, guild, office, requestId, requesterUser
     try {
       const m = await feedChannel.messages.fetch(msg.id).catch(() => null);
       if (m) {
-        const expEmbed = EmbedBuilder.from(m.embeds[0] || embed).setColor(0x6b7280).setTitle('⏰ Request Expired');
+        const expEmbed = EmbedBuilder.from(m.embeds[0] || embed).setColor(0x6b7280).setTitle('Request Expired');
         await m.edit({ embeds: [expEmbed], components: [], content: null }).catch(() => {});
       }
     } catch {}
     const u = await client.users.fetch(requesterUser.id).catch(() => null);
     if (u) {
       await u.send({
-        embeds: [new EmbedBuilder().setColor(0x6b7280).setTitle('⏰ Request Expired')
-          .setDescription(`Your request to join **${office.channel_name}** expired with no response.`)]
+        embeds: [new EmbedBuilder().setColor(0x6b7280).setTitle('Request Expired')
+          .setDescription(`${E.pending} Your request to join **${office.channel_name}** expired with no response.`)]
       }).catch(() => {});
     }
   }, REQUEST_TIMEOUT_MS);
@@ -428,18 +429,18 @@ export async function handleButton(interaction, client) {
     const office = getOffice(channelId);
     if (!office) {
       return interaction.update({
-        embeds: [new EmbedBuilder().setColor(0xEF4444).setTitle('❌ Office not configured').setDescription('That channel is no longer managed.')],
+        embeds: [new EmbedBuilder().setColor(0xEF4444).setTitle('Office not configured').setDescription(`${E.cross} That channel is no longer managed.`)],
         components: []
       }).catch(() => {});
     }
 
     const guild = client.guilds.cache.get(office.guild_id);
-    if (!guild) return interaction.reply({ content: '❌ Guild unavailable.', ephemeral: true });
+    if (!guild) return interaction.reply({ content: `${E.cross} Guild unavailable.`, ephemeral: true });
 
     const feedChannelId = getRequestFeed(guild.id);
     if (!feedChannelId) {
       return interaction.update({
-        embeds: [new EmbedBuilder().setColor(0xEF4444).setTitle('❌ No request feed configured').setDescription('Tell a superuser to run `/office feed`.')],
+        embeds: [new EmbedBuilder().setColor(0xEF4444).setTitle('No request feed configured').setDescription(`${E.cross} Tell a superuser to run \`/office feed\`.`)],
         components: []
       }).catch(() => {});
     }
@@ -447,8 +448,8 @@ export async function handleButton(interaction, client) {
     const existing = getPendingRequest(guild.id, interaction.user.id);
     if (existing) {
       return interaction.update({
-        embeds: [new EmbedBuilder().setColor(0xF59E0B).setTitle('⏳ Already pending')
-          .setDescription(`You already have a pending request.`)],
+        embeds: [new EmbedBuilder().setColor(0xF59E0B).setTitle('Already pending')
+          .setDescription(`${E.pending} You already have a pending request.`)],
         components: []
       }).catch(() => {});
     }
@@ -459,8 +460,8 @@ export async function handleButton(interaction, client) {
       source: 'kicked', sourceChannelId: null
     });
     await interaction.update({
-      embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('✅ Request sent')
-        .setDescription(`Your request to join **${office.channel_name}** has been posted. You'll be DMd when someone responds.`)
+      embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Request sent')
+        .setDescription(`${E.check} Your request to join **${office.channel_name}** has been posted. You'll be DMd when someone responds.`)
         .setFooter({ text: 'Expires in 10 minutes if no response.' })],
       components: []
     }).catch(() => {});
@@ -468,7 +469,7 @@ export async function handleButton(interaction, client) {
     await postRequestToFeed(client, guild, office, requestId, interaction.user);
 
     await logAction(client, {
-      action: '🔓 Office Request Created',
+      action: 'Office Request Created',
       moderator: { discordId: interaction.user.id, name: interaction.user.tag },
       target: { discordId: channelId, name: office.channel_name },
       reason: `Access requested for ${office.channel_name}`,
@@ -487,8 +488,8 @@ export async function handleButton(interaction, client) {
   if (id.startsWith('office_approve_')) {
     const requestId = parseInt(id.replace('office_approve_', ''));
     const req = getRequest(requestId);
-    if (!req) return interaction.reply({ content: '❌ Request not found.', ephemeral: true });
-    if (!req.channel_id) return interaction.reply({ content: '❌ Malformed request — no office attached.', ephemeral: true });
+    if (!req) return interaction.reply({ content: `${E.cross} Request not found.`, ephemeral: true });
+    if (!req.channel_id) return interaction.reply({ content: `${E.cross} Malformed request — no office attached.`, ephemeral: true });
     return resolveApprove(interaction, client, requestId, req.channel_id);
   }
 
@@ -504,7 +505,7 @@ export async function handleButton(interaction, client) {
 
 async function resolveDeny(interaction, client, requestId) {
   const req = getRequest(requestId);
-  if (!req) return interaction.reply({ content: '❌ Request not found.', ephemeral: true });
+  if (!req) return interaction.reply({ content: `${E.cross} Request not found.`, ephemeral: true });
   if (req.status !== 'pending') {
     return interaction.reply({ content: `This request was already **${req.status}**.`, ephemeral: true });
   }
@@ -524,7 +525,7 @@ async function resolveDeny(interaction, client, requestId) {
     }
   }
   if (!authorised) {
-    return interaction.reply({ content: '❌ You must be inside a managed office (or a superuser) to deny this request.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} You must be inside a managed office (or a superuser) to deny this request.`, ephemeral: true });
   }
 
   resolveRequest(requestId, 'denied', interaction.user.tag, null);
@@ -532,8 +533,8 @@ async function resolveDeny(interaction, client, requestId) {
   const requesterUser = await client.users.fetch(req.requester_id).catch(() => null);
   if (requesterUser) {
     await requesterUser.send({
-      embeds: [new EmbedBuilder().setColor(0xEF4444).setTitle('❌ Access Denied')
-        .setDescription(`Your request was denied by ${interaction.user.tag}.`)]
+      embeds: [new EmbedBuilder().setColor(0xEF4444).setTitle('Access Denied')
+        .setDescription(`${E.cross} Your request was denied by ${interaction.user.tag}.`)]
     }).catch(() => {});
   }
 
@@ -546,12 +547,12 @@ async function resolveDeny(interaction, client, requestId) {
   }
 
   const updated = EmbedBuilder.from(interaction.message.embeds[0])
-    .setColor(0xEF4444).setTitle('❌ Request Denied')
+    .setColor(0xEF4444).setTitle('Request Denied')
     .setFooter({ text: `Denied by ${interaction.user.tag}` });
   await interaction.update({ embeds: [updated], components: [], content: null });
 
   await logAction(client, {
-    action: '❌ Office Request Denied',
+    action: 'Office Request Denied',
     moderator: { discordId: interaction.user.id, name: interaction.user.tag },
     target: { discordId: req.requester_id, name: req.requester_tag },
     reason: `Access denied${req.source === 'waiting_room' ? ' (waiting-room request)' : ''}`,
@@ -561,23 +562,23 @@ async function resolveDeny(interaction, client, requestId) {
 
 async function resolveApprove(interaction, client, requestId, officeChannelId) {
   const req = getRequest(requestId);
-  if (!req) return interaction.reply({ content: '❌ Request not found.', ephemeral: true });
+  if (!req) return interaction.reply({ content: `${E.cross} Request not found.`, ephemeral: true });
   if (req.status !== 'pending') {
     return interaction.reply({ content: `This request was already **${req.status}**.`, ephemeral: true });
   }
 
   const office = getOffice(officeChannelId);
-  if (!office) return interaction.reply({ content: '❌ Office no longer configured.', ephemeral: true });
+  if (!office) return interaction.reply({ content: `${E.cross} Office no longer configured.`, ephemeral: true });
 
   const guild = interaction.guild;
   const vc = guild.channels.cache.get(officeChannelId);
-  if (!vc) return interaction.reply({ content: '❌ Voice channel not found.', ephemeral: true });
+  if (!vc) return interaction.reply({ content: `${E.cross} Voice channel not found.`, ephemeral: true });
 
   // Authorisation: superuser OR currently in the chosen office
   const isSuper = SUPERUSER_IDS.includes(String(interaction.user.id));
   const inOffice = vc.members?.has(interaction.user.id);
   if (!isSuper && !inOffice) {
-    return interaction.reply({ content: `❌ You must be currently in <#${officeChannelId}> (or a superuser) to bring someone in there.`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} You must be currently in <#${officeChannelId}> (or a superuser) to bring someone in there.`, ephemeral: true });
   }
 
   resolveRequest(requestId, 'approved', interaction.user.tag, officeChannelId);
@@ -594,20 +595,20 @@ async function resolveApprove(interaction, client, requestId, officeChannelId) {
     await requesterMember.voice.setChannel(vc).catch(e => console.error('[Office] move failed:', e.message));
   } else {
     await requesterMember.send({
-      embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('✅ Access Approved')
-        .setDescription(`Your request to join **${office.channel_name}** was approved by ${interaction.user.tag}.\n\nYou have **60 seconds** to join the channel.`)]
+      embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Access Approved')
+        .setDescription(`${E.check} Your request to join **${office.channel_name}** was approved by ${interaction.user.tag}.\n\nYou have **60 seconds** to join the channel.`)]
     }).catch(() => {});
   }
 
   setTimeout(() => clearPass(officeChannelId, requesterMember.id), APPROVE_WINDOW_MS);
 
   const updated = EmbedBuilder.from(interaction.message.embeds[0])
-    .setColor(0x22C55E).setTitle(`✅ Brought into ${office.channel_name}`)
+    .setColor(0x22C55E).setTitle(`Brought into ${office.channel_name}`)
     .setFooter({ text: `Approved by ${interaction.user.tag}` });
   await interaction.update({ embeds: [updated], components: [], content: null });
 
   await logAction(client, {
-    action: '✅ Office Request Approved',
+    action: 'Office Request Approved',
     moderator: { discordId: interaction.user.id, name: interaction.user.tag },
     target: { discordId: req.requester_id, name: req.requester_tag },
     reason: `Access approved for ${office.channel_name}${req.source === 'waiting_room' ? ' (from waiting room)' : ''}`,

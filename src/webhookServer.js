@@ -114,6 +114,7 @@ import * as breakCmd from './commands/break.js';
 import * as idea from './commands/idea.js';
 import { handleButton as officeButton, enforceJoin as officeEnforceJoin, getOffice as officeGetOffice, getWaitingRoom as officeGetWaitingRoom, handleWaitingRoomJoin as officeHandleWRJoin, handleWaitingRoomLeave as officeHandleWRLeave } from './services/officeManager.js';
 import { logRoleAction } from './utils/logger.js';
+import { E } from './lib/emoji.js';
 
 export function startWebhookServer(client, commands, getBragWeekKey) {
   const webhookApp = express();
@@ -1906,14 +1907,14 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
         const user = await client.users.fetch(discordId).catch(() => null);
         if (user) {
           await user.send({ embeds: [new EmbedBuilder()
-            .setTitle('🔴 You Have Been Suspended')
+            .setTitle('You Have Been Suspended')
             .setColor(0xEF4444)
-            .setDescription('You have been suspended from **Community Organisation**.\n\nIf you believe this is an error, you may appeal in the Appeals Server.')
+            .setDescription(`${E.suspend} You have been suspended from **Community Organisation**.\n\nIf you believe this is an error, you may appeal in the Appeals Server.`)
             .addFields(
-              { name: '📋 Reason', value: reason || 'No reason provided', inline: false },
-              { name: '⏱️ Duration', value: durationDisplay, inline: true },
-              { name: '📅 Expires', value: expiresDisplay, inline: true },
-              { name: '👤 Actioned By', value: moderatorName || 'Staff Management', inline: true },
+              { name: 'Reason', value: reason || 'No reason provided', inline: false },
+              { name: 'Duration', value: durationDisplay, inline: true },
+              { name: 'Expires', value: expiresDisplay, inline: true },
+              { name: 'Actioned By', value: moderatorName || 'Staff Management', inline: true },
             )
             .setFooter({ text: 'Community Organisation | Staff Assistant' })
             .setTimestamp()
@@ -1922,16 +1923,16 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
       } catch {}
   
       await logAction(client, {
-        action: '🔴 Staff Suspended (Portal)',
+        action: 'Staff Suspended (Portal)',
         moderator: { discordId: moderatorId || 'PORTAL', name: moderatorName || 'Portal' },
         target: { discordId, name: targetName || discordId },
         reason: reason || 'No reason provided',
         color: 0xEF4444,
         fields: [
-          { name: '⏱️ Duration', value: durationDisplay, inline: true },
-          { name: '📅 Expires', value: expiresDisplay, inline: true },
-          { name: '👤 Actioned By', value: moderatorName || 'Portal', inline: true },
-          { name: '🌐 Source', value: source ? `CO Staff Portal — ${source}` : 'CO Staff Portal', inline: true },
+          { name: 'Duration', value: durationDisplay, inline: true },
+          { name: 'Expires', value: expiresDisplay, inline: true },
+          { name: 'Actioned By', value: moderatorName || 'Portal', inline: true },
+          { name: 'Source', value: source ? `CO Staff Portal — ${source}` : 'CO Staff Portal', inline: true },
         ]
       });
   
@@ -1947,15 +1948,15 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
             const { EmbedBuilder } = await import('discord.js');
             const user = await client.users.fetch(discordId).catch(() => null);
             if (user) await user.send({ embeds: [new EmbedBuilder()
-              .setTitle('✅ Suspension Lifted')
+              .setTitle('Suspension Lifted')
               .setColor(0x22C55E)
-              .setDescription('Your suspension from **Community Organisation** has ended and your roles have been restored.')
+              .setDescription(`${E.check} Your suspension from **Community Organisation** has ended and your roles have been restored.`)
               .setFooter({ text: 'Community Organisation | Staff Assistant' })
               .setTimestamp()
             ]});
           } catch {}
           await logAction(client, {
-            action: '✅ Suspension Lifted (Auto)',
+            action: 'Suspension Lifted (Auto)',
             moderator: { discordId: 'SYSTEM', name: 'Automated' },
             target: { discordId, name: targetName || discordId },
             reason: 'Suspension duration expired',
@@ -1993,10 +1994,10 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
           const { EmbedBuilder } = await import('discord.js');
           const user = await client.users.fetch(discordId).catch(() => null);
           if (user) await user.send({ embeds: [new EmbedBuilder()
-            .setTitle('✅ Suspension Lifted')
+            .setTitle('Suspension Lifted')
             .setColor(0x22C55E)
-            .setDescription('Your suspension from **Community Organisation** has ended and your roles have been restored.')
-            .addFields({ name: '👤 Actioned By', value: moderatorName || 'Staff Management', inline: true })
+            .setDescription(`${E.check} Your suspension from **Community Organisation** has ended and your roles have been restored.`)
+            .addFields({ name: 'Actioned By', value: moderatorName || 'Staff Management', inline: true })
             .setFooter({ text: 'Community Organisation | Staff Assistant' })
             .setTimestamp()
           ]});
@@ -2004,12 +2005,12 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
   
         const { logAction } = await import('./utils/logger.js');
         await logAction(client, {
-          action: '✅ Suspension Lifted (Portal)',
+          action: 'Suspension Lifted (Portal)',
           moderator: { discordId: 'PORTAL', name: moderatorName || 'Portal' },
           target: { discordId, name: targetName || discordId },
           reason: 'Lifted via CO Staff Portal',
           color: 0x22C55E,
-          fields: [{ name: '🌐 Source', value: source ? `CO Staff Portal — ${source}` : 'CO Staff Portal', inline: true }]
+          fields: [{ name: 'Source', value: source ? `CO Staff Portal — ${source}` : 'CO Staff Portal', inline: true }]
         });
       } catch (e) {
         console.error('[BOT WEBHOOK /unsuspend async]', e.message, e.stack);
@@ -2057,9 +2058,9 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
       try {
         const user = await client.users.fetch(assignment.assigned_to);
         await user.send({ embeds: [new EmbedBuilder()
-          .setTitle('📅 Task Deadline Extended')
+          .setTitle('Task Deadline Extended')
           .setColor(0x22C55E)
-          .setDescription(`Your task deadline for **"${assignment.title}"** has been extended to **<t:${Math.floor(new Date(new_due_date).getTime()/1000)}:F>** following an approved performance adjustment.`)
+          .setDescription(`${E.calendar} Your task deadline for **"${assignment.title}"** has been extended to **<t:${Math.floor(new Date(new_due_date).getTime()/1000)}:F>** following an approved performance adjustment.`)
           .setFooter({ text: 'Community Organisation | Staff Assistant' })
           .setTimestamp()
         ]});
@@ -2070,7 +2071,7 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
         const { getUserByDiscordId: getUser } = await import('./db.js');
         const assigneeName = getUser(assignment.assigned_to)?.display_name || assignment.assigned_to;
         const assigner = await client.users.fetch(assignment.assigned_by);
-        await assigner.send({ content: `📅 **${assigneeName}**'s task deadline for "${assignment.title}" has been extended to **<t:${Math.floor(new Date(new_due_date).getTime()/1000)}:F>** — performance adjustment approved by ${approved_by || 'admin'}.` });
+        await assigner.send({ content: `${E.calendar} **${assigneeName}**'s task deadline for "${assignment.title}" has been extended to **<t:${Math.floor(new Date(new_due_date).getTime()/1000)}:F>** — performance adjustment approved by ${approved_by || 'admin'}.` });
       } catch {}
   
       res.json({ ok: true });
@@ -2217,7 +2218,7 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
       }
   
       await logAction(client, {
-        action: `📋 Disciplinary Action (Portal): ${actionLabel}`,
+        action: `Disciplinary Action (Portal): ${actionLabel}`,
         moderator: { discordId: 'PORTAL', name: moderatorName || 'Portal Case Management' },
         target: { discordId, name: targetName || discordId },
         reason: notes || caseRef || 'No reason',

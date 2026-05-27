@@ -15,6 +15,7 @@
 // Designed to be noisy but not crashing — every handler is wrapped.
 
 import { Events, AuditLogEvent } from 'discord.js';
+import { E } from '../lib/emoji.js';
 
 const ALERT_USER_IDS = ['723199054514749450', '415922272956710912'];
 const SUPPRESS_ACTORS = new Set([
@@ -57,7 +58,7 @@ export function setupDestructionWatcher(client) {
     const exec = await executorFromAuditLog(channel.guild, AuditLogEvent.ChannelDelete, channel.id);
     if (exec && SUPPRESS_ACTORS.has(exec.id)) return;
     await alert(client,
-      `🗑️ **CHANNEL DELETED** — ${channel.guild.name}\n` +
+      `${E.cross} **CHANNEL DELETED** — ${channel.guild.name}\n` +
       `Channel: #${channel.name} (${channel.id})\n` +
       `Type: ${channel.type}\n` +
       `Executor: ${exec?.tag || exec?.id || 'unknown'}\n` +
@@ -68,7 +69,7 @@ export function setupDestructionWatcher(client) {
     const exec = await executorFromAuditLog(role.guild, AuditLogEvent.RoleDelete, role.id);
     if (exec && SUPPRESS_ACTORS.has(exec.id)) return;
     await alert(client,
-      `🗑️ **ROLE DELETED** — ${role.guild.name}\n` +
+      `${E.cross} **ROLE DELETED** — ${role.guild.name}\n` +
       `Role: ${role.name} (${role.id}) — ${role.members?.size || '?'} members had it\n` +
       `Executor: ${exec?.tag || exec?.id || 'unknown'}\n` +
       `Time: ${new Date().toUTCString()}`);
@@ -79,7 +80,7 @@ export function setupDestructionWatcher(client) {
     const exec = await executorFromAuditLog(channel.guild, AuditLogEvent.MessageBulkDelete);
     if (exec && SUPPRESS_ACTORS.has(exec.id)) return;
     await alert(client,
-      `🚮 **BULK MESSAGE DELETE** — ${channel.guild.name}\n` +
+      `${E.cross} **BULK MESSAGE DELETE** — ${channel.guild.name}\n` +
       `#${channel.name} — ${messages?.size || '?'} messages\n` +
       `Executor: ${exec?.tag || exec?.id || 'unknown'}\n` +
       `Time: ${new Date().toUTCString()}`);
@@ -89,7 +90,7 @@ export function setupDestructionWatcher(client) {
     const exec = await executorFromAuditLog(ban.guild, AuditLogEvent.MemberBanAdd, ban.user.id);
     if (exec && SUPPRESS_ACTORS.has(exec.id)) return;
     await alert(client,
-      `⛔ **MEMBER BANNED** — ${ban.guild.name}\n` +
+      `${E.ban} **MEMBER BANNED** — ${ban.guild.name}\n` +
       `Target: ${ban.user.tag} (${ban.user.id})\n` +
       `Reason: ${ban.reason || '(none)'}\n` +
       `Executor: ${exec?.tag || exec?.id || 'unknown'}\n` +
@@ -101,7 +102,7 @@ export function setupDestructionWatcher(client) {
     if (exec && SUPPRESS_ACTORS.has(exec.id)) return;
     // Unban is HIGH SIGNAL — someone undoing a security action
     await alert(client,
-      `🚨 **MEMBER UNBANNED** — ${ban.guild.name}\n` +
+      `${E.warning} **MEMBER UNBANNED** — ${ban.guild.name}\n` +
       `Target: ${ban.user.tag} (${ban.user.id})\n` +
       `Executor: ${exec?.tag || exec?.id || 'unknown'}\n` +
       `Time: ${new Date().toUTCString()}\n` +
@@ -129,7 +130,7 @@ export function setupDestructionWatcher(client) {
     if (!ALERT_ON.has(entry.action)) return;
     const actionName = Object.keys(AuditLogEvent).find(k => AuditLogEvent[k] === entry.action) || `#${entry.action}`;
     await alert(client,
-      `🛡️ **Audit log: ${actionName}** — ${guild.name}\n` +
+      `${E.shield} **Audit log: ${actionName}** — ${guild.name}\n` +
       `Target: ${entry.targetType || '?'} ${entry.targetId || ''}\n` +
       `Executor: ${entry.executor?.tag || entry.executor?.id || 'unknown'}\n` +
       `Reason: ${entry.reason || '(none)'}\n` +

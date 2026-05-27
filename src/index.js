@@ -282,9 +282,9 @@ client.once('clientReady', async () => {
           await unsuspendAcrossGuilds(client, sus.discord_id);
           liftSuspension(sus.discord_id);
           const user = await client.users.fetch(sus.discord_id).catch(() => null);
-          if (user) await user.send({ embeds: [new EmbedBuilder().setTitle('✅ Suspension Lifted').setColor(0x22C55E).setDescription('Your suspension from **Community Organisation** has ended and your roles have been restored.').setFooter({ text: 'Community Organisation | Staff Assistant' }).setTimestamp()] }).catch(() => {});
+          if (user) await user.send({ embeds: [new EmbedBuilder().setTitle('Suspension Lifted').setColor(0x22C55E).setDescription(`${E.check} Your suspension from **Community Organisation** has ended and your roles have been restored.`).setFooter({ text: 'Community Organisation | Staff Assistant' }).setTimestamp()] }).catch(() => {});
           const { logAction } = await import('./utils/logger.js');
-          await logAction(client, { action: '✅ Suspension Lifted (Auto)', moderator: { discordId: 'SYSTEM', name: 'Automated' }, target: { discordId: sus.discord_id, name: sus.discord_id }, reason: 'Suspension duration expired', color: 0x22C55E });
+          await logAction(client, { action: 'Suspension Lifted (Auto)', moderator: { discordId: 'SYSTEM', name: 'Automated' }, target: { discordId: sus.discord_id, name: sus.discord_id }, reason: 'Suspension duration expired', color: 0x22C55E });
         } catch (e) { console.error('[C-05 suspension lift error]', e.message); }
       }, remaining);
     } else {
@@ -309,7 +309,7 @@ client.once('clientReady', async () => {
           }
           db.prepare("DELETE FROM banned_users WHERE discord_id = ? AND unban_at IS NOT NULL").run(ban.discord_id);
           const { logAction } = await import('./utils/logger.js');
-          await logAction(client, { action: '✅ Temp Ban Expired — Auto Unbanned', moderator: { discordId: 'SYSTEM', name: 'Auto (Duration Expired)' }, target: { discordId: ban.discord_id, name: ban.discord_id }, reason: 'Temp ban expired', color: 0x22c55e });
+          await logAction(client, { action: 'Temp Ban Expired — Auto Unbanned', moderator: { discordId: 'SYSTEM', name: 'Auto (Duration Expired)' }, target: { discordId: ban.discord_id, name: ban.discord_id }, reason: 'Temp ban expired', color: 0x22c55e });
         } catch (e) { console.error('[C-05 ban lift error]', e.message); }
       }, remaining);
     }
@@ -324,7 +324,7 @@ client.once('clientReady', async () => {
         await unsuspendAcrossGuilds(client, sus.discord_id);
         liftSuspension(sus.discord_id);
         const user = await client.users.fetch(sus.discord_id).catch(() => null);
-        if (user) await user.send({ embeds: [new EmbedBuilder().setTitle('✅ Suspension Lifted').setColor(0x22C55E).setDescription('Your suspension has ended.').setFooter({ text: 'Community Organisation | Staff Assistant' }).setTimestamp()] }).catch(() => {});
+        if (user) await user.send({ embeds: [new EmbedBuilder().setTitle('Suspension Lifted').setColor(0x22C55E).setDescription(`${E.check} Your suspension has ended.`).setFooter({ text: 'Community Organisation | Staff Assistant' }).setTimestamp()] }).catch(() => {});
       }
       const expiredBans = db.prepare("SELECT * FROM banned_users WHERE unban_at IS NOT NULL AND active = 1 AND unban_at <= ?").all(new Date(now).toISOString());
       for (const ban of expiredBans) {
@@ -396,9 +396,9 @@ client.once('clientReady', async () => {
           try {
             const assignee = await client.users.fetch(a.assigned_to);
             await assignee.send({ embeds: [new EmbedBuilder()
-              .setTitle('⚠️ OVERDUE TASK')
+              .setTitle('OVERDUE TASK')
               .setColor(0xEF4444)
-              .setDescription(`Your assignment **"${a.title}"** was due ${Math.round(hoursOverdue)} hour(s) ago and has not been marked complete.\n\nPlease complete it immediately or request an extension via the portal.`)
+              .setDescription(`${E.warning} Your assignment **"${a.title}"** was due ${Math.round(hoursOverdue)} hour(s) ago and has not been marked complete.\n\nPlease complete it immediately or request an extension via the portal.`)
               .setFooter({ text: `ASN-${a.id} | Community Organisation` })
               .setTimestamp()
             ]});
@@ -408,7 +408,7 @@ client.once('clientReady', async () => {
           try {
             const assigner = await client.users.fetch(a.assigned_by);
             const assigneeName = getUser(a.assigned_to)?.display_name || a.assigned_to;
-            await assigner.send({ content: `⚠️ **OVERDUE TASK** — "${a.title}" assigned to **${assigneeName}** is now overdue. They have been notified.` });
+            await assigner.send({ content: `${E.warning} **OVERDUE TASK** — "${a.title}" assigned to **${assigneeName}** is now overdue. They have been notified.` });
           } catch {}
         }
 
@@ -454,11 +454,11 @@ client.once('clientReady', async () => {
               // DM both parties
               try {
                 const assignee = await client.users.fetch(a.assigned_to);
-                await assignee.send({ content: `📋 **Case raised:** ${data.case_number} — Your assignment "${a.title}" is 24+ hours overdue. A case has been raised with DMSPC.` });
+                await assignee.send({ content: `${E.logs} **Case raised:** ${data.case_number} — Your assignment "${a.title}" is 24+ hours overdue. A case has been raised with DMSPC.` });
               } catch {}
               try {
                 const assigner = await client.users.fetch(a.assigned_by);
-                await assigner.send({ content: `📋 **Case raised:** ${data.case_number} — Assignment "${a.title}" assigned to ${assigneeName} is 24+ hours overdue.` });
+                await assigner.send({ content: `${E.logs} **Case raised:** ${data.case_number} — Assignment "${a.title}" assigned to ${assigneeName} is 24+ hours overdue.` });
               } catch {}
             }
           } catch (e) { console.error('[assign overdue] case raise error:', e.message); }
@@ -467,9 +467,9 @@ client.once('clientReady', async () => {
           try {
             const assignee = await client.users.fetch(a.assigned_to);
             await assignee.send({ embeds: [new EmbedBuilder()
-              .setTitle('🔴 ESCALATION — 24+ Hours Overdue')
+              .setTitle('ESCALATION — 24+ Hours Overdue')
               .setColor(0xEF4444)
-              .setDescription(`Your assignment **"${a.title}"** is now **${Math.round(hoursOverdue)} hours overdue**. A case has been raised and this may force a Black grade override on your Activity Points this week.`)
+              .setDescription(`${E.cross} Your assignment **"${a.title}"** is now **${Math.round(hoursOverdue)} hours overdue**. A case has been raised and this may force a Black grade override on your Activity Points this week.`)
               .setFooter({ text: `ASN-${a.id} | Community Organisation` })
               .setTimestamp()
             ]});
@@ -579,8 +579,8 @@ client.once('clientReady', async () => {
           const user = await client.users.fetch(staff.discord_id);
           await user.send({ embeds: [new EmbedBuilder()
             .setColor(0xF59E0B)
-            .setTitle('⏰ No Activity Points yet — week closes today')
-            .setDescription(`Hi ${staff.display_name || staff.full_name}!\n\nYou haven't accrued any Activity Points this week. The week closes at **midnight UTC tonight (Sunday)** and a zero week defaults to a **Black** grade.\n\nQuick wins: send some messages, join voice for 30 min, or submit a tasks/co-work claim from the Performance page.`)
+            .setTitle('No Activity Points yet — week closes today')
+            .setDescription(`${E.pending} Hi ${staff.display_name || staff.full_name}!\n\nYou haven't accrued any Activity Points this week. The week closes at **midnight UTC tonight (Sunday)** and a zero week defaults to a **Black** grade.\n\nQuick wins: send some messages, join voice for 30 min, or submit a tasks/co-work claim from the Performance page.`)
             .addFields({ name: 'Open', value: '[portal.communityorg.co.uk/performance](https://portal.communityorg.co.uk/performance?tab=activity)', inline: false })
             .setFooter({ text: 'Community Organisation | Activity Points' })
             .setTimestamp()
@@ -639,9 +639,9 @@ client.once('clientReady', async () => {
           return `**${i.name}** — ${parts.join(' · ')}`;
         });
         const embed = new EmbedBuilder()
-          .setTitle('🩺 Daily server-health digest — anomalies')
+          .setTitle('Daily server-health digest — anomalies')
           .setColor(0xf59e0b)
-          .setDescription(lines.join('\n'))
+          .setDescription(`${E.server} ` + lines.join('\n'))
           .setFooter({ text: 'Run /server-health for the live view' })
           .setTimestamp();
         for (const id of SUPERUSER_IDS) {
@@ -975,8 +975,8 @@ client.once('clientReady', async () => {
             const achievementText = achievementMap[award.award_name] || `Your achievement value: **${winner.value}**.`;
             await user.send({ embeds: [new EmbedBuilder()
               .setColor(0xC9A84C)
-              .setTitle('🏆 Weekly Award')
-              .setDescription(`Congratulations **${winner.display_name}**! You have won this week's **${award.award_name}** award.`)
+              .setTitle('Weekly Award')
+              .setDescription(`${E.kudos} Congratulations **${winner.display_name}**! You have won this week's **${award.award_name}** award.`)
               .addFields(
                 { name: 'Award', value: award.award_name, inline: true },
                 { name: 'Shop Points Earned', value: `**+${award.award_points} pts**`, inline: true },
@@ -997,7 +997,8 @@ client.once('clientReady', async () => {
         const ch = await client.channels.fetch(AWARDS_CHANNEL);
         await ch.send({ embeds: [new EmbedBuilder()
           .setColor(0xC9A84C)
-          .setTitle(`🏆 CO Weekly Awards — Week of ${prevWeekKey}`)
+          .setTitle(`CO Weekly Awards — Week of ${prevWeekKey}`)
+          .setDescription(`${E.kudos} **CO Weekly Awards — Week of ${prevWeekKey}**`)
           .addFields(fields.slice(0, 25))
           .setFooter({ text: 'Points added to monthly shop balances. Shop opens on the 30th.' })
           .setTimestamp()
@@ -1029,7 +1030,7 @@ client.once('clientReady', async () => {
   }
 
   const GRADE_COLOURS = { green: 0x1A6B3C, amber: 0xC9A84C, red: 0x8B1A1A, black: 0x2C2C2C, exempt: 0x3498DB };
-  const GRADE_EMOJIS = { green: '🟢', amber: '🟡', red: '🔴', black: '⚫', exempt: '🔵' };
+  const GRADE_EMOJIS = { green: E.check, amber: E.warning, red: E.cross, black: E.cross, exempt: E.info };
   const GRADE_MESSAGES = {
     green: 'Well done — you hit your Green target this week.',
     amber: "Close — you were within range but didn't reach Green.",
@@ -1066,7 +1067,7 @@ client.once('clientReady', async () => {
         try {
           const user = await client.users.fetch(g.discord_id);
           const grade = g.grade || 'black';
-          const emoji = GRADE_EMOJIS[grade] || '⚫';
+          const emoji = GRADE_EMOJIS[grade] || E.cross;
 
           // Fetch breakdown for this user
           let breakdownText = 'No activity recorded this week.';
@@ -1084,16 +1085,16 @@ client.once('clientReady', async () => {
             { name: 'Grade', value: `**${grade.toUpperCase()}**`, inline: true },
             { name: 'Total Points', value: `**${g.total_points}** / ${g.green_target} pts`, inline: true },
             { name: 'Categories Met', value: `${g.categories_met} / 3`, inline: true },
-            { name: '📊 Breakdown', value: breakdownText, inline: false },
+            { name: 'Breakdown', value: breakdownText, inline: false },
           ];
 
           if (grade === 'black' || grade === 'red') {
-            fields.push({ name: '⚠️ Action Required', value: 'Please contact your supervisor or DMSPC if you have questions about this grade.', inline: false });
+            fields.push({ name: 'Action Required', value: `${E.warning} Please contact your supervisor or DMSPC if you have questions about this grade.`, inline: false });
           }
 
           const embed = new EmbedBuilder()
-            .setTitle(`${emoji} Your Weekly Grade — ${prevWeekKey}`)
-            .setDescription(GRADE_MESSAGES[grade] || '')
+            .setTitle(`Your Weekly Grade — ${prevWeekKey}`)
+            .setDescription(`${emoji} ${GRADE_MESSAGES[grade] || ''}`)
             .setColor(GRADE_COLOURS[grade] || 0x2C2C2C)
             .addFields(fields)
             .setFooter({ text: grade === 'green' ? 'Keep it up! Shop opens on the 30th.' : 'Visit the portal to review your activity and submit any outstanding claims.' })
@@ -1145,8 +1146,8 @@ client.once('clientReady', async () => {
 
       const embed = new EmbedBuilder()
         .setColor(0x5865F2)
-        .setTitle('📊 Staff Message Leaderboard')
-        .setDescription(lines.join('\n'))
+        .setTitle('Staff Message Leaderboard')
+        .setDescription(`${E.aps} ` + lines.join('\n'))
         .addFields(
           { name: 'Week', value: weekKey, inline: true },
           { name: 'Total Staff Messages', value: String(totalAll), inline: true },
@@ -1219,8 +1220,8 @@ client.once('clientReady', async () => {
 
       const embed = new EmbedBuilder()
         .setColor(0x22c55e)
-        .setTitle('🎙️ Staff Voice Channel Leaderboard')
-        .setDescription(lines.join('\n'))
+        .setTitle('Staff Voice Channel Leaderboard')
+        .setDescription(`${E.aps} ` + lines.join('\n'))
         .addFields(
           { name: 'Week', value: weekKey, inline: true },
           { name: 'Total VC Time', value: fmtTime(totalSecs), inline: true },
@@ -1276,8 +1277,8 @@ client.once('clientReady', async () => {
 
       const embed = new EmbedBuilder()
         .setColor(0xf59e0b)
-        .setTitle('⚡ Staff Commands Used Leaderboard')
-        .setDescription(lines.join('\n'))
+        .setTitle('Staff Commands Used Leaderboard')
+        .setDescription(`${E.aps} ` + lines.join('\n'))
         .addFields(
           { name: 'Week', value: weekKey, inline: true },
           { name: 'Total Commands', value: String(totalCmds), inline: true },
@@ -1325,8 +1326,8 @@ client.once('clientReady', async () => {
 
       const embed = new EmbedBuilder()
         .setColor(0xec4899)
-        .setTitle('✉️ Staff DMs Sent Leaderboard')
-        .setDescription(lines.join('\n'))
+        .setTitle('Staff DMs Sent Leaderboard')
+        .setDescription(`${E.dm} ` + lines.join('\n'))
         .addFields(
           { name: 'Week', value: weekKey, inline: true },
           { name: 'Total DMs', value: String(totalDMs), inline: true },
@@ -1384,8 +1385,8 @@ client.once('clientReady', async () => {
 
       const embed = new EmbedBuilder()
         .setColor(0x06b6d4)
-        .setTitle('📋 Assignments Completed Leaderboard')
-        .setDescription(lines.join('\n'))
+        .setTitle('Assignments Completed Leaderboard')
+        .setDescription(`${E.logs} ` + lines.join('\n'))
         .addFields(
           { name: 'Week', value: weekKey, inline: true },
           { name: 'Total Completed', value: String(total), inline: true },
@@ -1460,14 +1461,14 @@ client.once('clientReady', async () => {
 
       const lines = streaks.slice(0, 15).map((r, i) => {
         const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `**${i + 1}.**`;
-        const fire = r.streak >= 7 ? ' 🔥' : r.streak >= 3 ? ' ⭐' : '';
+        const fire = r.streak >= 7 ? ` ${E.star}` : r.streak >= 3 ? ` ${E.star}` : '';
         return `${medal} ${r.name} — **${r.streak}** day${r.streak !== 1 ? 's' : ''}${fire}`;
       });
 
       const embed = new EmbedBuilder()
         .setColor(0xef4444)
-        .setTitle('🔥 Login Streak Leaderboard')
-        .setDescription(lines.join('\n'))
+        .setTitle('Login Streak Leaderboard')
+        .setDescription(`${E.star} ` + lines.join('\n'))
         .addFields(
           { name: 'Active Streaks', value: String(streaks.length), inline: true },
           { name: 'Longest', value: `${streaks[0].streak} days`, inline: true },
@@ -1555,8 +1556,8 @@ client.once('clientReady', async () => {
 
           await targetUser.send({ embeds: [new EmbedBuilder()
             .setColor(0x5865F2)
-            .setTitle('⏰ Reminder')
-            .setDescription(reminder.message)
+            .setTitle('Reminder')
+            .setDescription(`${E.pending} ` + reminder.message)
             .addFields(requesterUser ? [{ name: 'Set by', value: `<@${requesterUser.id}>`, inline: true }] : [])
             .setFooter({ text: 'Community Organisation | Reminder' })
             .setTimestamp()
@@ -1629,9 +1630,9 @@ client.once('clientReady', async () => {
               const winners = options.filter((_, i) => (votes[String(i)] || []).length === maxVotes);
               await channel.send({
                 embeds: [new EmbedBuilder()
-                  .setTitle('📊 Poll Results')
+                  .setTitle('Poll Results')
                   .setColor(0x22C55E)
-                  .setDescription(`**${poll.question}**\n\nWinner: **${winners.join(', ')}** with ${maxVotes} vote${maxVotes !== 1 ? 's' : ''} (${totalVotes} total)`)
+                  .setDescription(`${E.aps} **${poll.question}**\n\nWinner: **${winners.join(', ')}** with ${maxVotes} vote${maxVotes !== 1 ? 's' : ''} (${totalVotes} total)`)
                   .setTimestamp()
                 ]
               });
@@ -1659,9 +1660,9 @@ client.once('clientReady', async () => {
             const senderName = senderPortal?.display_name || 'A staff member';
 
             const embed = new EmbedBuilder()
-              .setTitle(scheduled.subject ? `📨 ${scheduled.subject}` : '📨 Scheduled Message')
+              .setTitle(scheduled.subject ? scheduled.subject : 'Scheduled Message')
               .setColor(0x5865F2)
-              .setDescription(scheduled.message)
+              .setDescription(`${E.dm} ` + scheduled.message)
               .addFields({ name: 'From', value: `${senderName} (<@${scheduled.sender_id}>)`, inline: true })
               .setFooter({ text: 'Community Organisation | Scheduled DM' })
               .setTimestamp();
@@ -1760,18 +1761,18 @@ client.once('clientReady', async () => {
       } catch {}
 
       const embed = new EmbedBuilder()
-        .setTitle('📊 Weekly Moderation Summary')
+        .setTitle('Weekly Moderation Summary')
         .setColor(0x5865F2)
-        .setDescription(`Summary for the past 7 days (ending <t:${Math.floor(Date.now() / 1000)}:D>)`)
+        .setDescription(`${E.aps} Summary for the past 7 days (ending <t:${Math.floor(Date.now() / 1000)}:D>)`)
         .addFields(
-          { name: '⚠️ Infractions Issued', value: String(infractions), inline: true },
-          { name: '🔨 Bans', value: String(bans), inline: true },
-          { name: '🌐 Global Bans', value: String(globalBans), inline: true },
-          { name: '🔴 Suspensions', value: String(suspensions), inline: true },
-          { name: '📋 Cases Opened', value: String(casesOpened), inline: true },
-          { name: '✅ Cases Closed', value: String(casesClosed), inline: true },
-          { name: '📌 Assignments Completed', value: String(assignmentsCompleted), inline: true },
-          { name: '✔️ Staff Verified', value: String(staffVerified), inline: true },
+          { name: 'Infractions Issued', value: `${E.warning} ${String(infractions)}`, inline: true },
+          { name: 'Bans', value: `${E.ban} ${String(bans)}`, inline: true },
+          { name: 'Global Bans', value: `${E.gban} ${String(globalBans)}`, inline: true },
+          { name: 'Suspensions', value: `${E.suspend} ${String(suspensions)}`, inline: true },
+          { name: 'Cases Opened', value: `${E.logs} ${String(casesOpened)}`, inline: true },
+          { name: 'Cases Closed', value: `${E.check} ${String(casesClosed)}`, inline: true },
+          { name: 'Assignments Completed', value: `${E.logs} ${String(assignmentsCompleted)}`, inline: true },
+          { name: 'Staff Verified', value: `${E.check} ${String(staffVerified)}`, inline: true },
         )
         .setFooter({ text: 'Community Organisation | Weekly Report' })
         .setTimestamp();
@@ -1797,9 +1798,9 @@ client.once('clientReady', async () => {
         portalDown = false;
         console.log('[Health] Portal recovered');
         const embed = new EmbedBuilder()
-          .setTitle('✅ Portal Recovered')
+          .setTitle('Portal Recovered')
           .setColor(0x22C55E)
-          .setDescription('The CO Staff Portal (`localhost:3016`) is back online.')
+          .setDescription(`${E.check} The CO Staff Portal (\`localhost:3016\`) is back online.`)
           .setTimestamp()
           .setFooter({ text: 'Community Organisation | Health Monitor' });
         await sendToWatchedUsers(client, embed);
@@ -1809,9 +1810,9 @@ client.once('clientReady', async () => {
         portalDown = true;
         console.error('[Health] Portal is DOWN:', e.message);
         const embed = new EmbedBuilder()
-          .setTitle('🔴 Portal DOWN')
+          .setTitle('Portal DOWN')
           .setColor(0xEF4444)
-          .setDescription(`The CO Staff Portal (\`localhost:3016\`) is not responding.\n\n**Error:** ${e.message}`)
+          .setDescription(`${E.cross} The CO Staff Portal (\`localhost:3016\`) is not responding.\n\n**Error:** ${e.message}`)
           .setTimestamp()
           .setFooter({ text: 'Community Organisation | Health Monitor' });
         await sendToWatchedUsers(client, embed);
@@ -1834,7 +1835,7 @@ client.on('interactionCreate', async interaction => {
     // Allow /verify in the verification channel as well
     const isVerifyInVerificationChannel = interaction.commandName === 'verify' && interaction.channelId === VERIFICATION_CHANNEL_ID;
     if (interaction.guildId === COMMAND_CHANNEL_GUILD && interaction.channelId !== COMMAND_CHANNEL_ID && !COMMAND_SUPERUSERS.includes(interaction.user.id) && !isVerifyInVerificationChannel) {
-      return interaction.reply({ content: `❌ Bot commands can only be used in <#${COMMAND_CHANNEL_ID}>.`, ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Bot commands can only be used in <#${COMMAND_CHANNEL_ID}>.`, ephemeral: true });
     }
 
     // Maintenance gate — during an active bot-maintenance window, only superusers may run commands
@@ -1849,9 +1850,9 @@ client.on('interactionCreate', async interaction => {
       ).get();
       if (maint && !COMMAND_SUPERUSERS.includes(interaction.user.id)) {
         const embed = new EmbedBuilder()
-          .setTitle('🛠️ Bot Maintenance In Progress')
+          .setTitle('Bot Maintenance In Progress')
           .setColor(0xC9A84C)
-          .setDescription(maint.description || 'The CO Discord Bot is undergoing scheduled maintenance. Commands are restricted to superusers until the window closes.')
+          .setDescription(`${E.bot} ` + (maint.description || 'The CO Discord Bot is undergoing scheduled maintenance. Commands are restricted to superusers until the window closes.'))
           .addFields(
             { name: 'Window', value: `<t:${Math.floor(new Date(maint.starts_at + 'Z').getTime()/1000)}:f> → <t:${Math.floor(new Date(maint.ends_at + 'Z').getTime()/1000)}:f>`, inline: false },
             { name: 'Status', value: 'See portal.communityorg.co.uk/status', inline: false },
@@ -1882,7 +1883,7 @@ client.on('interactionCreate', async interaction => {
       console.error(`[CO Bot] Command error (${interaction.commandName}):`, e.message);
       console.error(`[CO Bot] Stack:`, e.stack);
       if (e.errors) for (const sub of e.errors) console.error(`[CO Bot] sub-error:`, sub?.message, sub?.stack);
-      const msg = { content: '❌ An error occurred. Please try again or contact an administrator.', ephemeral: true };
+      const msg = { content: `${E.cross} An error occurred. Please try again or contact an administrator.`, ephemeral: true };
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp(msg).catch(() => {});
       } else {
@@ -1913,13 +1914,14 @@ client.on('interactionCreate', async interaction => {
       if (logChannel) {
         const options = interaction.options?._hoistedOptions?.map(o => `**${o.name}:** ${o.value}`).join('\n') || '';
         const embed = new EmbedBuilder()
-          .setTitle(success ? `✅ Command Executed` : `❌ Command Failed`)
+          .setTitle(success ? `Command Executed` : `Command Failed`)
           .setColor(success ? 0x22c55e : 0xef4444)
+          .setDescription(success ? `${E.check} **Command Executed**` : `${E.cross} **Command Failed**`)
           .addFields(
             { name: 'Command', value: `/${interaction.commandName}`, inline: true },
             { name: 'User', value: `${portalUser?.display_name || interaction.user.username} (<@${interaction.user.id}>)`, inline: true },
             { name: 'Guild', value: interaction.guild?.name || 'DM', inline: true },
-            { name: 'Status', value: success ? '✅ Success' : '❌ Failed', inline: true },
+            { name: 'Status', value: success ? `${E.check} Success` : `${E.cross} Failed`, inline: true },
             ...(options ? [{ name: 'Options', value: options, inline: false }] : []),
             ...(errorMsg ? [{ name: 'Error', value: String(errorMsg).slice(0, 500), inline: false }] : []),
           )
@@ -2008,13 +2010,13 @@ client.on('interactionCreate', async interaction => {
 
         if (response.ok) {
           await interaction.update({
-            content: `✅ NID submitted successfully. Case reference: **${data.case_ref}**\n[View in Portal](${process.env.PORTAL_URL}/cases)`,
+            content: `${E.check} NID submitted successfully. Case reference: **${data.case_ref}**\n[View in Portal](${process.env.PORTAL_URL}/cases)`,
             embeds: [], components: []
           });
 
           const { logAction: nidLog } = await import('./utils/logger.js');
           await nidLog(client, {
-            action: '📋 NID Submitted',
+            action: 'NID Submitted',
             target: { discordId: userId, name: userId },
             moderator: { discordId: interaction.user.id, name: interaction.user.username },
             color: 0xF59E0B,
@@ -2022,10 +2024,10 @@ client.on('interactionCreate', async interaction => {
             guildId: interaction.guildId
           });
         } else {
-          await interaction.update({ content: `❌ Failed: ${data.error}`, embeds: [], components: [] });
+          await interaction.update({ content: `${E.cross} Failed: ${data.error}`, embeds: [], components: [] });
         }
       } catch (e) {
-        await interaction.update({ content: `❌ Error: ${e.message}`, embeds: [], components: [] });
+        await interaction.update({ content: `${E.cross} Error: ${e.message}`, embeds: [], components: [] });
       }
     }
 
@@ -2041,7 +2043,7 @@ client.on('interactionCreate', async interaction => {
       const acknowledgerName = interaction.user.username;
 
       await interaction.update({
-        content: `✅ **Acknowledged.** The sender has been notified that you have read this message.`,
+        content: `${E.check} **Acknowledged.** The sender has been notified that you have read this message.`,
         embeds: [],
         components: []
       });
@@ -2051,9 +2053,9 @@ client.on('interactionCreate', async interaction => {
         if (sender) {
           await sender.send({
             embeds: [new EmbedBuilder()
-              .setTitle('📧 Acknowledgement Received')
+              .setTitle('Acknowledgement Received')
               .setColor(0x22c55e)
-              .setDescription(`**${acknowledgerName}** (<@${interaction.user.id}>) has confirmed reading your DM.`)
+              .setDescription(`${E.dm} **${acknowledgerName}** (<@${interaction.user.id}>) has confirmed reading your DM.`)
               .setTimestamp()
             ]
           });
@@ -2083,14 +2085,14 @@ client.on('interactionCreate', async interaction => {
         // Disable the buttons on the original DM
         try {
           const disabled = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('case_acked').setLabel(`✅ Acknowledged`).setStyle(3).setDisabled(true),
+            new ButtonBuilder().setCustomId('case_acked').setLabel(`Acknowledged`).setStyle(3).setDisabled(true),
             new ButtonBuilder().setCustomId('case_view_noop').setLabel('Open case').setStyle(2).setDisabled(true),
           );
           await interaction.message.edit({ components: [disabled] });
         } catch (e) {}
-        await interaction.followUp({ content: `✅ Acknowledgement recorded on **${data.case_number || 'the case'}**. Thanks.`, ephemeral: true });
+        await interaction.followUp({ content: `${E.check} Acknowledgement recorded on **${data.case_number || 'the case'}**. Thanks.`, ephemeral: true });
       } catch (e) {
-        await interaction.followUp({ content: `❌ Couldn't record acknowledgement: ${e.message}`, ephemeral: true });
+        await interaction.followUp({ content: `${E.cross} Couldn't record acknowledgement: ${e.message}`, ephemeral: true });
       }
       return;
     }
@@ -2116,7 +2118,7 @@ client.on('interactionCreate', async interaction => {
         const isEob = staffData?.department === 'Executive Operations Board' || (staffData?.auth_level >= 99);
 
         if (!isEob) {
-          await interaction.followUp({ content: '❌ You do not have permission to action shop redemptions.', ephemeral: true });
+          await interaction.followUp({ content: `${E.cross} You do not have permission to action shop redemptions.`, ephemeral: true });
           return;
         }
 
@@ -2132,12 +2134,12 @@ client.on('interactionCreate', async interaction => {
         const portalData = await portalRes.json();
 
         if (!portalRes.ok) {
-          await interaction.followUp({ content: `❌ ${portalData.error || 'Action failed'}`, ephemeral: true });
+          await interaction.followUp({ content: `${E.cross} ${portalData.error || 'Action failed'}`, ephemeral: true });
           return;
         }
 
         const actionerName = interaction.user.globalName || interaction.user.username;
-        const actionLabel = isApprove ? `✅ Approved by ${actionerName}` : `❌ Declined by ${actionerName}`;
+        const actionLabel = isApprove ? `Approved by ${actionerName}` : `Declined by ${actionerName}`;
 
         // Disable buttons on ALL sent DMs for this redemption
         const botMessageIds = portalData.bot_message_ids || [];
@@ -2167,7 +2169,7 @@ client.on('interactionCreate', async interaction => {
 
       } catch (e) {
         console.error('[Shop Button]', e.message);
-        try { await interaction.followUp({ content: `❌ Error: ${e.message}`, ephemeral: true }); } catch {}
+        try { await interaction.followUp({ content: `${E.cross} Error: ${e.message}`, ephemeral: true }); } catch {}
       }
       return;
     }
@@ -2177,7 +2179,7 @@ client.on('interactionCreate', async interaction => {
       // Fetch guild members for select menu
       const guild = interaction.guild;
       if (!guild) {
-        await interaction.update({ content: '❌ This command must be used in a server.', components: [] });
+        await interaction.update({ content: `${E.cross} This command must be used in a server.`, components: [] });
         return;
       }
 
@@ -2193,7 +2195,7 @@ client.on('interactionCreate', async interaction => {
         .slice(0, 25);
 
       if (members.length === 0) {
-        await interaction.update({ content: '❌ No members found in this server.', components: [] });
+        await interaction.update({ content: `${E.cross} No members found in this server.`, components: [] });
         return;
       }
 
@@ -2299,9 +2301,9 @@ client.on('interactionCreate', async interaction => {
       await interaction.update({
         content: null,
         embeds: [new EmbedBuilder()
-          .setTitle(`📋 DM Exemptions (${exempts.length})`)
+          .setTitle(`DM Exemptions (${exempts.length})`)
           .setColor(0x22c55e)
-          .setDescription(rows.join('\n\n'))
+          .setDescription(`${E.logs} ` + rows.join('\n\n'))
           .setFooter({ text: 'Community Organisation | Staff Assistant' })
           .setTimestamp()
         ],
@@ -2325,9 +2327,9 @@ client.on('interactionCreate', async interaction => {
       await interaction.update({
         content: null,
         embeds: [new EmbedBuilder()
-          .setTitle(`📋 DM Exemptions (${exempts.length})`)
+          .setTitle(`DM Exemptions (${exempts.length})`)
           .setColor(0x5865F2)
-          .setDescription(rows.join('\n\n'))
+          .setDescription(`${E.logs} ` + rows.join('\n\n'))
           .setFooter({ text: 'Community Organisation | Staff Assistant' })
           .setTimestamp()
         ],
@@ -2445,7 +2447,7 @@ client.on('interactionCreate', async interaction => {
 
       const { logAction: dmLog } = await import('./utils/logger.js');
       await dmLog(client, {
-        action: '✅ DM Exemption Added',
+        action: 'DM Exemption Added',
         target: { discordId: userId, name: displayName },
         moderator: { discordId: interaction.user.id, name: interaction.user.username },
         color: 0x22C55E,
@@ -2461,9 +2463,9 @@ client.on('interactionCreate', async interaction => {
       await interaction.update({
         content: null,
         embeds: [new EmbedBuilder()
-          .setTitle(`📋 DM Exemptions (${exempts.length})`)
+          .setTitle(`DM Exemptions (${exempts.length})`)
           .setColor(0x22c55e)
-          .setDescription(exempts.length > 0 ? rows.join('\n\n') : 'No users are currently exempt.')
+          .setDescription(`${E.logs} ` + (exempts.length > 0 ? rows.join('\n\n') : 'No users are currently exempt.'))
           .setFooter({ text: 'Community Organisation | Staff Assistant' })
           .setTimestamp()
         ],
@@ -2485,7 +2487,7 @@ client.on('interactionCreate', async interaction => {
 
       const { logAction: dmLogRem } = await import('./utils/logger.js');
       await dmLogRem(client, {
-        action: '❌ DM Exemption Removed',
+        action: 'DM Exemption Removed',
         target: { discordId: userId, name: userId },
         moderator: { discordId: interaction.user.id, name: interaction.user.username },
         color: 0xEF4444,
@@ -2501,9 +2503,9 @@ client.on('interactionCreate', async interaction => {
       await interaction.update({
         content: null,
         embeds: [new EmbedBuilder()
-          .setTitle(`📋 DM Exemptions (${exempts.length})`)
+          .setTitle(`DM Exemptions (${exempts.length})`)
           .setColor(0x22c55e)
-          .setDescription(exempts.length > 0 ? rows.join('\n\n') : 'No users are currently exempt.')
+          .setDescription(`${E.logs} ` + (exempts.length > 0 ? rows.join('\n\n') : 'No users are currently exempt.'))
           .setFooter({ text: 'Community Organisation | Staff Assistant' })
           .setTimestamp()
         ],
@@ -2518,7 +2520,7 @@ client.on('interactionCreate', async interaction => {
   }
   } catch (e) {
     console.error('[interactionCreate] Unhandled error:', e.message);
-    const msg = { content: '❌ An unexpected error occurred. Please try again.', ephemeral: true };
+    const msg = { content: `${E.cross} An unexpected error occurred. Please try again.`, ephemeral: true };
     try {
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp(msg).catch(() => {});
@@ -2686,8 +2688,8 @@ client.on('messageCreate', async (message) => {
             WHERE guild_id = ? AND channel_id = ?
           `).run(newHighScore, countChannel.current_count, message.guild.id, message.channel.id);
           await message.channel.send(
-            `❌ <@${message.author.id}> counted twice in a row and ruined the count at **${countChannel.current_count}**! The next number is **1**.\n` +
-            (newHighScore > 0 ? `🏆 High score: **${newHighScore}**` : '')
+            `${E.cross} <@${message.author.id}> counted twice in a row and ruined the count at **${countChannel.current_count}**! The next number is **1**.\n` +
+            (newHighScore > 0 ? `${E.kudos} High score: **${newHighScore}**` : '')
           );
           return;
         }
@@ -2702,8 +2704,8 @@ client.on('messageCreate', async (message) => {
             WHERE guild_id = ? AND channel_id = ?
           `).run(newHighScore, countChannel.current_count, message.guild.id, message.channel.id);
           await message.channel.send(
-            `❌ <@${message.author.id}> ruined the count at **${countChannel.current_count}**! The next number was **${expected}**.\n` +
-            (newHighScore > 0 ? `🏆 High score: **${newHighScore}**` : '')
+            `${E.cross} <@${message.author.id}> ruined the count at **${countChannel.current_count}**! The next number was **${expected}**.\n` +
+            (newHighScore > 0 ? `${E.kudos} High score: **${newHighScore}**` : '')
           );
           return;
         }
@@ -2718,7 +2720,7 @@ client.on('messageCreate', async (message) => {
 
         if (value % 1000 === 0) {
           await message.react('🎉').catch(() => {});
-          await message.channel.send(`🎉 **${value}!** Amazing!`);
+          await message.channel.send(`${E.kudos} **${value}!** Amazing!`);
         } else if (value % 100 === 0) {
           await message.react('🔥').catch(() => {});
         } else {
@@ -2753,7 +2755,7 @@ client.on('messageCreate', async (message) => {
             ? `weekly AI cap (${r.used.toLocaleString()} / ${r.cap.toLocaleString()} messages)`
             : `5-hour session AI cap (${r.used.toLocaleString()} / ${r.cap.toLocaleString()} messages)`;
           await message.reply({
-            content: `⛔ Atlas can't reply right now — you've hit your ${reasonText}. Resets in ~${mins}m. See https://portal.communityorg.co.uk/usage for details.`,
+            content: `${E.cross} Atlas can't reply right now — you've hit your ${reasonText}. Resets in ~${mins}m. See https://portal.communityorg.co.uk/usage for details.`,
             allowedMentions: { repliedUser: false },
           }).catch(() => {});
         }
