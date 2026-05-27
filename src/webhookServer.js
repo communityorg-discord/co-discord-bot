@@ -144,7 +144,19 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
       ping: client?.ws?.ping ?? null,
     });
   });
-  
+
+  // GET /api/bot/admin-commands — the CO prefix admin command reference, for
+  // the dev portal to merge into its unified (USGRP + CO) command list.
+  webhookApp.get('/api/bot/admin-commands', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    try {
+      const { commandList } = await import('./admin/registry.js');
+      res.json({ commands: commandList() });
+    } catch (e) {
+      res.status(500).json({ error: e.message, commands: [] });
+    }
+  });
+
   // POST /atlas-webhook — single entrypoint for portal-side Atlas actions
   // that need to touch Discord (DMs, channel posts, embeds). Auth: same
   // x-bot-secret as every other inbound webhook. The portal's atlasAgent

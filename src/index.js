@@ -3264,5 +3264,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
 // instance for port 3017.
 if (!process.argv.includes('--register')) startWebhookServer(client, commands, getBragWeekKey);
 
+// Old-style prefix admin commands (Dion + Evan only).
+import('./admin/prefix.js').then(({ setupAdminPrefix }) => setupAdminPrefix(client)).catch(e => console.error('[co-admin] setup failed:', e.message));
 
 client.login(process.env.DISCORD_BOT_TOKEN);
