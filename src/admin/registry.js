@@ -207,13 +207,83 @@ export const COMMANDS = {
                 note: `**${list.length}** infraction${list.length === 1 ? '' : 's'} on record for <@${id}>.\n\n${lines.join('\n')}`.slice(0, 4000) };
         } },
 
+    // ── Moderation (Discord timeout) ──────────────────────────────
+    timeout: { group: 'Moderation', usage: '.timeout <@user|id> <minutes> [reason]', desc: 'Time a member out (Discord mute) for N minutes.',
+        async run({ args, rest, message, authorId, authorName }) {
+            const id = resolveId(args[0]); const mins = parseInt(args[1], 10);
+            if (!id || !Number.isFinite(mins) || mins <= 0) throw new Error('Usage: `.timeout <@user> <minutes> [reason]`');
+            if (mins > 40320) throw new Error('Max timeout is 28 days (40320 minutes).');
+            const reason = rest.replace(args[0], '').replace(args[1], '').trim() || 'Timed out by administrator';
+            const m = await message.guild.members.fetch(id).catch(() => null); if (!m) throw new Error('Member not in this server.');
+            await m.timeout(mins * 60000, reason);
+            addInfraction(id, 'timeout', reason, authorId, authorName, null, 1);
+            return { title: 'Member timed out', target: id, icon: E.suspend,
+                note: `<@${id}> has been timed out for **${mins}** minute${mins === 1 ? '' : 's'}.`,
+                fields: [{ name: 'Duration', value: `${E.pending} ${mins} min`, inline: true }, { name: 'Reason', value: reason, inline: false }] };
+        } },
+    untimeout: { group: 'Moderation', usage: '.untimeout <@user|id>', desc: "Remove a member's timeout.",
+        async run({ args, message }) {
+            const id = resolveId(args[0]); if (!id) throw new Error('Usage: `.untimeout <@user>`');
+            const m = await message.guild.members.fetch(id).catch(() => null); if (!m) throw new Error('Member not in this server.');
+            await m.timeout(null);
+            return { title: 'Timeout removed', target: id, icon: E.check,
+                note: `<@${id}>'s timeout has been lifted.`,
+                fields: [{ name: 'Status', value: `${E.check} Cleared`, inline: true }] };
+        } },
+
+    // ── Channels ──────────────────────────────────────────────────
+    lock: { group: 'Channels', usage: '.lock', desc: 'Lock this channel (members can no longer send).',
+        async run({ message }) {
+            await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: false }, { reason: 'Locked by admin' });
+            return { title: 'Channel locked', icon: E.shield, note: `<#${message.channel.id}> is now locked — members can't send messages.` };
+        } },
+    unlock: { group: 'Channels', usage: '.unlock', desc: 'Unlock this channel.',
+        async run({ message }) {
+            await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: null }, { reason: 'Unlocked by admin' });
+            return { title: 'Channel unlocked', icon: E.check, note: `<#${message.channel.id}> is unlocked — members can send messages again.` };
+        } },
+    slowmode: { group: 'Channels', usage: '.slowmode <seconds>', desc: 'Set channel slowmode (0 clears, max 21600).',
+        async run({ args, message }) {
+            if (args[0] == null || Number.isNaN(parseInt(args[0], 10))) throw new Error('Usage: `.slowmode <seconds>`');
+            const s = Math.min(Math.max(parseInt(args[0], 10), 0), 21600);
+            await message.channel.setRateLimitPerUser(s, 'Admin slowmode');
+            return { title: s ? 'Slowmode set' : 'Slowmode cleared', icon: E.pending,
+                note: s ? `Slowmode in <#${message.channel.id}> set to **${s}s**.` : `Slowmode cleared in <#${message.channel.id}>.`,
+                fields: [{ name: 'Delay', value: `${s}s`, inline: true }] };
+        } },
+    invite: { group: 'Channels', usage: '.invite [uses] [hours]', desc: 'Create an invite link to this channel.',
+        async run({ args, message }) {
+            const uses = Math.max(parseInt(args[0], 10) || 0, 0); const hours = Math.max(parseInt(args[1], 10) || 0, 0);
+            const inv = await message.channel.createInvite({ maxUses: uses, maxAge: hours * 3600, unique: true }).catch((e) => { throw new Error('Could not create invite: ' + (e.message || 'unknown')); });
+            return { title: 'Invite created', icon: E.link,
+                note: `Created an invite to <#${message.channel.id}>.`,
+                fields: [
+                    { name: 'Link', value: inv.url, inline: false },
+                    { name: 'Max uses', value: uses ? String(uses) : 'Unlimited', inline: true },
+                    { name: 'Expires', value: hours ? `${hours}h` : 'Never', inline: true },
+                ] };
+        } },
+    move: { group: 'Channels', usage: '.move <@user|id> <#voice|id>', desc: 'Move a member to a voice channel.',
+        async run({ args, message }) {
+            const id = resolveId(args[0]); const chId = resolveId(args[1]);
+            if (!id || !chId) throw new Error('Usage: `.move <@user> <#voice-channel>`');
+            const m = await message.guild.members.fetch(id).catch(() => null); if (!m) throw new Error('Member not in this server.');
+            if (!m.voice?.channelId) throw new Error('That member is not in a voice channel.');
+            const ch = await message.guild.channels.fetch(chId).catch(() => null);
+            if (!ch || !ch.isVoiceBased?.()) throw new Error('Target is not a voice channel.');
+            await m.voice.setChannel(ch.id, 'Moved by admin');
+            return { title: 'Member moved', target: id, icon: E.member,
+                note: `Moved <@${id}> to **${ch.name}**.`,
+                fields: [{ name: 'Voice channel', value: ch.name, inline: true }] };
+        } },
+
     // ── Help ──────────────────────────────────────────────────────
     help: { group: 'Help', usage: '.help [group]', desc: 'List every Community Organisation admin command.',
         async run({ args }) {
             const filter = String(args[0] || '').toLowerCase();
             const groups = {};
             for (const [name, c] of Object.entries(COMMANDS)) { if (name === 'help') continue; (groups[c.group] = groups[c.group] || []).push(c); }
-            const ORDER = ['Moderation', 'Comms', 'Roles', 'Lookup'];
+            const ORDER = ['Moderation', 'Comms', 'Roles', 'Channels', 'Lookup'];
             const ordered = [...ORDER.filter((g) => groups[g]), ...Object.keys(groups).filter((g) => !ORDER.includes(g))];
             const want = ordered.filter((g) => !filter || g.toLowerCase().includes(filter));
             if (!want.length) throw new Error(`No command group matching "${args[0]}". Run \`.help\` on its own.`);

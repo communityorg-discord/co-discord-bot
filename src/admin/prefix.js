@@ -17,6 +17,7 @@ const THEME = {
     Moderation: { color: 0xDC2626, icon: E.gavel },
     Comms:      { color: 0x5865F2, icon: E.dm },
     Roles:      { color: 0x5865F2, icon: E.role },
+    Channels:   { color: 0x0EA5E9, icon: E.server },
     Lookup:     { color: 0x4F46E5, icon: E.id },
     Help:       { color: 0x64748B, icon: E.seal },
 };
