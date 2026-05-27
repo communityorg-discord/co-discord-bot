@@ -15,9 +15,11 @@ const ALIASES = { commands: 'help', cmds: 'help', '?': 'help' };
 // Per-group accent colour + fallback headline icon.
 const THEME = {
     Moderation: { color: 0xDC2626, icon: E.gavel },
+    Staff:      { color: 0x0D9488, icon: E.staff },
     Comms:      { color: 0x5865F2, icon: E.dm },
     Roles:      { color: 0x5865F2, icon: E.role },
     Channels:   { color: 0x0EA5E9, icon: E.server },
+    Server:     { color: 0x6366F1, icon: E.server },
     Lookup:     { color: 0x4F46E5, icon: E.id },
     Help:       { color: 0x64748B, icon: E.seal },
 };

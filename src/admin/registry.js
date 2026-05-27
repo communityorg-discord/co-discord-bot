@@ -5,7 +5,7 @@
 // run() returns a structured result the prefix renderer turns into a rich embed:
 //   { title, note, target?, icon?, fields?: [{name,value,inline}] }
 // Throw an Error to render a red failure embed. All actions are real.
-import { EmbedBuilder } from 'discord.js';
+import { EmbedBuilder, ChannelType } from 'discord.js';
 import { E } from '../lib/emoji.js';
 import {
     db, addInfraction, deleteInfraction, addGlobalBan, getActiveGlobalBan, addSuspension, liftSuspension,
@@ -336,13 +336,108 @@ export const COMMANDS = {
                 fields: [{ name: 'Thread', value: `<#${th.id}>`, inline: true }] };
         } },
 
+    // ── Staff / HR ────────────────────────────────────────────────
+    staffwarn: { group: 'Staff', usage: '.staffwarn <@user|id> <reason>', desc: "Issue a verbal warning on a staff member's HR record.",
+        async run({ args, rest, authorId }) {
+            const id = resolveId(args[0]); const reason = rest.replace(args[0], '').trim();
+            if (!id || !reason) throw new Error('Usage: `.staffwarn <@user> <reason>`');
+            const target = getUserByDiscordId(id); if (!target) throw new Error('That user has no staff record.');
+            const sup = getUserByDiscordId(authorId);
+            const PORTAL = process.env.PORTAL_HTTP || 'http://localhost:3016';
+            const r = await fetch(`${PORTAL}/api/disciplinary/non-investigational`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Bot-Secret': process.env.BOT_SECRET || 'co-bot-internal' },
+                body: JSON.stringify({ user_id: Number(target.id), action_type: 'verbal_warning', violation_description: reason, _bot_supervisor_id: sup?.id }),
+            }).catch((e) => { throw new Error('Could not reach the staff portal: ' + (e.message || 'unknown')); });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(j.error || `Portal returned ${r.status}.`);
+            return { title: 'Staff warning issued', target: id, icon: E.warning,
+                note: `Logged a verbal warning on **${target.display_name || target.full_name || 'the staff member'}**'s HR record.`,
+                fields: [{ name: 'Reason', value: reason.slice(0, 1024), inline: false }] };
+        } },
+    staff: { group: 'Lookup', usage: '.staff <@user|id>', desc: "Look up a staff member's HR record.",
+        async run({ args }) {
+            const id = resolveId(args[0]); if (!id) throw new Error('Usage: `.staff <@user>`');
+            const u = getUserByDiscordId(id); if (!u) throw new Error('That user has no staff record.');
+            return { title: u.display_name || u.full_name || 'Staff member', target: id, icon: E.staff,
+                note: `Staff HR record for <@${id}>.`,
+                fields: [
+                    { name: 'Name', value: `${E.member} ${u.full_name || u.display_name || '—'}`, inline: true },
+                    { name: 'Position', value: u.position || '—', inline: true },
+                    { name: 'Department', value: u.department || '—', inline: true },
+                    { name: 'Status', value: u.account_status || '—', inline: true },
+                ] };
+        } },
+
+    // ── Server (heavy ops — destructive ones need CONFIRM) ────────
+    channel: { group: 'Server', usage: '.channel <create|rename|delete> …', desc: 'Create, rename, or delete a channel (delete needs CONFIRM).',
+        async run({ args, rest, message }) {
+            const op = String(args[0] || '').toLowerCase();
+            if (op === 'create') {
+                const name = rest.replace(args[0], '').trim(); if (!name) throw new Error('Usage: `.channel create <name>`');
+                const ch = await message.guild.channels.create({ name: name.slice(0, 100), type: ChannelType.GuildText, parent: message.channel?.parentId || null });
+                return { title: 'Channel created', icon: E.server, note: `Created <#${ch.id}>.`, fields: [{ name: 'Channel', value: `<#${ch.id}>`, inline: true }] };
+            }
+            if (op === 'rename') {
+                const chId = resolveId(args[1]); const name = rest.replace(args[0], '').replace(args[1], '').trim();
+                if (!chId || !name) throw new Error('Usage: `.channel rename <#channel> <new name>`');
+                const ch = await message.guild.channels.fetch(chId).catch(() => null); if (!ch) throw new Error('No such channel.');
+                const old = ch.name; await ch.setName(name.slice(0, 100), 'Admin rename');
+                return { title: 'Channel renamed', icon: E.server, note: `Renamed **#${old}** → <#${ch.id}>.`, fields: [{ name: 'New name', value: `**${name.slice(0, 100)}**`, inline: true }] };
+            }
+            if (op === 'delete') {
+                const chId = resolveId(args[1]); if (!chId) throw new Error('Usage: `.channel delete <#channel> CONFIRM`');
+                if (!args.includes('CONFIRM')) throw new Error('This permanently deletes the channel. Re-run with `CONFIRM` at the end: `.channel delete <#channel> CONFIRM`');
+                const ch = await message.guild.channels.fetch(chId).catch(() => null); if (!ch) throw new Error('No such channel.');
+                const nm = ch.name; await ch.delete('Admin delete');
+                return { title: 'Channel deleted', icon: E.cross, note: `Deleted **#${nm}**.` };
+            }
+            throw new Error('Usage: `.channel <create|rename|delete> …`');
+        } },
+    emoji: { group: 'Server', usage: '.emoji <add|delete> …', desc: 'Add a server emoji (name + image URL) or delete one by name.',
+        async run({ args, message }) {
+            const op = String(args[0] || '').toLowerCase();
+            if (op === 'add') {
+                const name = args[1], url = args[2];
+                if (!name || !url) throw new Error('Usage: `.emoji add <name> <image_url>`');
+                const em = await message.guild.emojis.create({ attachment: url, name: name.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 32) }).catch((e) => { throw new Error('Could not add emoji: ' + (e.message || 'unknown')); });
+                return { title: 'Emoji added', icon: E.star, note: `Added emoji **:${em.name}:** ${em}.`, fields: [{ name: 'Name', value: `\`:${em.name}:\``, inline: true }] };
+            }
+            if (op === 'delete') {
+                const name = String(args[1] || '').replace(/:/g, ''); if (!name) throw new Error('Usage: `.emoji delete <name>`');
+                const em = message.guild.emojis.cache.find((x) => x.name === name); if (!em) throw new Error(`No emoji named :${name}: here.`);
+                await em.delete('Admin delete');
+                return { title: 'Emoji deleted', icon: E.cross, note: `Deleted emoji **:${name}:**.` };
+            }
+            throw new Error('Usage: `.emoji <add|delete> …`');
+        } },
+    lockdown: { group: 'Server', usage: '.lockdown <on|off>', desc: 'Lock or unlock every text channel in this server (on needs CONFIRM).',
+        async run({ args, message }) {
+            const op = String(args[0] || '').toLowerCase();
+            if (!['on', 'off'].includes(op)) throw new Error('Usage: `.lockdown <on|off>`');
+            if (op === 'on' && !args.includes('CONFIRM')) throw new Error('This locks EVERY channel in the server. Re-run with `CONFIRM`: `.lockdown on CONFIRM`');
+            const everyone = message.guild.roles.everyone;
+            const chans = message.guild.channels.cache.filter((c) => c.isTextBased?.() && c.permissionOverwrites);
+            let n = 0;
+            for (const [, c] of chans) { try { await c.permissionOverwrites.edit(everyone, { SendMessages: op === 'on' ? false : null }, { reason: 'Lockdown ' + op }); n++; } catch { /* hierarchy */ } }
+            return { title: op === 'on' ? 'Server locked down' : 'Lockdown lifted', icon: op === 'on' ? E.shield : E.check,
+                note: op === 'on' ? `Locked **${n}** channels — only staff can send.` : `Unlocked **${n}** channels.`,
+                fields: [{ name: 'Channels', value: `**${n}**`, inline: true }] };
+        } },
+    massunban: { group: 'Server', usage: '.massunban CONFIRM', desc: 'Lift EVERY Discord ban in this server.',
+        async run({ args, message }) {
+            if (!args.includes('CONFIRM')) throw new Error('This unbans EVERYONE in this server. Re-run with `CONFIRM`: `.massunban CONFIRM`');
+            const bans = await message.guild.bans.fetch().catch(() => null); if (!bans) throw new Error('Could not fetch the ban list.');
+            let n = 0; for (const [id] of bans) { try { await message.guild.bans.remove(id, 'Mass unban'); n++; } catch { /* */ } }
+            return { title: 'Mass unban complete', icon: E.unban, note: `Lifted **${n}** ban${n === 1 ? '' : 's'} in **${message.guild.name}**.`, fields: [{ name: 'Unbanned', value: `**${n}**`, inline: true }] };
+        } },
+
     // ── Help ──────────────────────────────────────────────────────
     help: { group: 'Help', usage: '.help [group]', desc: 'List every Community Organisation admin command.',
         async run({ args }) {
             const filter = String(args[0] || '').toLowerCase();
             const groups = {};
             for (const [name, c] of Object.entries(COMMANDS)) { if (name === 'help') continue; (groups[c.group] = groups[c.group] || []).push(c); }
-            const ORDER = ['Moderation', 'Comms', 'Roles', 'Channels', 'Lookup'];
+            const ORDER = ['Moderation', 'Staff', 'Comms', 'Roles', 'Channels', 'Server', 'Lookup'];
             const ordered = [...ORDER.filter((g) => groups[g]), ...Object.keys(groups).filter((g) => !ORDER.includes(g))];
             const want = ordered.filter((g) => !filter || g.toLowerCase().includes(filter));
             if (!want.length) throw new Error(`No command group matching "${args[0]}". Run \`.help\` on its own.`);

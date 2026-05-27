@@ -10,6 +10,38 @@ import { LOG_CHANNEL_ID, MOD_LOG_CHANNEL_ID,
   SUPERUSER_IDS,
 } from '../config.js';
 import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent } from './botDb.js';
+import { E } from '../lib/emoji.js';
+
+// Pick a custom CO emoji for a log entry from its action text (and colour as a
+// fallback). Used to lead every log embed so they're branded, not bare.
+export function logIcon(action = '', color) {
+  const a = String(action).toLowerCase();
+  if (/global ?ban|gban/.test(a)) return E.gban;
+  if (/unban|reinstat/.test(a)) return E.unban;
+  if (/\bban\b|banned/.test(a)) return E.ban;
+  if (/unsuspend|lifted/.test(a)) return E.check;
+  if (/suspend/.test(a)) return E.suspend;
+  if (/warn/.test(a)) return E.warning;
+  if (/investigat/.test(a)) return E.investigate;
+  if (/terminat|eliminat/.test(a)) return E.terminate;
+  if (/timeout|mute/.test(a)) return E.suspend;
+  if (/note/.test(a)) return E.logs;
+  if (/verif/.test(a)) return E.verify;
+  if (/role/.test(a)) return E.role;
+  if (/nick/.test(a)) return E.member;
+  if (/dm|direct message|message sent/.test(a)) return E.dm;
+  if (/purge|delete|clear|kick/.test(a)) return E.cross;
+  if (/cooldown|slowmode/.test(a)) return E.pending;
+  if (/lock/.test(a)) return E.shield;
+  if (/invite/.test(a)) return E.link;
+  if (/thread|ticket/.test(a)) return E.ticket;
+  if (/infraction|case|record/.test(a)) return E.gavel;
+  if (/kudos|thank|brag/.test(a)) return E.kudos;
+  if (color === 0xED4245 || color === 0xDC2626 || color === 0xEF4444 || color === 0x7F1D1D) return E.cross;
+  if (color === 0x22C55E || color === 0x57F287) return E.check;
+  if (color === 0xFEE75C || color === 0xF59E0B || color === 0xFAA61A) return E.warning;
+  return E.logs;
+}
 
 // Watched log audience = the superuser set. Was previously a hardcoded
 // 3-user list duplicated from config.js; now sourced from the same
@@ -138,11 +170,12 @@ export async function logAction(client, {
   specificChannelId, logType, guildId,
 }) {
   const embed = new EmbedBuilder()
-    .setTitle(`📋 ${action}`)
+    .setTitle(action)
     .setColor(color)
+    .setDescription(`${logIcon(action, color)} **${action}**`)
     .addFields(
-      { name: 'Target', value: formatActor(target), inline: true },
-      { name: 'Moderator', value: formatActor(moderator), inline: true },
+      { name: 'Target', value: `${E.member} ${formatActor(target)}`, inline: true },
+      { name: 'Moderator', value: `${E.staff} ${formatActor(moderator)}`, inline: true },
       { name: 'Reason', value: reason || 'No reason provided', inline: false },
       ...fields
     )
@@ -159,11 +192,12 @@ export async function logRoleAction(client, {
   roleLogType, guildId,
 }) {
   const embed = new EmbedBuilder()
-    .setTitle(`🎭 ${action}`)
+    .setTitle(action)
     .setColor(color)
+    .setDescription(`${E.role} **${action}**`)
     .addFields(
-      ...(target ? [{ name: 'Target', value: formatActor(target), inline: true }] : []),
-      ...(moderator ? [{ name: 'Moderator', value: formatActor(moderator), inline: true }] : []),
+      ...(target ? [{ name: 'Target', value: `${E.member} ${formatActor(target)}`, inline: true }] : []),
+      ...(moderator ? [{ name: 'Moderator', value: `${E.staff} ${formatActor(moderator)}`, inline: true }] : []),
       ...fields
     )
     .setTimestamp()

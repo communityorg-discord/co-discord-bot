@@ -2,6 +2,7 @@ import { EmbedBuilder, AuditLogEvent, PermissionFlagsBits } from 'discord.js';
 import { db } from '../utils/botDb.js';
 import { getUserByDiscordId } from '../db.js';
 import { SUPERUSER_IDS as REAL_SUPERUSERS, OFFICIAL_BYPASS_IDS } from '../config.js';
+import { E } from '../lib/emoji.js';
 
 const INVITE_REGEX = /(discord\.gg|discord\.com\/invite|discordapp\.com\/invite)\/[a-zA-Z0-9]+/gi;
 const SEVERITY_COLORS = { low: 0x3B82F6, medium: 0xF59E0B, high: 0xEF4444, critical: 0x7F1D1D };
@@ -63,7 +64,8 @@ export class AutoMod {
   async notifyEOB(guildId, type, targetId, targetUsername, severity, action, details) {
     const embed = new EmbedBuilder()
       .setColor(SEVERITY_COLORS[severity] || SEVERITY_COLORS.medium)
-      .setTitle(`${SEVERITY_EMOJIS[severity] || '🟡'} AutoMod — ${type.replace(/_/g, ' ').toUpperCase()}`)
+      .setTitle(`AutoMod — ${type.replace(/_/g, ' ').toUpperCase()}`)
+      .setDescription(`${E.warning} **AutoMod — ${type.replace(/_/g, ' ').toUpperCase()}**`)
       .addFields(
         { name: 'Target', value: targetId ? `<@${targetId}> (${targetUsername || targetId})` : 'N/A', inline: true },
         { name: 'Severity', value: severity.toUpperCase(), inline: true },
@@ -120,8 +122,8 @@ export class AutoMod {
     db.prepare(`INSERT INTO infractions (discord_id, type, reason, moderator_id, moderator_name)
       VALUES (?, 'warning', ?, 'AUTOMOD', 'AutoMod')`).run(member.id, `[AutoMod] ${reason}`);
     await member.send({ embeds: [new EmbedBuilder()
-      .setColor(0xF59E0B).setTitle('⚠️ Automated Warning')
-      .setDescription(`You received an automated warning in **${guild.name}**.\n\n**Reason:** ${reason}`)
+      .setColor(0xF59E0B).setTitle('Automated Warning')
+      .setDescription(`${E.warning} **Automated Warning**\n\nYou received an automated warning in **${guild.name}**.\n\n**Reason:** ${reason}`)
       .setFooter({ text: 'CO AutoMod System' }).setTimestamp()
     ]}).catch(() => {});
   }
@@ -148,8 +150,8 @@ export class AutoMod {
 
     await member.roles.set(qRole ? [qRole.id] : []).catch(() => {});
     await member.send({ embeds: [new EmbedBuilder()
-      .setColor(0xDC2626).setTitle('🔒 Quarantined')
-      .setDescription(`You have been quarantined in **${guild.name}**.\n\n**Reason:** ${reason}\n\nThe moderation team has been notified.`)
+      .setColor(0xDC2626).setTitle('Quarantined')
+      .setDescription(`${E.suspend} **Quarantined**\n\nYou have been quarantined in **${guild.name}**.\n\n**Reason:** ${reason}\n\nThe moderation team has been notified.`)
       .setFooter({ text: 'CO AutoMod System' }).setTimestamp()
     ]}).catch(() => {});
   }
@@ -171,8 +173,8 @@ export class AutoMod {
     const sysChannel = guild.systemChannel || channels.first();
     if (sysChannel) {
       await sysChannel.send({ embeds: [new EmbedBuilder()
-        .setColor(0x7F1D1D).setTitle('🚨 RAID LOCKDOWN ACTIVATED')
-        .setDescription(`Server auto-locked due to suspected raid.\n\n**Reason:** ${reason}`)
+        .setColor(0x7F1D1D).setTitle('RAID LOCKDOWN ACTIVATED')
+        .setDescription(`${E.warning} **RAID LOCKDOWN ACTIVATED**\n\nServer auto-locked due to suspected raid.\n\n**Reason:** ${reason}`)
         .setTimestamp()
       ]}).catch(() => {});
     }
@@ -428,8 +430,8 @@ export class AutoMod {
           const member = await guild.members.fetch(p.discord_id).catch(() => null);
           if (member) {
             await member.send({ embeds: [new EmbedBuilder()
-              .setColor(0xF59E0B).setTitle('⚠️ Verification Required')
-              .setDescription(`You joined **${guild.name}** ${Math.floor(hours)} hours ago without verifying.\n\nRun \`/verify\` immediately. You will be removed in ${config.verify_terminate_hours - config.verify_warning_hours} hours.`)
+              .setColor(0xF59E0B).setTitle('Verification Required')
+              .setDescription(`${E.warning} **Verification Required**\n\nYou joined **${guild.name}** ${Math.floor(hours)} hours ago without verifying.\n\nRun \`/verify\` immediately. You will be removed in ${config.verify_terminate_hours - config.verify_warning_hours} hours.`)
               .setFooter({ text: 'CO AutoMod System' })
             ]}).catch(() => {});
           }
@@ -440,8 +442,8 @@ export class AutoMod {
           const member = await guild.members.fetch(p.discord_id).catch(() => null);
           if (member) {
             await member.send({ embeds: [new EmbedBuilder()
-              .setColor(0xEF4444).setTitle('❌ Removed — Failure to Verify')
-              .setDescription(`You were removed from **${guild.name}** for not verifying within ${config.verify_terminate_hours} hours.`)
+              .setColor(0xEF4444).setTitle('Removed — Failure to Verify')
+              .setDescription(`${E.cross} **Removed — Failure to Verify**\n\nYou were removed from **${guild.name}** for not verifying within ${config.verify_terminate_hours} hours.`)
               .setFooter({ text: 'CO AutoMod System' })
             ]}).catch(() => {});
             await member.kick('[AutoMod] Verify timeout').catch(() => {});
@@ -480,7 +482,7 @@ export class AutoMod {
         // If single channel lockdown, also notify
         if (ld.channel_id) {
           const ch = guild.channels.cache.get(ld.channel_id);
-          if (ch) await ch.send({ embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('🔓 Auto-Unlocked').setDescription('Lockdown duration expired.').setTimestamp()] }).catch(() => {});
+          if (ch) await ch.send({ embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Auto-Unlocked').setDescription(`${E.unban} **Auto-Unlocked**\n\nLockdown duration expired.`).setTimestamp()] }).catch(() => {});
         }
 
         db.prepare("UPDATE lockdown_state SET is_active = 0, unlocked_at = datetime('now') WHERE id = ?").run(ld.id);

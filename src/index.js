@@ -2,6 +2,7 @@ import './forceDmEmbed.js'; // org rule: every DM this bot sends must be an embe
 import express from 'express';
 import multer from 'multer';
 import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, EmbedBuilder, Partials } from 'discord.js';
+import { E } from './lib/emoji.js';
 import { config } from 'dotenv';
 import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID } from './config.js';
 import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent, logAtlasBotAction, logMessageEvent } from './utils/botDb.js';
@@ -2563,9 +2564,10 @@ client.on('guildMemberAdd', async (member) => {
 
   // Member-join log
   try {
-    const embed = new EmbedBuilder().setTitle('📥 Member Joined').setColor(0x22c55e)
+    const embed = new EmbedBuilder().setTitle('Member Joined').setColor(0x22c55e)
+      .setDescription(`${E.member} **Member Joined**`)
       .addFields(
-        { name: 'Member', value: `${member.user.username} (<@${member.user.id}>)`, inline: true },
+        { name: 'Member', value: `${E.member} ${member.user.username} (<@${member.user.id}>)`, inline: true },
         { name: 'Server', value: member.guild?.name || '—', inline: true },
         { name: 'Account age', value: member.user.createdTimestamp ? `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>` : '—', inline: true },
       ).setTimestamp().setFooter({ text: 'Community Organisation | Member Log' });
@@ -2578,9 +2580,10 @@ client.on('guildMemberRemove', async (member) => {
 
   // Member-leave log
   try {
-    const embed = new EmbedBuilder().setTitle('📤 Member Left').setColor(0xef4444)
+    const embed = new EmbedBuilder().setTitle('Member Left').setColor(0xef4444)
+      .setDescription(`${E.member} **Member Left**`)
       .addFields(
-        { name: 'Member', value: `${member.user?.username || 'Unknown'} (<@${member.user?.id || member.id}>)`, inline: true },
+        { name: 'Member', value: `${E.member} ${member.user?.username || 'Unknown'} (<@${member.user?.id || member.id}>)`, inline: true },
         { name: 'Server', value: member.guild?.name || '—', inline: true },
       ).setTimestamp().setFooter({ text: 'Community Organisation | Member Log' });
     await logEvent(client, { embed, category: 'membership', type: 'member_leave', guildId: member.guild?.id });
@@ -2864,7 +2867,7 @@ client.on('messageDelete', async (message) => {
         await auditCh.send({ embeds: [new EmbedBuilder()
           .setTitle('Log Deletion Detected')
           .setColor(0xef4444)
-          .setDescription(`A message was deleted in **#${channel}**`)
+          .setDescription(`${E.warning} A message was deleted in **#${channel}**`)
           .addFields(
             { name: 'Original Author', value: String(who), inline: true },
             { name: 'Deleted By', value: String(deletedBy), inline: true },
@@ -2888,17 +2891,18 @@ client.on('messageDelete', async (message) => {
   try {
     const guildId = message.guildId;
     const content = message.content?.slice(0, 1500) || '*No text content*';
-    const attachments = message.attachments.size > 0 ? `\n📎 ${message.attachments.size} attachment(s)` : '';
-    const jumpLink = message.url ? `\n🔗 [Jump to message](${message.url})` : '';
+    const attachments = message.attachments.size > 0 ? `\n${E.dm} ${message.attachments.size} attachment(s)` : '';
+    const jumpLink = message.url ? `\n${E.link} [Jump to message](${message.url})` : '';
 
     const embed = new EmbedBuilder()
-      .setTitle('🗑️ Message Deleted')
+      .setTitle('Message Deleted')
       .setColor(0xef4444)
+      .setDescription(`${E.cross} **Message Deleted**`)
       .addFields(
-        { name: '👤 Author', value: `${message.author.username} (<@${message.author.id}>)`, inline: true },
-        { name: '📌 Channel', value: message.channel?.name ? `#${message.channel.name}` : message.channelId, inline: true },
-        { name: '🏠 Server', value: message.guild?.name || 'DM', inline: true },
-        { name: '💬 Content', value: content + attachments + jumpLink, inline: false },
+        { name: 'Author', value: `${E.member} ${message.author.username} (<@${message.author.id}>)`, inline: true },
+        { name: 'Channel', value: message.channel?.name ? `#${message.channel.name}` : message.channelId, inline: true },
+        { name: 'Server', value: message.guild?.name || 'DM', inline: true },
+        { name: 'Content', value: content + attachments + jumpLink, inline: false },
       )
       .setFooter({ text: 'Community Organisation | Staff Assistant' })
       .setTimestamp();
@@ -2941,7 +2945,7 @@ client.on('inviteCreate', async (invite) => {
         embeds: [new EmbedBuilder()
           .setTitle('Invite Deleted')
           .setColor(0xef4444)
-          .setDescription(`Your invite to **${invite.guild.name}** was automatically deleted. Only superusers can create invites for internal CO servers.`)
+          .setDescription(`${E.cross} Your invite to **${invite.guild.name}** was automatically deleted. Only superusers can create invites for internal CO servers.`)
           .setFooter({ text: 'Community Organisation' })
           .setTimestamp()
         ]
@@ -2962,17 +2966,18 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
     const guildId = newMessage.guildId;
     const oldContent = oldMessage.content?.slice(0, 750) || '*No text content*';
     const newContent = newMessage.content?.slice(0, 750) || '*No text content*';
-    const jumpLink = newMessage.url ? `\n🔗 [Jump to message](${newMessage.url})` : '';
+    const jumpLink = newMessage.url ? `\n${E.link} [Jump to message](${newMessage.url})` : '';
 
     const embed = new EmbedBuilder()
-      .setTitle('✏️ Message Edited')
+      .setTitle('Message Edited')
       .setColor(0xf59e0b)
+      .setDescription(`${E.logs} **Message Edited**`)
       .addFields(
-        { name: '👤 Author', value: `${newMessage.author.username} (<@${newMessage.author.id}>)`, inline: true },
-        { name: '📌 Channel', value: newMessage.channel?.name ? `#${newMessage.channel.name}` : newMessage.channelId, inline: true },
-        { name: '🏠 Server', value: newMessage.guild?.name || 'DM', inline: true },
-        { name: '📝 Before', value: oldContent, inline: false },
-        { name: '📝 After', value: newContent + jumpLink, inline: false },
+        { name: 'Author', value: `${E.member} ${newMessage.author.username} (<@${newMessage.author.id}>)`, inline: true },
+        { name: 'Channel', value: newMessage.channel?.name ? `#${newMessage.channel.name}` : newMessage.channelId, inline: true },
+        { name: 'Server', value: newMessage.guild?.name || 'DM', inline: true },
+        { name: 'Before', value: oldContent, inline: false },
+        { name: 'After', value: newContent + jumpLink, inline: false },
       )
       .setFooter({ text: 'Community Organisation | Staff Assistant' })
       .setTimestamp();
