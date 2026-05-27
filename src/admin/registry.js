@@ -8,7 +8,7 @@
 import { EmbedBuilder } from 'discord.js';
 import { E } from '../lib/emoji.js';
 import {
-    db, addInfraction, addGlobalBan, getActiveGlobalBan, addSuspension, liftSuspension,
+    db, addInfraction, deleteInfraction, addGlobalBan, getActiveGlobalBan, addSuspension, liftSuspension,
     getActiveSuspension, startInvestigation, endInvestigation, getActiveInvestigation, getInfractions,
 } from '../utils/botDb.js';
 import { getUserByDiscordId } from '../db.js';
@@ -207,6 +207,36 @@ export const COMMANDS = {
                 note: `**${list.length}** infraction${list.length === 1 ? '' : 's'} on record for <@${id}>.\n\n${lines.join('\n')}`.slice(0, 4000) };
         } },
 
+    // ── Moderation (single-server + records) ──────────────────────
+    serverban: { group: 'Moderation', usage: '.serverban <@user|id> <reason>', desc: 'Ban a member from THIS server only (not network-wide).',
+        async run({ args, rest, message, authorId, authorName }) {
+            const id = resolveId(args[0]); const reason = rest.replace(args[0], '').trim();
+            if (!id || !reason) throw new Error('Usage: `.serverban <@user> <reason>`');
+            await message.guild.bans.create(id, { reason }).catch((e) => { throw new Error('Could not ban: ' + (e.message || 'unknown')); });
+            addInfraction(id, 'ban', reason, authorId, authorName, null, 1);
+            return { title: 'Member banned (this server)', target: id, icon: E.ban,
+                note: `<@${id}> has been banned from **${message.guild.name}**.`,
+                fields: [{ name: 'Reason', value: reason, inline: false }] };
+        } },
+    note: { group: 'Moderation', usage: '.note <@user|id> <text>', desc: "Add a private note to a member's record.",
+        async run({ args, rest, authorId, authorName }) {
+            const id = resolveId(args[0]); const text = rest.replace(args[0], '').trim();
+            if (!id || !text) throw new Error('Usage: `.note <@user> <text>`');
+            const inf = addInfraction(id, 'note', text, authorId, authorName, null, 0);
+            return { title: 'Note added', target: id, icon: E.logs,
+                note: `Added a note to <@${id}>'s record.`,
+                fields: [{ name: 'Case', value: `#${inf?.lastInsertRowid ?? '—'}`, inline: true }, { name: 'Note', value: text.slice(0, 1024), inline: false }] };
+        } },
+    delcase: { group: 'Moderation', usage: '.delcase <case_id>', desc: 'Delete an infraction/case by its ID.',
+        async run({ args, authorId }) {
+            const cid = parseInt(args[0], 10); if (!Number.isFinite(cid)) throw new Error('Usage: `.delcase <case_id>`');
+            const removed = deleteInfraction(cid, authorId);
+            if (!removed) throw new Error(`No case #${cid}.`);
+            return { title: 'Case deleted', target: removed.discord_id, icon: E.gavel,
+                note: `Deleted case **#${cid}** (${(removed.type || 'note').replace(/_/g, ' ')}) from <@${removed.discord_id}>'s record.`,
+                fields: [{ name: 'Original reason', value: (removed.reason || '—').slice(0, 1024), inline: false }] };
+        } },
+
     // ── Moderation (Discord timeout) ──────────────────────────────
     timeout: { group: 'Moderation', usage: '.timeout <@user|id> <minutes> [reason]', desc: 'Time a member out (Discord mute) for N minutes.',
         async run({ args, rest, message, authorId, authorName }) {
@@ -275,6 +305,35 @@ export const COMMANDS = {
             return { title: 'Member moved', target: id, icon: E.member,
                 note: `Moved <@${id}> to **${ch.name}**.`,
                 fields: [{ name: 'Voice channel', value: ch.name, inline: true }] };
+        } },
+    pin: { group: 'Channels', usage: '.pin <message_id>', desc: 'Pin a message in this channel.',
+        async run({ args, message }) {
+            const mid = resolveId(args[0]); if (!mid) throw new Error('Usage: `.pin <message_id>`');
+            const m = await message.channel.messages.fetch(mid).catch(() => null); if (!m) throw new Error('No message with that ID here.');
+            await m.pin('Pinned by admin');
+            return { title: 'Message pinned', icon: E.check, note: `Pinned a message in <#${message.channel.id}>.` };
+        } },
+    unpin: { group: 'Channels', usage: '.unpin <message_id>', desc: 'Unpin a message in this channel.',
+        async run({ args, message }) {
+            const mid = resolveId(args[0]); if (!mid) throw new Error('Usage: `.unpin <message_id>`');
+            const m = await message.channel.messages.fetch(mid).catch(() => null); if (!m) throw new Error('No message with that ID here.');
+            await m.unpin('Unpinned by admin');
+            return { title: 'Message unpinned', icon: E.check, note: `Unpinned a message in <#${message.channel.id}>.` };
+        } },
+    delmsg: { group: 'Channels', usage: '.delmsg <message_id>', desc: 'Delete a single message by ID.',
+        async run({ args, message }) {
+            const mid = resolveId(args[0]); if (!mid) throw new Error('Usage: `.delmsg <message_id>`');
+            const m = await message.channel.messages.fetch(mid).catch(() => null); if (!m) throw new Error('No message with that ID here.');
+            await m.delete();
+            return { title: 'Message deleted', icon: E.cross, note: `Deleted a message in <#${message.channel.id}>.` };
+        } },
+    thread: { group: 'Channels', usage: '.thread <name>', desc: 'Open a thread in this channel.',
+        async run({ rest, message }) {
+            const name = rest.trim(); if (!name) throw new Error('Usage: `.thread <name>`');
+            const th = await message.channel.threads.create({ name: name.slice(0, 100), autoArchiveDuration: 1440 }).catch((e) => { throw new Error('Could not create thread: ' + (e.message || 'unknown')); });
+            return { title: 'Thread created', icon: E.ticket,
+                note: `Opened thread **${name.slice(0, 100)}** in <#${message.channel.id}>.`,
+                fields: [{ name: 'Thread', value: `<#${th.id}>`, inline: true }] };
         } },
 
     // ── Help ──────────────────────────────────────────────────────
