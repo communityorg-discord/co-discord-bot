@@ -3,6 +3,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { db } from '../utils/botDb.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('remind')
@@ -72,7 +73,7 @@ export async function execute(interaction) {
 
   const perm = await canUseCommand('remind', interaction);
   if (!perm.allowed) {
-    return interaction.editReply({ content: `❌ ${perm.reason}` });
+    return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
   }
 
   const timeStr = interaction.options.getString('time');
@@ -83,17 +84,17 @@ export async function execute(interaction) {
   if (targetUser.id !== interaction.user.id) {
     const otherPerm = await canUseCommand('remind:other', interaction);
     if (!otherPerm.allowed) {
-      return interaction.editReply({ content: `❌ ${otherPerm.reason}` });
+      return interaction.editReply({ content: `${E.cross} ${otherPerm.reason}` });
     }
   }
 
   const remindAt = parseTime(timeStr);
   if (!remindAt) {
-    return interaction.editReply({ content: '❌ Could not parse time. Use formats like: `30 minutes`, `2 hours`, `tomorrow 9am`, `Sunday 12pm`' });
+    return interaction.editReply({ content: `${E.cross} Could not parse time. Use formats like: \`30 minutes\`, \`2 hours\`, \`tomorrow 9am\`, \`Sunday 12pm\`` });
   }
 
   if (remindAt.getTime() - Date.now() < 60000) {
-    return interaction.editReply({ content: '❌ Reminder must be at least 1 minute in the future.' });
+    return interaction.editReply({ content: `${E.cross} Reminder must be at least 1 minute in the future.` });
   }
 
   db.prepare(
@@ -103,5 +104,5 @@ export async function execute(interaction) {
   const formatted = `<t:${Math.floor(remindAt.getTime() / 1000)}:F>`;
   const targetText = targetUser.id === interaction.user.id ? 'you' : `<@${targetUser.id}>`;
 
-  await interaction.editReply({ content: `✅ Reminder set for ${formatted}. I'll DM ${targetText} with your message.` });
+  await interaction.editReply({ content: `${E.check} Reminder set for ${formatted}. I'll DM ${targetText} with your message.` });
 }

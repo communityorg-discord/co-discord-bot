@@ -3,6 +3,7 @@ import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBu
 import { logAction } from '../utils/logger.js';
 import { getLogConfig, setLogChannel, getGlobalLogChannel, setGlobalLogChannel, getLogChannel, getAllLogConfig, getAssignmentStats } from '../utils/botDb.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 // Per-guild log categories and their types
 const CATEGORIES = {
@@ -103,13 +104,13 @@ function buildInfoEmbed(guildId) {
   // Assignment stats
   try {
     const stats = getAssignmentStats();
-    fields.push({ name: '📋 Assignments This Week', value: `Total: **${stats.total_this_week}** | Completed: **${stats.completed_this_week}** | Overdue: **${stats.overdue}** | Pending: **${stats.pending}**`, inline: false });
+    fields.push({ name: 'Assignments This Week', value: `Total: **${stats.total_this_week}** | Completed: **${stats.completed_this_week}** | Overdue: **${stats.overdue}** | Pending: **${stats.pending}**`, inline: false });
   } catch {}
 
-  fields.push({ name: '📌 Instructions', value: '1. Select a category below\n2. Choose a log type\n3. Pick a channel when prompted\n\nGlobal and Orgwide bindings appear after selecting their categories.', inline: false });
+  fields.push({ name: 'Instructions', value: '1. Select a category below\n2. Choose a log type\n3. Pick a channel when prompted\n\nGlobal and Orgwide bindings appear after selecting their categories.', inline: false });
 
   return new EmbedBuilder()
-    .setTitle('⚙️ Log Channel Configuration Panel')
+    .setTitle('Log Channel Configuration Panel')
     .setColor(0x5865F2)
     .setDescription('Configure where different types of logs are sent **in this server**.\n\nUse the selectors below to set a channel for each log type. For organisation-wide logs across all servers, use `/orglogs`.')
     .addFields(...fields)
@@ -198,7 +199,7 @@ export async function execute(interaction) {
 
   const perm = await canUseCommand('logspanel', interaction);
   if (!perm.allowed) {
-    return interaction.editReply({ content: `❌ ${perm.reason}` });
+    return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
   }
 
   const guildId = interaction.guildId;
@@ -206,7 +207,7 @@ export async function execute(interaction) {
   const categoryRow = buildCategorySelect();
 
   await interaction.editReply({
-    content: '⚙️ **Log Configuration Panel**\nUse the selector below to configure log channels.',
+    content: '**Log Configuration Panel**\nUse the selector below to configure log channels.',
     embeds: [embed],
     components: [categoryRow]
   });
@@ -230,7 +231,7 @@ export async function handleSelect(interaction) {
     const embed = buildInfoEmbed(interaction.guildId);
     const categoryRow = buildCategorySelect();
     await interaction.update({
-      content: '⚙️ **Log Configuration Panel**\nUse the selector below to configure log channels.',
+      content: '**Log Configuration Panel**\nUse the selector below to configure log channels.',
       embeds: [embed],
       components: [categoryRow]
     });
@@ -246,10 +247,10 @@ export async function handleSelect(interaction) {
       const serverBindings = [];
       for (const [key, cat] of Object.entries(SERVER_CATEGORIES)) {
         const channelId = getGlobalLogChannel(key, interaction.guildId);
-        serverBindings.push(cat.emoji + ' ' + cat.label + ': ' + (channelId ? '✅ <#' + channelId + '>' : '❌ Not set'));
+        serverBindings.push(cat.emoji + ' ' + cat.label + ': ' + (channelId ? E.check + ' <#' + channelId + '>' : E.cross + ' Not set'));
       }
       const serverEmbed = new EmbedBuilder()
-        .setTitle('📡 Server Log Bindings')
+        .setTitle('Server Log Bindings')
         .setColor(0x5865F2)
         .setDescription('Catch-all log channels for **this server only**. These receive all events of a type happening in this server.\n\n' + serverBindings.join('\n'))
         .setFooter({ text: 'Community Organisation | Staff Assistant' })
@@ -259,7 +260,7 @@ export async function handleSelect(interaction) {
       const backRow = buildBackButton();
 
       await interaction.update({
-        content: '📡 **Server Logs** — Select the log type to configure, or go back:',
+        content: '**Server Logs** — Select the log type to configure, or go back:',
         embeds: [serverEmbed],
         components: [serverRow, backRow]
       });
@@ -275,12 +276,12 @@ export async function handleSelect(interaction) {
     const typeRows = [];
     for (const [typeKey, type] of Object.entries(cat.types)) {
       const channelId = config[`${categoryKey}:${typeKey}`];
-      const status = channelId ? `✅ <#${channelId}>` : '❌ Not set';
+      const status = channelId ? `${E.check} <#${channelId}>` : `${E.cross} Not set`;
       typeRows.push(`**${cat.emoji} ${type.label}:** ${status}`);
     }
 
     const catEmbed = new EmbedBuilder()
-      .setTitle(`📁 ${cat.emoji} ${cat.label} — Log Bindings`)
+      .setTitle(`${cat.emoji} ${cat.label} — Log Bindings`)
       .setColor(0x5865F2)
       .addFields({ name: '​', value: typeRows.join('\n'), inline: false })
       .setFooter({ text: 'Community Organisation | Staff Assistant' })
@@ -290,7 +291,7 @@ export async function handleSelect(interaction) {
     const backRow = buildBackButton();
 
     await interaction.update({
-      content: `📁 **${cat.emoji} ${cat.label}** — Select the log type to configure, or go back:`,
+      content: `**${cat.emoji} ${cat.label}** — Select the log type to configure, or go back:`,
       embeds: [catEmbed],
       components: [typeRow, backRow]
     });
@@ -375,7 +376,7 @@ export async function handleModal(interaction) {
       targetChannel = await interaction.guild.channels.fetch(channelIdInput).catch(() => null);
       if (!targetChannel) {
         return interaction.reply({
-          content: `❌ Channel ID "${channelIdInput}" not found in this server.`,
+          content: `${E.cross} Channel ID "${channelIdInput}" not found in this server.`,
           flags: 64
         });
       }
@@ -389,15 +390,15 @@ export async function handleModal(interaction) {
 
     await interaction.reply({
       content: targetChannel
-        ? `✅ ${cat.label} set to ${targetChannel}`
-        : `✅ ${cat.label} has been cleared (server logs disabled)`,
+        ? `${E.check} ${cat.label} set to ${targetChannel}`
+        : `${E.check} ${cat.label} has been cleared (server logs disabled)`,
       embeds: [embed],
       components: [categoryRow],
       flags: 64
     });
 
     await logAction(interaction.client, {
-      action: '⚙️ Server Log Channel Configured',
+      action: 'Server Log Channel Configured',
       target: null,
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       color: 0x5865F2,
@@ -427,7 +428,7 @@ export async function handleModal(interaction) {
     targetChannel = await interaction.guild.channels.fetch(channelIdInput).catch(() => null);
     if (!targetChannel) {
       return interaction.reply({
-        content: `❌ Channel ID "${channelIdInput}" not found in this server.`,
+        content: `${E.cross} Channel ID "${channelIdInput}" not found in this server.`,
         flags: 64
       });
     }
@@ -440,15 +441,15 @@ export async function handleModal(interaction) {
 
   await interaction.reply({
     content: targetChannel
-      ? `✅ ${type.label} set to ${targetChannel}`
-      : `✅ ${type.label} has been cleared`,
+      ? `${E.check} ${type.label} set to ${targetChannel}`
+      : `${E.check} ${type.label} has been cleared`,
     embeds: [embed],
     components: [categoryRow],
     flags: 64
   });
 
   await logAction(interaction.client, {
-    action: '⚙️ Log Channel Configured',
+    action: 'Log Channel Configured',
     target: null,
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     color: 0x5865F2,

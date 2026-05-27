@@ -4,16 +4,17 @@
 // Useful for cross-timezone meeting scheduling without leaving Discord.
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 const ZONES = [
-  { label: 'UTC',           tz: 'UTC',                 emoji: '🌐' },
-  { label: 'London',        tz: 'Europe/London',       emoji: '🇬🇧' },
-  { label: 'Berlin',        tz: 'Europe/Berlin',       emoji: '🇪🇺' },
-  { label: 'New York',      tz: 'America/New_York',    emoji: '🇺🇸' },
-  { label: 'Los Angeles',   tz: 'America/Los_Angeles', emoji: '🌴' },
-  { label: 'Sydney',        tz: 'Australia/Sydney',    emoji: '🇦🇺' },
-  { label: 'Tokyo',         tz: 'Asia/Tokyo',          emoji: '🇯🇵' },
-  { label: 'Mumbai',        tz: 'Asia/Kolkata',        emoji: '🇮🇳' },
+  { label: 'UTC',           tz: 'UTC' },
+  { label: 'London',        tz: 'Europe/London' },
+  { label: 'Berlin',        tz: 'Europe/Berlin' },
+  { label: 'New York',      tz: 'America/New_York' },
+  { label: 'Los Angeles',   tz: 'America/Los_Angeles' },
+  { label: 'Sydney',        tz: 'Australia/Sydney' },
+  { label: 'Tokyo',         tz: 'Asia/Tokyo' },
+  { label: 'Mumbai',        tz: 'Asia/Kolkata' },
 ];
 
 function fmt(date, tz) {
@@ -34,7 +35,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('timezone', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
 
   const offset = (interaction.options.getString('offset') || '').trim().toLowerCase();
@@ -44,7 +45,7 @@ export async function execute(interaction) {
   if (offset) {
     const m = offset.match(/in\s+(\d+)\s*(m|min|mins|minutes|h|hr|hrs|hours|d|day|days)/);
     if (!m) {
-      return interaction.reply({ content: '❌ Offset must look like `in 4h`, `in 30m`, or `in 2d`.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Offset must look like \`in 4h\`, \`in 30m\`, or \`in 2d\`.`, ephemeral: true });
     }
     const n = Number(m[1]);
     const unit = m[2];
@@ -57,11 +58,11 @@ export async function execute(interaction) {
   }
 
   const lines = ZONES.map(z =>
-    `${z.emoji} **${z.label}** — ${fmt(when, z.tz)}`
+    `**${z.label}** — ${fmt(when, z.tz)}`
   ).join('\n');
 
   const embed = new EmbedBuilder()
-    .setTitle(`🕒 World clock — ${header}`)
+    .setTitle(`World clock — ${header}`)
     .setColor(0x6366f1)
     .setDescription(lines)
     .setFooter({ text: `Discord-relative: <t:${Math.floor(when.getTime() / 1000)}:F>` });

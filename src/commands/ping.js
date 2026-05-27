@@ -3,6 +3,7 @@
 // the bot is slow / unreachable, or when triaging a portal incident.
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('ping')
@@ -13,7 +14,7 @@ const PORTAL_URL = process.env.PORTAL_HEALTH_URL || 'http://localhost:3016/api/h
 export async function execute(interaction) {
   const perm = await canUseCommand('ping', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   const sentAt = Date.now();
   await interaction.deferReply({ ephemeral: true });
@@ -42,12 +43,12 @@ export async function execute(interaction) {
     : (portalError ? 0xef4444 : 0xf59e0b);
 
   const embed = new EmbedBuilder()
-    .setTitle('🏓 Pong')
+    .setTitle('Pong')
     .setColor(colour)
     .addFields(
       { name: 'Discord gateway', value: gatewayPing >= 0 ? fmtMs(gatewayPing) : '_unknown_', inline: true },
       { name: 'Bot reply', value: fmtMs(replyLatency), inline: true },
-      { name: 'Portal API', value: portalError ? `❌ ${portalError}` : fmtMs(portalLatency), inline: true },
+      { name: 'Portal API', value: portalError ? `${E.cross} ${portalError}` : fmtMs(portalLatency), inline: true },
       { name: 'Bot uptime', value: humanUptime(process.uptime()), inline: true },
       { name: 'Guilds', value: String(interaction.client.guilds.cache.size), inline: true },
     )

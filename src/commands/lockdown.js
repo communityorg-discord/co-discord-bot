@@ -5,6 +5,7 @@ import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, ChannelType } f
 import { db } from '../utils/botDb.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { logAction } from '../utils/logger.js';
+import { E } from '../lib/emoji.js';
 
 function parseDuration(input) {
   if (!input) return null;
@@ -93,10 +94,10 @@ export async function execute(interaction) {
 
   // Auth check
   const perm = await canUseCommand(`lockdown:${sub}`, interaction);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
   if (sub === 'global' && action === 'lock' && interaction.options.getString('confirm') !== 'CONFIRM') {
-    return interaction.reply({ content: '❌ Set `confirm` to `CONFIRM` for global lockdown.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Set \`confirm\` to \`CONFIRM\` for global lockdown.`, ephemeral: true });
   }
 
   await interaction.deferReply({ ephemeral: true });
@@ -110,16 +111,16 @@ export async function execute(interaction) {
       const result = db.prepare(`INSERT INTO lockdown_state (guild_id, channel_id, lockdown_type, locked_by, reason, auto_unlock_at)
         VALUES (?, ?, 'channel', ?, ?, ?)`).run(interaction.guildId, channel.id, interaction.user.id, reason, autoUnlock?.toISOString() || null);
       await snapshotAndLock(channel, result.lastInsertRowid);
-      await channel.send({ embeds: [new EmbedBuilder().setColor(0xEF4444).setTitle('🔒 Channel Locked').setDescription(`This channel has been locked.\n**Reason:** ${reason}${autoUnlock ? `\n**Auto-unlock:** <t:${Math.floor(autoUnlock.getTime() / 1000)}:R>` : ''}`).setTimestamp()] });
-      await interaction.editReply({ content: `🔒 <#${channel.id}> locked.` });
+      await channel.send({ embeds: [new EmbedBuilder().setColor(0xEF4444).setTitle('Channel Locked').setDescription(`This channel has been locked.\n**Reason:** ${reason}${autoUnlock ? `\n**Auto-unlock:** <t:${Math.floor(autoUnlock.getTime() / 1000)}:R>` : ''}`).setTimestamp()] });
+      await interaction.editReply({ content: `<#${channel.id}> locked.` });
     } else {
       const lockdown = db.prepare("SELECT * FROM lockdown_state WHERE guild_id = ? AND channel_id = ? AND is_active = 1").get(interaction.guildId, channel.id);
-      if (!lockdown) return interaction.editReply({ content: '❌ No active lockdown on this channel.' });
+      if (!lockdown) return interaction.editReply({ content: `${E.cross} No active lockdown on this channel.` });
       await restoreChannel(channel, lockdown.id);
       db.prepare("UPDATE lockdown_state SET is_active = 0, unlocked_at = datetime('now') WHERE id = ?").run(lockdown.id);
       db.prepare('DELETE FROM lockdown_permission_snapshots WHERE lockdown_id = ?').run(lockdown.id);
-      await channel.send({ embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('🔓 Channel Unlocked').setDescription('This channel has been unlocked.').setTimestamp()] });
-      await interaction.editReply({ content: `🔓 <#${channel.id}> unlocked.` });
+      await channel.send({ embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Channel Unlocked').setDescription('This channel has been unlocked.').setTimestamp()] });
+      await interaction.editReply({ content: `<#${channel.id}> unlocked.` });
     }
   } else if (sub === 'server' || sub === 'global') {
     const guilds = sub === 'global' ? [...interaction.client.guilds.cache.values()] : [interaction.guild];
@@ -136,7 +137,7 @@ export async function execute(interaction) {
         }
         const sysChannel = guild.systemChannel || channels.first();
         if (sysChannel) {
-          await sysChannel.send({ embeds: [new EmbedBuilder().setColor(0x7F1D1D).setTitle(`🚨 ${sub === 'global' ? 'GLOBAL ' : ''}SERVER LOCKDOWN`).setDescription(`All channels locked.\n**Reason:** ${reason}`).setTimestamp()] }).catch(() => {});
+          await sysChannel.send({ embeds: [new EmbedBuilder().setColor(0x7F1D1D).setTitle(`${sub === 'global' ? 'GLOBAL ' : ''}SERVER LOCKDOWN`).setDescription(`All channels locked.\n**Reason:** ${reason}`).setTimestamp()] }).catch(() => {});
         }
         lockedCount++;
       } else {
@@ -151,14 +152,14 @@ export async function execute(interaction) {
         }
         const sysChannel = guild.systemChannel || guild.channels.cache.filter(c => c.type === ChannelType.GuildText).first();
         if (sysChannel) {
-          await sysChannel.send({ embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('🔓 Lockdown Lifted').setDescription('All channels have been unlocked.').setTimestamp()] }).catch(() => {});
+          await sysChannel.send({ embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Lockdown Lifted').setDescription('All channels have been unlocked.').setTimestamp()] }).catch(() => {});
         }
         lockedCount++;
       }
     }
 
     await logAction(interaction.client, {
-      action: `${action === 'lock' ? '🔒' : '🔓'} ${sub === 'global' ? 'Global' : 'Server'} Lockdown ${action === 'lock' ? 'Applied' : 'Lifted'}`,
+      action: `${sub === 'global' ? 'Global' : 'Server'} Lockdown ${action === 'lock' ? 'Applied' : 'Lifted'}`,
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       target: { discordId: 'ALL', name: sub === 'global' ? 'All CO Servers' : interaction.guild.name },
       reason,
@@ -166,6 +167,6 @@ export async function execute(interaction) {
       fields: [{ name: 'Guilds', value: String(lockedCount), inline: true }]
     });
 
-    await interaction.editReply({ content: `${action === 'lock' ? '🔒' : '🔓'} ${sub === 'global' ? 'Global' : 'Server'} lockdown ${action === 'lock' ? 'applied' : 'lifted'} across ${lockedCount} guild(s).` });
+    await interaction.editReply({ content: `${sub === 'global' ? 'Global' : 'Server'} lockdown ${action === 'lock' ? 'applied' : 'lifted'} across ${lockedCount} guild(s).` });
   }
 }

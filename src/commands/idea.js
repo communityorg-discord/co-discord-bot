@@ -7,6 +7,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { db } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('idea')
@@ -22,7 +23,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('idea', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   const sub = interaction.options.getSubcommand();
   const userId = interaction.user.id;
@@ -33,7 +34,7 @@ export async function execute(interaction) {
     // Auto-upvote your own idea
     try { db.prepare('INSERT INTO idea_votes (idea_id, voter_discord_id, value) VALUES (?, ?, 1)').run(r.lastInsertRowid, userId); } catch {}
     return interaction.reply({
-      content: `💡 Idea **#${r.lastInsertRowid}** posted (and auto-upvoted by you). Others can vote with \`/idea vote id:${r.lastInsertRowid} direction:Upvote\` or \`direction:Downvote\`.`,
+      content: `Idea **#${r.lastInsertRowid}** posted (and auto-upvoted by you). Others can vote with \`/idea vote id:${r.lastInsertRowid} direction:Upvote\` or \`direction:Downvote\`.`,
       ephemeral: true,
     });
   }
@@ -48,14 +49,14 @@ export async function execute(interaction) {
     `).all();
     if (!rows.length) {
       return interaction.reply({
-        content: '💡 No open ideas yet. Be the first — `/idea post text:<your suggestion>`.',
+        content: 'No open ideas yet. Be the first — `/idea post text:<your suggestion>`.',
         ephemeral: true,
       });
     }
     const fmt = (n) => (n > 0 ? `+${n}` : `${n}`);
     const lines = rows.map(r => `**#${r.id}** · ${fmt(r.votes)} · <@${r.owner_discord_id}>\n   _${r.text.slice(0, 200)}_`);
     const embed = new EmbedBuilder()
-      .setTitle(`💡 Top open ideas — ${rows.length}`)
+      .setTitle(`Top open ideas — ${rows.length}`)
       .setColor(0x6366f1)
       .setDescription(lines.join('\n\n').slice(0, 4000))
       .setFooter({ text: 'Vote with /idea vote id:N direction:Upvote|Downvote · post your own with /idea post' });
@@ -68,8 +69,8 @@ export async function execute(interaction) {
     const value = direction === 'down' ? -1 : 1;
 
     const idea = db.prepare('SELECT id, status FROM ideas WHERE id = ?').get(id);
-    if (!idea) return interaction.reply({ content: `❌ No idea #${id}.`, ephemeral: true });
-    if (idea.status !== 'open') return interaction.reply({ content: `❌ Idea #${id} is ${idea.status}, voting closed.`, ephemeral: true });
+    if (!idea) return interaction.reply({ content: `${E.cross} No idea #${id}.`, ephemeral: true });
+    if (idea.status !== 'open') return interaction.reply({ content: `${E.cross} Idea #${id} is ${idea.status}, voting closed.`, ephemeral: true });
 
     const existing = db.prepare('SELECT value FROM idea_votes WHERE idea_id = ? AND voter_discord_id = ?').get(id, userId);
     let action;
@@ -86,9 +87,8 @@ export async function execute(interaction) {
       action = value === 1 ? 'upvoted' : 'downvoted';
     }
     const net = db.prepare('SELECT COALESCE(SUM(value), 0) c FROM idea_votes WHERE idea_id = ?').get(id).c;
-    const emoji = action === 'removed' ? '↩️' : value === 1 ? '👍' : '👎';
     return interaction.reply({
-      content: `${emoji} #${id} ${action} — net score now **${net}**. (Voting the same direction again removes your vote.)`,
+      content: `#${id} ${action} — net score now **${net}**. (Voting the same direction again removes your vote.)`,
       ephemeral: true,
     });
   }

@@ -4,6 +4,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { db } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('todo')
@@ -30,7 +31,7 @@ function listAll(ownerId) {
 export async function execute(interaction) {
   const perm = await canUseCommand('todo', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   const sub = interaction.options.getSubcommand();
   const userId = interaction.user.id;
@@ -40,7 +41,7 @@ export async function execute(interaction) {
     db.prepare('INSERT INTO todos (owner_id, text) VALUES (?, ?)').run(userId, text);
     const open = listOpen(userId).length;
     return interaction.reply({
-      content: `✅ Added — you now have **${open}** open item${open === 1 ? '' : 's'}.`,
+      content: `${E.check} Added — you now have **${open}** open item${open === 1 ? '' : 's'}.`,
       ephemeral: true,
     });
   }
@@ -51,12 +52,12 @@ export async function execute(interaction) {
     const done = all.filter(t => t.done);
 
     const embed = new EmbedBuilder()
-      .setTitle('📝 Your todos')
+      .setTitle('Your todos')
       .setColor(open.length === 0 ? 0x22c55e : 0x6366f1)
       .setFooter({ text: 'Reference items by their number — /todo done index:N · /todo remove index:N' });
 
     if (open.length === 0) {
-      embed.setDescription('🎉 _Inbox zero. Nothing open._');
+      embed.setDescription('_Inbox zero. Nothing open._');
     } else {
       const lines = open.map((t, i) => `**${i + 1}.** ${t.text}`).join('\n');
       embed.addFields({ name: `Open (${open.length})`, value: lines.slice(0, 1024), inline: false });
@@ -74,17 +75,17 @@ export async function execute(interaction) {
   if (sub === 'done') {
     const idx = interaction.options.getInteger('index');
     const row = open[idx - 1];
-    if (!row) return interaction.reply({ content: `❌ No open item #${idx}. Run \`/todo list\`.`, ephemeral: true });
+    if (!row) return interaction.reply({ content: `${E.cross} No open item #${idx}. Run \`/todo list\`.`, ephemeral: true });
     db.prepare(`UPDATE todos SET done = 1, completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`).run(row.id);
-    return interaction.reply({ content: `✅ Done — _${row.text}_`, ephemeral: true });
+    return interaction.reply({ content: `${E.check} Done — _${row.text}_`, ephemeral: true });
   }
 
   if (sub === 'remove') {
     const idx = interaction.options.getInteger('index');
     const row = open[idx - 1];
-    if (!row) return interaction.reply({ content: `❌ No open item #${idx}.`, ephemeral: true });
+    if (!row) return interaction.reply({ content: `${E.cross} No open item #${idx}.`, ephemeral: true });
     db.prepare('DELETE FROM todos WHERE id = ?').run(row.id);
-    return interaction.reply({ content: `🗑️ Removed — _${row.text}_`, ephemeral: true });
+    return interaction.reply({ content: `Removed — _${row.text}_`, ephemeral: true });
   }
 
   if (sub === 'undo') {
@@ -92,13 +93,13 @@ export async function execute(interaction) {
     const done = db.prepare('SELECT id, text FROM todos WHERE owner_id = ? AND done = 1 ORDER BY completed_at DESC LIMIT 50').all(userId);
     const idx = interaction.options.getInteger('index');
     const row = done[idx - 1];
-    if (!row) return interaction.reply({ content: `❌ No completed item #${idx}.`, ephemeral: true });
+    if (!row) return interaction.reply({ content: `${E.cross} No completed item #${idx}.`, ephemeral: true });
     db.prepare('UPDATE todos SET done = 0, completed_at = NULL WHERE id = ?').run(row.id);
-    return interaction.reply({ content: `↩️ Reopened — _${row.text}_`, ephemeral: true });
+    return interaction.reply({ content: `Reopened — _${row.text}_`, ephemeral: true });
   }
 
   if (sub === 'clear') {
     const r = db.prepare('DELETE FROM todos WHERE owner_id = ? AND done = 1').run(userId);
-    return interaction.reply({ content: `🧹 Cleared ${r.changes} completed item${r.changes === 1 ? '' : 's'}.`, ephemeral: true });
+    return interaction.reply({ content: `Cleared ${r.changes} completed item${r.changes === 1 ? '' : 's'}.`, ephemeral: true });
   }
 }

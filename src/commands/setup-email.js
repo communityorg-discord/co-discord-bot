@@ -3,6 +3,7 @@ import { SlashCommandBuilder, EmbedBuilder, ModalBuilder, TextInputBuilder, Acti
 import { savePersonalEmailSetup, getPersonalEmailSetup, removePersonalEmailSetup } from '../utils/botDb.js';
 import { getUserByDiscordId } from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('setup-email')
@@ -28,7 +29,7 @@ export async function execute(interaction) {
   const checkName = sub ? `setup-email:${sub}` : 'setup-email';
   const perm = await canUseCommand(checkName, interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
 
   if (sub === 'configure') {
@@ -36,14 +37,14 @@ export async function execute(interaction) {
     const userEmail = portalUser?.co_email || portalUser?.email || null;
     if (!userEmail) {
       return interaction.reply({
-        content: '❌ No email address found for your account in the staff portal. Contact DMSPC to have your email set up first.',
+        content: `${E.cross} No email address found for your account in the staff portal. Contact DMSPC to have your email set up first.`,
         ephemeral: true,
       });
     }
 
     const modal = new ModalBuilder()
       .setCustomId('setup_email_modal')
-      .setTitle('📧 Personal Email Setup');
+      .setTitle('Personal Email Setup');
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(
@@ -71,19 +72,19 @@ export async function execute(interaction) {
     const setup = getPersonalEmailSetup(interaction.user.id);
     if (!setup) {
       return interaction.reply({
-        content: '📭 No personal email monitoring configured. Run `/setup-email configure` to set it up.',
+        content: `${E.inbox} No personal email monitoring configured. Run \`/setup-email configure\` to set it up.`,
         ephemeral: true,
       });
     }
 
     const embed = new EmbedBuilder()
-      .setTitle('📧 Personal Email Monitoring')
+      .setTitle('Personal Email Monitoring')
       .setColor(0x22C55E)
       .addFields(
-        { name: '📮 Email Address', value: setup.co_email, inline: true },
-        { name: '✅ Status', value: 'Active', inline: true },
-        { name: '🖥️ IMAP Host', value: `${setup.imap_host}:${setup.imap_port}`, inline: true },
-        { name: '📅 Configured', value: `<t:${Math.floor(new Date(setup.created_at).getTime() / 1000)}:R>`, inline: false },
+        { name: 'Email Address', value: setup.co_email, inline: true },
+        { name: 'Status', value: 'Active', inline: true },
+        { name: 'IMAP Host', value: `${setup.imap_host}:${setup.imap_port}`, inline: true },
+        { name: 'Configured', value: `<t:${Math.floor(new Date(setup.created_at).getTime() / 1000)}:R>`, inline: false },
       )
       .setFooter({ text: 'New emails are checked every minute and sent to your DMs' })
       .setTimestamp();
@@ -94,7 +95,7 @@ export async function execute(interaction) {
   if (sub === 'disable') {
     removePersonalEmailSetup(interaction.user.id);
     return interaction.reply({
-      content: '✅ Personal email monitoring disabled. Run `/setup-email configure` to re-enable.',
+      content: `${E.check} Personal email monitoring disabled. Run \`/setup-email configure\` to re-enable.`,
       ephemeral: true,
     });
   }
@@ -108,7 +109,7 @@ export async function handleModal(interaction) {
   const coEmail = portalUser?.co_email || portalUser?.email || null;
 
   if (!coEmail) {
-    return interaction.reply({ content: '❌ CO email not found in portal.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} CO email not found in portal.`, ephemeral: true });
   }
 
   await interaction.deferReply({ ephemeral: true });
@@ -116,6 +117,6 @@ export async function handleModal(interaction) {
   savePersonalEmailSetup(interaction.user.id, coEmail, password);
 
   return interaction.editReply({
-    content: `✅ Email monitoring configured for **${coEmail}**.\n\nThe bot will check your inbox every minute and send new emails to your DMs. If the password is incorrect you will receive an error notification.\n\nUse \`/setup-email status\` to check your setup.`,
+    content: `${E.check} Email monitoring configured for **${coEmail}**.\n\nThe bot will check your inbox every minute and send new emails to your DMs. If the password is incorrect you will receive an error notification.\n\nUse \`/setup-email status\` to check your setup.`,
   });
 }

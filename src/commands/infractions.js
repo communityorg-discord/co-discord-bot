@@ -6,6 +6,7 @@ import { getInfractions, getDeletedInfractions, deleteInfraction } from '../util
 import { getUserByDiscordId } from '../db.js';
 import { logAction } from '../utils/logger.js';
 import { INFRACTIONS_CASES_LOG_CHANNEL_ID } from '../config.js';
+import { E } from '../lib/emoji.js';
 
 const PAGE_SIZE = 10;
 
@@ -16,7 +17,7 @@ function buildInfractionsPage(infractions, page, total, target, includeDeleted, 
   const portalUser = getUserByDiscordId(target.id);
 
   const embed = new EmbedBuilder()
-    .setTitle(`📋 Infractions — ${portalUser?.display_name || target.username}`)
+    .setTitle(`Infractions — ${portalUser?.display_name || target.username}`)
     .setColor(infractions.length ? 0xEF4444 : 0x22C55E)
     .setFooter({ text: `Community Organisation | Page ${page} of ${totalPages}` });
 
@@ -24,7 +25,7 @@ function buildInfractionsPage(infractions, page, total, target, includeDeleted, 
     embed.setDescription('No active infractions.');
   } else {
     const descLines = pageItems.map(i => {
-      const exp = i.expires_at ? ` ⏱ <t:${Math.floor(new Date(i.expires_at).getTime()/1000)}:R>` : '';
+      const exp = i.expires_at ? ` ${E.calendar} <t:${Math.floor(new Date(i.expires_at).getTime()/1000)}:R>` : '';
       const active = i.active === 0 ? ' ~~(deleted)~~' : '';
       return `**#${i.id}** \`${i.type}\`${exp}${active} — ${i.reason}\n*By ${i.moderator_name || 'Unknown'} <t:${Math.floor(new Date(i.created_at).getTime()/1000)}:R>*`;
     });
@@ -35,7 +36,7 @@ function buildInfractionsPage(infractions, page, total, target, includeDeleted, 
 
   if (includeDeleted && deleted.length > 0) {
     const delDesc = deleted.map(i => `**#${i.id}** \`${i.type}\` — ~~${i.reason}~~`).join('\n');
-    embed.addFields({ name: `🗑️ Deleted (${deleted.length})`, value: delDesc.length > 1024 ? delDesc.substring(0, 1021) + '...' : delDesc });
+    embed.addFields({ name: `Deleted (${deleted.length})`, value: delDesc.length > 1024 ? delDesc.substring(0, 1021) + '...' : delDesc });
   }
 
   const row = new ActionRowBuilder();
@@ -61,7 +62,7 @@ export async function execute(interaction) {
   try {
     const sub = interaction.options.getSubcommand();
     const perm = await canUseCommand(`infractions:${sub}`, interaction);
-    if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
     if (sub === 'view') {
       const target = interaction.options.getUser('user');
@@ -77,10 +78,10 @@ export async function execute(interaction) {
     if (sub === 'delete') {
       const id = interaction.options.getInteger('id');
       const deleted = deleteInfraction(id, interaction.user.id);
-      if (!deleted) return interaction.reply({ content: `❌ Infraction #${id} not found.`, ephemeral: true });
+      if (!deleted) return interaction.reply({ content: `${E.cross} Infraction #${id} not found.`, ephemeral: true });
 
       await logAction(interaction.client, {
-        action: '🗑️ Infraction Deleted',
+        action: 'Infraction Deleted',
         moderator: { discordId: interaction.user.id, name: interaction.user.username },
         target: { discordId: deleted.discord_id, name: getUserByDiscordId(deleted.discord_id)?.display_name || deleted.discord_id },
         reason: `Infraction #${id} (${deleted.type})`,
@@ -96,7 +97,7 @@ export async function execute(interaction) {
       });
 
       await interaction.reply({ embeds: [new EmbedBuilder()
-        .setTitle('🗑️ Infraction Deleted')
+        .setTitle('Infraction Deleted')
         .setColor(0x22C55E)
         .setDescription(`Infraction #${id} has been deleted and moved to deleted history.`)
         .addFields({ name: 'Deleted By', value: interaction.user.username, inline: true })

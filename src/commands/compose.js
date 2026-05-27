@@ -3,6 +3,7 @@ import { SlashCommandBuilder, ModalBuilder, TextInputBuilder, ActionRowBuilder, 
 import { getPersonalEmailSetup } from '../utils/botDb.js';
 import { fetchEmailConfig } from '../services/emailService.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('compose')
@@ -16,12 +17,12 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('compose', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   const setup = getPersonalEmailSetup(interaction.user.id);
   if (!setup) {
     return interaction.reply({
-      content: '❌ No personal email configured. Run `/setup-email configure` first.\n\nTo send from a **team inbox**, use `/inbox` instead.',
+      content: `${E.cross} No personal email configured. Run \`/setup-email configure\` first.\n\nTo send from a **team inbox**, use \`/inbox\` instead.`,
       ephemeral: true,
     });
   }
@@ -54,7 +55,7 @@ export async function execute(interaction) {
         .setStyle(ButtonStyle.Secondary),
     );
     return interaction.reply({
-      content: `**✉️ Compose from ${setup.co_email} — Step 1:** CC a team inbox (optional):`,
+      content: `**${E.dm} Compose from ${setup.co_email} — Step 1:** CC a team inbox (optional):`,
       components: [ccRow, skipRow],
       ephemeral: true,
     });
@@ -66,7 +67,7 @@ export async function execute(interaction) {
 export async function showPersonalComposeModal(interaction, to, cc) {
   const modal = new ModalBuilder()
     .setCustomId(`personal_compose_submit|${encodeURIComponent(to)}|${encodeURIComponent(cc || '')}`)
-    .setTitle('✉️ Compose Email');
+    .setTitle('Compose Email');
   modal.addComponents(
     new ActionRowBuilder().addComponents(
       new TextInputBuilder()

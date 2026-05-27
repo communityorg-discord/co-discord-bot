@@ -4,6 +4,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getUserByDiscordId, getBragStatus } from '../db.js';
 import portalDb from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 function getWeekKey(date = new Date()) {
   const d = new Date(date);
@@ -40,11 +41,11 @@ export async function execute(interaction) {
   try {
     const perm = await canUseCommand('brag', interaction);
     if (!perm.allowed) {
-      return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+      return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
     }
     const commandUser = getUserByDiscordId(interaction.user.id);
     if (!commandUser) {
-      return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account. Contact DMSPC.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Your Discord account is not linked to a CO Staff Portal account. Contact DMSPC.`, ephemeral: true });
     }
 
     const targetUserOption = interaction.options.getUser('user');
@@ -54,11 +55,11 @@ export async function execute(interaction) {
     if (targetUserOption && targetUserOption.id !== interaction.user.id) {
       const canView = await canUseCommand('brag:other', interaction);
       if (!canView.allowed) {
-        return interaction.reply({ content: `❌ ${canView.reason}`, ephemeral: true });
+        return interaction.reply({ content: `${E.cross} ${canView.reason}`, ephemeral: true });
       }
       const targetLinkedUser = getUserByDiscordId(targetUserOption.id);
       if (!targetLinkedUser) {
-        return interaction.reply({ content: `❌ <@${targetUserOption.id}> is not linked to a CO Staff Portal account.`, ephemeral: true });
+        return interaction.reply({ content: `${E.cross} <@${targetUserOption.id}> is not linked to a CO Staff Portal account.`, ephemeral: true });
       }
       targetDbUser = targetLinkedUser;
       isViewingOther = true;
@@ -106,7 +107,6 @@ export async function execute(interaction) {
       projected = Math.round((currentCount / daysElapsed) * 7);
     }
 
-    const gradeEmoji = (g) => ({ green: '🟢', amber: '🟡', red: '🔴', black: '⚫', pending: '⏳' }[g?.toLowerCase()] || '⚪');
     const gradeColor = (g) => ({ green: 0x22C55E, amber: 0xF59E0B, red: 0xEF4444, black: 0x1F2937 }[g?.toLowerCase()] || 0x5865F2);
 
     const currentGrade = currentWeekRecord?.grade || (currentCount > 0 ? 'pending' : 'unknown');
@@ -115,18 +115,18 @@ export async function execute(interaction) {
 
     const viewingNote = isViewingOther ? ` (viewing ${commandUser.display_name || commandUser.full_name})` : '';
     const embed = new EmbedBuilder()
-      .setTitle(`${gradeEmoji(currentGrade)} Activity Points — ${targetDbUser.display_name || targetDbUser.full_name}${viewingNote}`)
+      .setTitle(`Activity Points — ${targetDbUser.display_name || targetDbUser.full_name}${viewingNote}`)
       .setColor(gradeColor(currentGrade))
       .setDescription('_BRAG was retired in 2026-04-26 — this view now reads from Activity Points._')
       .addFields(
         { name: 'Position', value: targetDbUser.position || 'N/A', inline: true },
         { name: 'Department', value: targetDbUser.department || 'N/A', inline: true },
         { name: '\u200B', value: '\u200B', inline: true },
-        { name: '📊 This Week (points)', value: String(currentCount), inline: true },
-        { name: '🎯 Target', value: `🟢 ${thresholdsGreen}+\n🟡 ${thresholdsAmber}-${thresholdsGreen}\n🔴 ${thresholdsRed}-${thresholdsAmber}\n⚫ 0-${thresholdsRed}`, inline: true },
-        { name: '📈 Projected', value: projected !== null ? String(projected) : 'N/A', inline: true },
-        { name: '🏆 Last Week', value: lastWeekCount > 0 ? `${lastWeekCount} pts — ${gradeEmoji(lastWeekGrade)} ${lastWeekGrade?.toUpperCase()}` : 'No data', inline: true },
-        { name: 'Current Grade', value: `${gradeEmoji(currentGrade)} ${(currentGrade || 'N/A').toUpperCase()}`, inline: true },
+        { name: 'This Week (points)', value: String(currentCount), inline: true },
+        { name: 'Target', value: `${thresholdsGreen}+\n${thresholdsAmber}-${thresholdsGreen}\n${thresholdsRed}-${thresholdsAmber}\n0-${thresholdsRed}`, inline: true },
+        { name: 'Projected', value: projected !== null ? String(projected) : 'N/A', inline: true },
+        { name: 'Last Week', value: lastWeekCount > 0 ? `${lastWeekCount} pts — ${lastWeekGrade?.toUpperCase()}` : 'No data', inline: true },
+        { name: 'Current Grade', value: `${(currentGrade || 'N/A').toUpperCase()}`, inline: true },
         { name: 'Categories met', value: String(currentWeekRecord?.categories_met ?? '—'), inline: true },
       )
       .setFooter({ text: 'Community Organisation | Staff Assistant — try /aps for the live tier breakdown' })

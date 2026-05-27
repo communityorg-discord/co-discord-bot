@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getUserByDiscordId, getLeaveBalance, getPendingLeaveRequests } from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('leave')
@@ -11,11 +12,11 @@ export async function execute(interaction) {
   try {
   const perm = await canUseCommand('leave', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   const user = getUserByDiscordId(interaction.user.id);
   if (!user) {
-    return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Your Discord account is not linked to a CO Staff Portal account.`, ephemeral: true });
   }
 
   const balance = getLeaveBalance(user.id);
@@ -29,7 +30,7 @@ export async function execute(interaction) {
   const wellbeingRemaining = wellbeingTotal - wellbeingUsed;
 
   const embed = new EmbedBuilder()
-    .setTitle(`🏖️ Leave Balance — ${user.display_name || user.full_name}`)
+    .setTitle(`Leave Balance — ${user.display_name || user.full_name}`)
     .setColor(0x5865F2)
     .addFields(
       { name: 'Annual Leave', value: `${annualRemaining} / ${annualTotal} days remaining`, inline: true },

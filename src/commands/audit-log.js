@@ -5,23 +5,24 @@
 // a permission grant. Filters by action type and target user.
 import { SlashCommandBuilder, EmbedBuilder, AuditLogEvent } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 const ACTION_LABEL = {
-  [AuditLogEvent.MemberKick]: '👢 Kick',
-  [AuditLogEvent.MemberBanAdd]: '🔨 Ban',
-  [AuditLogEvent.MemberBanRemove]: '✅ Unban',
-  [AuditLogEvent.MemberUpdate]: '✏️ Member edit',
-  [AuditLogEvent.MemberRoleUpdate]: '🎭 Role change',
-  [AuditLogEvent.MessageDelete]: '🗑️ Msg delete',
-  [AuditLogEvent.MessageBulkDelete]: '🗑️🗑️ Bulk delete',
-  [AuditLogEvent.RoleCreate]: '➕ Role create',
-  [AuditLogEvent.RoleDelete]: '➖ Role delete',
-  [AuditLogEvent.RoleUpdate]: '✏️ Role edit',
-  [AuditLogEvent.ChannelCreate]: '➕ Channel create',
-  [AuditLogEvent.ChannelDelete]: '➖ Channel delete',
-  [AuditLogEvent.ChannelUpdate]: '✏️ Channel edit',
-  [AuditLogEvent.MemberMove]: '🔀 VC move',
-  [AuditLogEvent.MemberDisconnect]: '🔇 VC disconnect',
+  [AuditLogEvent.MemberKick]: 'Kick',
+  [AuditLogEvent.MemberBanAdd]: `${E.ban} Ban`,
+  [AuditLogEvent.MemberBanRemove]: `${E.unban} Unban`,
+  [AuditLogEvent.MemberUpdate]: 'Member edit',
+  [AuditLogEvent.MemberRoleUpdate]: 'Role change',
+  [AuditLogEvent.MessageDelete]: 'Msg delete',
+  [AuditLogEvent.MessageBulkDelete]: 'Bulk delete',
+  [AuditLogEvent.RoleCreate]: 'Role create',
+  [AuditLogEvent.RoleDelete]: 'Role delete',
+  [AuditLogEvent.RoleUpdate]: 'Role edit',
+  [AuditLogEvent.ChannelCreate]: 'Channel create',
+  [AuditLogEvent.ChannelDelete]: 'Channel delete',
+  [AuditLogEvent.ChannelUpdate]: 'Channel edit',
+  [AuditLogEvent.MemberMove]: 'VC move',
+  [AuditLogEvent.MemberDisconnect]: `${E.suspend} VC disconnect`,
 };
 
 const ACTION_CHOICES = [
@@ -63,12 +64,12 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('audit-log', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   await interaction.deferReply({ ephemeral: true });
 
   const guild = interaction.guild;
-  if (!guild) return interaction.editReply({ content: '❌ Run in a server.' });
+  if (!guild) return interaction.editReply({ content: `${E.cross} Run in a server.` });
 
   const action = interaction.options.getString('action') || 'any';
   const target = interaction.options.getUser('user');
@@ -88,11 +89,11 @@ export async function execute(interaction) {
       entries = entries.slice(0, limit);
     }
   } catch (e) {
-    return interaction.editReply({ content: `❌ Couldn't fetch audit log — bot needs ViewAuditLog perm. (${e.message})` });
+    return interaction.editReply({ content: `${E.cross} Couldn't fetch audit log — bot needs ViewAuditLog perm. (${e.message})` });
   }
 
   if (!entries.length) {
-    return interaction.editReply({ content: `📭 No audit-log entries match those filters.` });
+    return interaction.editReply({ content: `No audit-log entries match those filters.` });
   }
 
   const lines = entries.map(e => {
@@ -105,7 +106,7 @@ export async function execute(interaction) {
   });
 
   const embed = new EmbedBuilder()
-    .setTitle(`📜 Audit log — ${guild.name}`)
+    .setTitle(`Audit log — ${guild.name}`)
     .setColor(0x6366f1)
     .setDescription(lines.join('\n').slice(0, 4096))
     .setFooter({

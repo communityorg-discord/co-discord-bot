@@ -5,6 +5,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { db } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('reminders')
@@ -26,7 +27,7 @@ function listPending(userId) {
 export async function execute(interaction) {
   const perm = await canUseCommand('reminders', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   const sub = interaction.options.getSubcommand();
   const userId = interaction.user.id;
@@ -34,7 +35,7 @@ export async function execute(interaction) {
   if (sub === 'list') {
     const rows = listPending(userId);
     if (!rows.length) {
-      return interaction.reply({ content: '📭 No pending reminders. Set one with `/remind`.', ephemeral: true });
+      return interaction.reply({ content: `${E.inbox} No pending reminders. Set one with \`/remind\`.`, ephemeral: true });
     }
     const lines = rows.map((r, i) => {
       const ts = Math.floor(new Date(r.remind_at).getTime() / 1000);
@@ -44,7 +45,7 @@ export async function execute(interaction) {
       return `**${i + 1}.** <t:${ts}:R> · ${direction}\n   _${r.message.slice(0, 200)}_`;
     });
     const embed = new EmbedBuilder()
-      .setTitle(`⏰ Your reminders — ${rows.length}`)
+      .setTitle(`Your reminders — ${rows.length}`)
       .setColor(0x6366f1)
       .setDescription(lines.join('\n\n').slice(0, 4000))
       .setFooter({ text: 'Cancel one with /reminders cancel index:N' });
@@ -56,17 +57,17 @@ export async function execute(interaction) {
     const idx = interaction.options.getInteger('index');
     const row = rows[idx - 1];
     if (!row) {
-      return interaction.reply({ content: `❌ No reminder #${idx}. Run \`/reminders list\`.`, ephemeral: true });
+      return interaction.reply({ content: `${E.cross} No reminder #${idx}. Run \`/reminders list\`.`, ephemeral: true });
     }
     // Mark as sent=1 (effectively cancelled — won't be picked up by the cron)
     // We don't delete so any audit/history surfaces still see it.
     const r = db.prepare('UPDATE reminders SET sent = 1 WHERE id = ?').run(row.id);
     if (r.changes === 0) {
-      return interaction.reply({ content: '⚠️ Already fired or removed — refresh with /reminders list.', ephemeral: true });
+      return interaction.reply({ content: `${E.warning} Already fired or removed — refresh with /reminders list.`, ephemeral: true });
     }
     const ts = Math.floor(new Date(row.remind_at).getTime() / 1000);
     return interaction.reply({
-      content: `🚫 Cancelled — reminder due <t:${ts}:R> ("${row.message.slice(0, 100)}").`,
+      content: `${E.cross} Cancelled — reminder due <t:${ts}:R> ("${row.message.slice(0, 100)}").`,
       ephemeral: true,
     });
   }

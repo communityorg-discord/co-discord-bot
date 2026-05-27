@@ -6,6 +6,7 @@
 // worst-first.
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 // Perms we consider critical for the bot to function in a text-like channel
 const TEXT_PERMS = [
@@ -41,12 +42,12 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('bot-perms', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   await interaction.deferReply({ ephemeral: true });
 
   const guild = interaction.guild;
-  if (!guild) return interaction.editReply({ content: '❌ Run in a server.' });
+  if (!guild) return interaction.editReply({ content: `${E.cross} Run in a server.` });
 
   const includeOk = interaction.options.getBoolean('include_ok') || false;
 
@@ -81,27 +82,27 @@ export async function execute(interaction) {
 
     if (missing.length) {
       totalProblems++;
-      const sev = missing.includes('ViewChannel') || missing.includes('SendMessages') ? '🔴' : '🟡';
+      const sev = missing.includes('ViewChannel') || missing.includes('SendMessages') ? E.cross : E.warning;
       problemLines.push({
         sev,
-        channelType: isVoice ? '🔊' : '#',
-        text: `${sev} ${isVoice ? '🔊' : '#'}${ch.name} — missing: ${missing.join(', ')}`,
+        channelType: '#',
+        text: `${sev} #${ch.name} — missing: ${missing.join(', ')}`,
       });
     } else if (includeOk) {
-      okLines.push(`✅ ${isVoice ? '🔊' : '#'}${ch.name}`);
+      okLines.push(`${E.check} #${ch.name}`);
     }
   }
 
   // Critical-first sort
-  problemLines.sort((a, b) => (a.sev === '🔴' ? 0 : 1) - (b.sev === '🔴' ? 0 : 1));
+  problemLines.sort((a, b) => (a.sev === E.cross ? 0 : 1) - (b.sev === E.cross ? 0 : 1));
 
   const embed = new EmbedBuilder()
-    .setTitle(`🔧 Bot perms audit — ${guild.name}`)
-    .setColor(totalProblems === 0 ? 0x22c55e : (problemLines.some(p => p.sev === '🔴') ? 0xef4444 : 0xf59e0b))
+    .setTitle(`Bot perms audit — ${guild.name}`)
+    .setColor(totalProblems === 0 ? 0x22c55e : (problemLines.some(p => p.sev === E.cross) ? 0xef4444 : 0xf59e0b))
     .setDescription(
       totalProblems === 0
-        ? `✅ Bot has all expected perms across ${totalChecked} channel${totalChecked === 1 ? '' : 's'}.`
-        : `⚠️ ${totalProblems} of ${totalChecked} channels have missing perms.`
+        ? `${E.check} Bot has all expected perms across ${totalChecked} channel${totalChecked === 1 ? '' : 's'}.`
+        : `${E.warning} ${totalProblems} of ${totalChecked} channels have missing perms.`
     );
 
   if (problemLines.length) {

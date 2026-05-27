@@ -3,6 +3,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { ALL_SERVER_IDS, MASS_UNBAN_LOG_CHANNEL_ID } from '../config.js';
 import { logAction } from '../utils/logger.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('mass-unban')
@@ -27,7 +28,7 @@ export async function execute(interaction) {
 
   const perm = await canUseCommand('mass-unban', interaction);
   if (!perm.allowed) {
-    return interaction.editReply({ content: `❌ ${perm.reason}` });
+    return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
   }
 
   const scope = interaction.options.getString('scope');
@@ -70,16 +71,16 @@ export async function execute(interaction) {
 
     const lines = results.map(r =>
       r.error
-        ? `❌ **${r.guild}:** Error — ${r.error}`
+        ? `${E.cross} **${r.guild}:** Error — ${r.error}`
         : r.unbanned === 0 && r.failed === 0
-        ? `⚪ **${r.guild}:** No bans to remove`
+        ? `**${r.guild}:** No bans to remove`
         : r.failed === 0
-        ? `✅ **${r.guild}:** ${r.unbanned} unbanned`
-        : `⚠️ **${r.guild}:** ${r.unbanned} unbanned, ${r.failed} failed`
+        ? `${E.check} **${r.guild}:** ${r.unbanned} unbanned`
+        : `${E.warning} **${r.guild}:** ${r.unbanned} unbanned, ${r.failed} failed`
     );
 
     const embed = new EmbedBuilder()
-      .setTitle('🌐 Mass Unban (Global)')
+      .setTitle('Mass Unban (Global)')
       .setColor(0x22C55E)
       .addFields(
         { name: 'Total Unbanned', value: String(totalUnbanned), inline: true },
@@ -95,7 +96,7 @@ export async function execute(interaction) {
 
     // Log to mass-unban-logs + global moderation
     await logAction(interaction.client, {
-      action: '🌐 Mass Unban (Global)',
+      action: 'Mass Unban (Global)',
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       target: { discordId: 'MULTIPLE', name: `All Servers (${results.length} servers)` },
       reason,
@@ -128,7 +129,7 @@ export async function execute(interaction) {
     }
 
     const embed = new EmbedBuilder()
-      .setTitle('🛡️ Mass Unban (Local)')
+      .setTitle('Mass Unban (Local)')
       .setColor(0x22C55E)
       .addFields(
         { name: 'Server', value: guild.name, inline: true },
@@ -143,7 +144,7 @@ export async function execute(interaction) {
 
     // Log to mass-unban-logs + global moderation
     await logAction(interaction.client, {
-      action: '🛡️ Mass Unban (Local)',
+      action: 'Mass Unban (Local)',
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       target: { discordId: 'MULTIPLE', name: guild.name },
       reason,

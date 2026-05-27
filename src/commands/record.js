@@ -5,6 +5,7 @@ import { SlashCommandBuilder, EmbedBuilder, ChannelType } from 'discord.js';
 import { startRecording, stopRecording, isRecording, getActiveRecording } from '../services/recordingService.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { db } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('record')
@@ -34,17 +35,17 @@ export async function execute(interaction) {
   const sub = interaction.options.getSubcommand();
   const perm = await canUseCommand(`record:${sub}`, interaction);
   if (!perm.allowed) {
-    return interaction.editReply({ content: `❌ ${perm.reason}` });
+    return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
   }
 
   if (sub === 'start') {
     const voiceChannel = interaction.options.getChannel('channel') || interaction.member.voice?.channel;
     if (!voiceChannel || (voiceChannel.type !== ChannelType.GuildVoice && voiceChannel.type !== ChannelType.GuildStageVoice)) {
-      return interaction.editReply({ content: '❌ Please specify a voice channel or join one first.' });
+      return interaction.editReply({ content: `${E.cross} Please specify a voice channel or join one first.` });
     }
 
     if (isRecording(interaction.guild.id)) {
-      return interaction.editReply({ content: '❌ A recording is already active in this server. Use `/record stop` first.' });
+      return interaction.editReply({ content: `${E.cross} A recording is already active in this server. Use \`/record stop\` first.` });
     }
 
     try {
@@ -56,10 +57,10 @@ export async function execute(interaction) {
       await interaction.user.send({
         embeds: [new EmbedBuilder()
           .setColor(0xef4444)
-          .setTitle('🔴 Recording Started')
+          .setTitle('Recording Started')
           .setDescription(`Recording is now active in **${voiceChannel.name}**.`)
           .addFields(
-            { name: '🔑 Access Code', value: `**${accessCode}**`, inline: true },
+            { name: 'Access Code', value: `**${accessCode}**`, inline: true },
             { name: 'Recording ID', value: `\`${recordingKey}\``, inline: true },
             { name: 'Started', value: `<t:${startTs}:F>`, inline: true },
             { name: 'Retention', value: '7 days', inline: true },
@@ -70,12 +71,12 @@ export async function execute(interaction) {
         ]
       }).catch(() => {});
 
-      await interaction.editReply({ content: `✅ Recording started in **${voiceChannel.name}**. Check your DMs for details.` });
+      await interaction.editReply({ content: `${E.check} Recording started in **${voiceChannel.name}**. Check your DMs for details.` });
 
       // Post live-updating embed in text channel
       const liveEmbed = new EmbedBuilder()
         .setColor(0xef4444)
-        .setTitle('🔴 Recording in Progress')
+        .setTitle('Recording in Progress')
         .setDescription(`Recording active in **${voiceChannel.name}**\nStarted by **${interaction.user.tag}** — <t:${startTs}:R>`)
         .addFields(
           { name: 'Participants (0)', value: '*Waiting for speakers...*', inline: true },
@@ -95,13 +96,13 @@ export async function execute(interaction) {
       }
 
     } catch (e) {
-      await interaction.editReply({ content: `❌ Failed to start recording: ${e.message}` });
+      await interaction.editReply({ content: `${E.cross} Failed to start recording: ${e.message}` });
     }
   }
 
   else if (sub === 'stop') {
     if (!isRecording(interaction.guild.id)) {
-      return interaction.editReply({ content: '❌ No active recording in this server.' });
+      return interaction.editReply({ content: `${E.cross} No active recording in this server.` });
     }
 
     try {
@@ -120,7 +121,7 @@ export async function execute(interaction) {
 
       const embed = new EmbedBuilder()
         .setColor(0x22c55e)
-        .setTitle('✅ Recording Complete')
+        .setTitle('Recording Complete')
         .setDescription(`Recording from **${rec.channel_name}** is ready.`)
         .addFields(
           { name: 'Duration', value: durationStr, inline: true },
@@ -138,12 +139,12 @@ export async function execute(interaction) {
         await interaction.user.send({ embeds: [embed] }).catch(() => {});
       }
 
-      await interaction.editReply({ content: `✅ Recording stopped. ${participants.filter(p => p.discord_id !== 'BOT').length} track(s) saved. Duration: **${durationStr}**. Check your DMs.` });
+      await interaction.editReply({ content: `${E.check} Recording stopped. ${participants.filter(p => p.discord_id !== 'BOT').length} track(s) saved. Duration: **${durationStr}**. Check your DMs.` });
 
       // Update the live embed to show final state, or post a new one
       const finalEmbed = new EmbedBuilder()
         .setColor(0x22c55e)
-        .setTitle('⏹️ Recording Ended')
+        .setTitle('Recording Ended')
         .setDescription(`Recording stopped by **${interaction.user.tag}**`)
         .addFields(
           { name: 'Duration', value: `**${durationStr}**`, inline: true },
@@ -160,7 +161,7 @@ export async function execute(interaction) {
       }
 
     } catch (e) {
-      await interaction.editReply({ content: `❌ Failed to stop recording: ${e.message}` });
+      await interaction.editReply({ content: `${E.cross} Failed to stop recording: ${e.message}` });
     }
   }
 
@@ -182,14 +183,14 @@ export async function execute(interaction) {
     const lines = recordings.map(r => {
       const startTs = Math.floor(new Date(r.started_at).getTime() / 1000);
       const dur = r.duration_seconds ? `${Math.floor(r.duration_seconds / 60)}m ${r.duration_seconds % 60}s` : 'In progress';
-      const status = r.status === 'recording' ? '🔴 Recording' : r.status === 'ready' ? '✅ Ready' : r.status === 'processing' ? '⏳ Processing' : '🗑️ Deleted';
+      const status = r.status === 'recording' ? 'Recording' : r.status === 'ready' ? `${E.check} Ready` : r.status === 'processing' ? `${E.pending} Processing` : 'Deleted';
       return `**${r.channel_name}** — <t:${startTs}:R>\n${status} · ${dur} · ${r.participant_count} tracks\n\`${r.recording_key}\``;
     });
 
     await interaction.editReply({
       embeds: [new EmbedBuilder()
         .setColor(0x5865F2)
-        .setTitle('🎙️ Recent Recordings')
+        .setTitle('Recent Recordings')
         .setDescription(lines.join('\n\n'))
         .setFooter({ text: 'CO Recording System' })
       ]

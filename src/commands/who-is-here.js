@@ -5,6 +5,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ChannelType } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { getEffectiveAllServerIds } from '../config.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('who-is-here')
@@ -16,7 +17,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('who-is-here', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   await interaction.deferReply({ ephemeral: true });
 
@@ -27,7 +28,7 @@ export async function execute(interaction) {
     : (interaction.guildId ? [interaction.guildId] : []);
 
   if (!guildIds.length) {
-    return interaction.editReply({ content: '❌ Run in a server (or pass all_servers).' });
+    return interaction.editReply({ content: `${E.cross} Run in a server (or pass all_servers).` });
   }
 
   const sections = []; // [{ guildName, channels: [{name, members: [...]}], totalPeople }]
@@ -70,13 +71,13 @@ export async function execute(interaction) {
   if (grandTotal === 0) {
     return interaction.editReply({
       content: allServers
-        ? `🔇 No-one is in any voice channel across ${guildIds.length} CO guild${guildIds.length === 1 ? '' : 's'}.`
-        : `🔇 No-one is in voice in this server.`,
+        ? `${E.suspend} No-one is in any voice channel across ${guildIds.length} CO guild${guildIds.length === 1 ? '' : 's'}.`
+        : `${E.suspend} No-one is in voice in this server.`,
     });
   }
 
   const embed = new EmbedBuilder()
-    .setTitle(`🔊 ${grandTotal} ${grandTotal === 1 ? 'person is' : 'people are'} in voice`)
+    .setTitle(`${grandTotal} ${grandTotal === 1 ? 'person is' : 'people are'} in voice`)
     .setColor(0x22c55e)
     .setTimestamp();
 
@@ -84,13 +85,13 @@ export async function execute(interaction) {
     const lines = sec.channels.map(c => {
       const mems = c.members.map(m => {
         const flags = [];
-        if (m.muted) flags.push('🔇');
-        if (m.deafened) flags.push('🙈');
-        if (m.stream) flags.push('📺');
-        if (m.camera) flags.push('🎥');
-        return `<@${m.id}>${flags.length ? ` ${flags.join('')}` : ''}`;
+        if (m.muted) flags.push(E.suspend);
+        if (m.deafened) flags.push('(deaf)');
+        if (m.stream) flags.push('(stream)');
+        if (m.camera) flags.push('(cam)');
+        return `<@${m.id}>${flags.length ? ` ${flags.join(' ')}` : ''}`;
       }).join(', ');
-      return `🔊 **${c.name}** (${c.members.length})\n${mems}`;
+      return `**${c.name}** (${c.members.length})\n${mems}`;
     }).join('\n\n');
 
     embed.addFields({

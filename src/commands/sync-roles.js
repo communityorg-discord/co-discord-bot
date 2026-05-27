@@ -11,6 +11,7 @@ import { canUseCommand } from '../utils/permissions.js';
 import { POSITIONS } from '../utils/positions.js';
 import { db as botDb } from '../utils/botDb.js';
 import { getEffectiveAllServerIds } from '../config.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('sync-roles')
@@ -20,19 +21,19 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('sync-roles', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   await interaction.deferReply({ ephemeral: true });
 
   const target = interaction.options.getUser('user');
   const verified = botDb.prepare("SELECT * FROM verified_members WHERE discord_id = ?").get(target.id);
   if (!verified) {
-    return interaction.editReply({ content: `❌ <@${target.id}> isn't in the verified_members table — run /verify first, then re-sync.` });
+    return interaction.editReply({ content: `${E.cross} <@${target.id}> isn't in the verified_members table — run /verify first, then re-sync.` });
   }
 
   const expectedRoleNames = [...(POSITIONS[verified.position] || []), 'Verified', 'CO | Staff'];
   if (!expectedRoleNames.length) {
-    return interaction.editReply({ content: `❌ No position-role mapping for '${verified.position}' — check the POSITIONS map in src/utils/positions.js.` });
+    return interaction.editReply({ content: `${E.cross} No position-role mapping for '${verified.position}' — check the POSITIONS map in src/utils/positions.js.` });
   }
 
   const client = interaction.client;
@@ -64,7 +65,7 @@ export async function execute(interaction) {
   }
 
   const embed = new EmbedBuilder()
-    .setTitle(`🔄 Role re-sync — ${verified.nickname || target.username}`)
+    .setTitle(`Role re-sync — ${verified.nickname || target.username}`)
     .setColor(0x6366f1)
     .setDescription(`Position: **${verified.position}**\nRoles checked: \`${expectedRoleNames.join('`, `')}\``)
     .addFields(perGuild.slice(0, 24).map(g => ({

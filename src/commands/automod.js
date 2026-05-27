@@ -6,6 +6,7 @@ import { canUseCommand } from '../utils/permissions.js';
 import { randomBytes } from 'crypto';
 import { postAllPanels } from '../services/automodPanels.js';
 import { automod } from '../services/automod.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('automod')
@@ -28,15 +29,15 @@ export async function execute(interaction) {
 
     const perm = await canUseCommand('automod:setup', interaction);
     if (!perm.allowed) {
-      return interaction.editReply({ content: `❌ ${perm.reason}` });
+      return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
     }
 
     try {
       const results = await postAllPanels(interaction.channel, interaction.guildId);
-      await interaction.editReply({ content: `✅ AutoMod panels posted: ${results.join(', ')}. All management is now done via these panels.` });
+      await interaction.editReply({ content: `${E.check} AutoMod panels posted: ${results.join(', ')}. All management is now done via these panels.` });
     } catch (e) {
       console.error('[AutoMod Setup]', e.message);
-      await interaction.editReply({ content: `❌ Failed to post panels: ${e.message}` });
+      await interaction.editReply({ content: `${E.cross} Failed to post panels: ${e.message}` });
     }
   }
 
@@ -45,7 +46,7 @@ export async function execute(interaction) {
 
     const perm = await canUseCommand('automod:request-approval', interaction);
     if (!perm.allowed) {
-      return interaction.editReply({ content: `❌ ${perm.reason}` });
+      return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
     }
 
     const actionType = interaction.options.getString('action');
@@ -68,7 +69,7 @@ export async function execute(interaction) {
         await approvalCh.send({
           content: `@here New approval request from <@${interaction.user.id}>`,
           embeds: [new EmbedBuilder()
-            .setColor(0xF59E0B).setTitle('📋 Approval Request')
+            .setColor(0xF59E0B).setTitle('Approval Request')
             .addFields(
               { name: 'Requester', value: `<@${interaction.user.id}>`, inline: true },
               { name: 'Action', value: actionType, inline: true },
@@ -88,6 +89,6 @@ export async function execute(interaction) {
     const { refreshPanel } = await import('../services/automodPanels.js');
     await refreshPanel(interaction.client, guildId, 'approvals');
 
-    await interaction.editReply({ content: '✅ Approval request submitted. An EOB member will review it shortly.' });
+    await interaction.editReply({ content: `${E.check} Approval request submitted. An EOB member will review it shortly.` });
   }
 }

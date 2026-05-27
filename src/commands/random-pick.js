@@ -5,6 +5,7 @@
 // status so you don't pick someone offline.
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('random-pick')
@@ -25,7 +26,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('random-pick', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   await interaction.deferReply();
 
@@ -46,8 +47,8 @@ export async function execute(interaction) {
   if (!pool.length) {
     return interaction.editReply({
       content: onlineOnly
-        ? `🪙 No-one with **${role.name}** is online right now.`
-        : `🪙 **${role.name}** has no human members.`,
+        ? `No-one with **${role.name}** is online right now.`
+        : `**${role.name}** has no human members.`,
     });
   }
 
@@ -59,9 +60,9 @@ export async function execute(interaction) {
   const winners = pool.slice(0, Math.min(count, pool.length));
 
   const embed = new EmbedBuilder()
-    .setTitle(`🎲 ${winners.length === 1 ? 'And the lucky one is…' : `${winners.length} picked`}`)
+    .setTitle(`${winners.length === 1 ? 'And the lucky one is…' : `${winners.length} picked`}`)
     .setColor(role.color || 0x6366f1)
-    .setDescription(winners.map(m => `🎉 <@${m.id}>`).join('\n'))
+    .setDescription(winners.map(m => `<@${m.id}>`).join('\n'))
     .setFooter({
       text: `From @${role.name} — pool of ${pool.length}${onlineOnly ? ' (online only)' : ''} · picked by ${interaction.user.username}`,
     })

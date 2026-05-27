@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getUserByDiscordId, getStaffByName } from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('staff')
@@ -12,23 +13,23 @@ export async function execute(interaction) {
   try {
   const perm = await canUseCommand('staff', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   const requestingUser = getUserByDiscordId(interaction.user.id);
   if (!requestingUser) {
-    return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Your Discord account is not linked to a CO Staff Portal account.`, ephemeral: true });
   }
 
   const query = interaction.options.getString('name');
   const results = getStaffByName(query);
 
   if (!results.length) {
-    return interaction.reply({ content: `❌ No staff found matching "${query}"`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} No staff found matching "${query}"`, ephemeral: true });
   }
 
   const SHOWN = 3;
   const embeds = results.slice(0, SHOWN).map(s => new EmbedBuilder()
-    .setTitle(`👤 ${s.display_name || s.full_name || s.username}`)
+    .setTitle(`${s.display_name || s.full_name || s.username}`)
     .setColor(0x5865F2)
     .addFields(
       { name: 'Position', value: s.position || 'N/A', inline: true },

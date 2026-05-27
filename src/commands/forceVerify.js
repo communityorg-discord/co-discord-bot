@@ -6,6 +6,7 @@ import { db } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { OFFICIAL_BYPASS_IDS } from '../config.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('force-verify')
@@ -22,7 +23,7 @@ export async function execute(interaction) {
 
     const perm = await canUseCommand('force-verify', interaction);
     if (!perm.allowed) {
-      return interaction.editReply({ content: `❌ ${perm.reason}` });
+      return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
     }
 
     const targetUser = interaction.options.getUser('user');
@@ -32,7 +33,7 @@ export async function execute(interaction) {
     // Check if already pending
     const pending = db.prepare("SELECT id FROM verification_queue WHERE discord_id = ? AND status = 'pending'").get(discordId);
     if (pending) {
-      return interaction.editReply({ content: `⏳ <@${discordId}> already has a pending verification request (#${pending.id}).` });
+      return interaction.editReply({ content: `${E.pending} <@${discordId}> already has a pending verification request (#${pending.id}).` });
     }
 
     // Check official account bypass
@@ -45,11 +46,11 @@ export async function execute(interaction) {
     } else {
       portalUser = await getPortalUser(discordId);
       if (!portalUser) {
-        return interaction.editReply({ content: `❌ <@${discordId}> is not found in the CO Staff Portal. They must be an active staff member to verify.` });
+        return interaction.editReply({ content: `${E.cross} <@${discordId}> is not found in the CO Staff Portal. They must be an active staff member to verify.` });
       }
       position = portalUser.position;
       if (!position || !POSITIONS[position]) {
-        return interaction.editReply({ content: `❌ Position **${position || 'Unknown'}** is not recognised in the roles system.` });
+        return interaction.editReply({ content: `${E.cross} Position **${position || 'Unknown'}** is not recognised in the roles system.` });
       }
     }
 
@@ -58,7 +59,7 @@ export async function execute(interaction) {
     try {
       verifyChannel = await getOrCreateVerificationChannel(interaction.client);
     } catch (e) {
-      return interaction.editReply({ content: '❌ Could not find the verification channel.' });
+      return interaction.editReply({ content: `${E.cross} Could not find the verification channel.` });
     }
 
     const isProbation = !isOfficial && portalUser?.on_probation === true;
@@ -106,7 +107,7 @@ export async function execute(interaction) {
     db.prepare("UPDATE verification_queue SET message_id = ? WHERE id = ?").run(msg.id, queueId);
 
     await logAction(interaction.client, {
-      action: '📝 Force Verification Request Submitted',
+      action: 'Force Verification Request Submitted',
       target: { discordId, name: targetUser.username },
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       color: 0x5865F2,
@@ -114,11 +115,11 @@ export async function execute(interaction) {
       guildId: interaction.guildId
     });
 
-    return interaction.editReply({ content: `✅ Verification request **#${queueId}** submitted for <@${discordId}> as **${position}**. Awaiting approval in the verification queue.` });
+    return interaction.editReply({ content: `${E.check} Verification request **#${queueId}** submitted for <@${discordId}> as **${position}**. Awaiting approval in the verification queue.` });
   } catch (err) {
     console.error('[Force Verify] Error:', err.message);
     try {
-      await interaction.editReply({ content: '❌ An error occurred. Please try again.' });
+      await interaction.editReply({ content: `${E.cross} An error occurred. Please try again.` });
     } catch (_) {}
   }
 }

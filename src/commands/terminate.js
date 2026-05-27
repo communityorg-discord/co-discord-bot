@@ -7,6 +7,7 @@ import { logAction } from '../utils/logger.js';
 import { TERMINATE_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import botDb from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('terminate')
@@ -16,13 +17,13 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const perm = await canUseCommand('terminate', interaction);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
   const target = interaction.options.getUser('user');
   const reason = interaction.options.getString('reason');
 
   if (requiresSuperuserWarning(target.id)) {
-    return interaction.reply({ content: `⚠️ **Warning:** You are attempting to moderate a Superuser. This has been logged.`, ephemeral: true });
+    return interaction.reply({ content: `${E.warning} **Warning:** You are attempting to moderate a Superuser. This has been logged.`, ephemeral: true });
   }
 
   const portalUser = getUserByDiscordId(target.id);
@@ -31,7 +32,7 @@ export async function execute(interaction) {
   try {
     await target.send({
       embeds: [new EmbedBuilder()
-        .setTitle('🔴 Employment Terminated')
+        .setTitle('Employment Terminated')
         .setColor(0xEF4444)
         .setDescription('Your employment with Community Organisation has been terminated.')
         .addFields(
@@ -58,7 +59,7 @@ export async function execute(interaction) {
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()
-    .setTitle('🔴 Staff Terminated')
+    .setTitle('Staff Terminated')
     .setColor(0x7F1D1D)
     .setDescription(`**${portalUser?.display_name || target.username}** has been terminated.`)
     .addFields(

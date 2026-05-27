@@ -6,6 +6,7 @@ import { POSITIONS } from '../utils/positions.js';
 import { applyVerification } from '../utils/verifyHelper.js';
 import { logAction } from '../utils/logger.js';
 import { db } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 import fetch from 'node-fetch';
 
 const positionChoices = Object.keys(POSITIONS)
@@ -22,7 +23,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('onboard', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
 
   const targetUser = interaction.options.getUser('user');
@@ -61,7 +62,7 @@ export async function handleModal(interaction) {
   const matchedPosition = Object.keys(POSITIONS).find(p => p.replace(/[^a-zA-Z0-9]/g, ' ').includes(position.replace(/_/g, ' '))) || position;
 
   const targetUser = await interaction.client.users.fetch(targetDiscordId).catch(() => null);
-  if (!targetUser) return interaction.editReply({ content: '❌ Could not find that user.' });
+  if (!targetUser) return interaction.editReply({ content: `${E.cross} Could not find that user.` });
 
   const steps = [];
   let portalUser = getUserByDiscordId(targetDiscordId);
@@ -112,19 +113,19 @@ export async function handleModal(interaction) {
   // Step 3 — DM credentials + Staff HQ invite
   try {
     const dmFields = [
-      { name: '🌐 Portal URL', value: 'https://portal.communityorg.co.uk', inline: false },
-      { name: '👤 Username', value: `\`${credentials?.username || portalUser?.username || 'N/A'}\``, inline: true },
-      { name: '🔑 Temporary Password', value: `\`${credentials?.temp_password || 'Contact admin'}\``, inline: true },
-      { name: '📌 Position', value: matchedPosition, inline: true },
+      { name: 'Portal URL', value: 'https://portal.communityorg.co.uk', inline: false },
+      { name: 'Username', value: `\`${credentials?.username || portalUser?.username || 'N/A'}\``, inline: true },
+      { name: 'Temporary Password', value: `\`${credentials?.temp_password || 'Contact admin'}\``, inline: true },
+      { name: 'Position', value: matchedPosition, inline: true },
     ];
     if (staffHqInviteUrl) {
-      dmFields.push({ name: '🏛️ Staff HQ Server', value: `[Click to join](${staffHqInviteUrl}) — single-use, expires in 7 days`, inline: false });
+      dmFields.push({ name: 'Staff HQ Server', value: `[Click to join](${staffHqInviteUrl}) — single-use, expires in 7 days`, inline: false });
     }
-    dmFields.push({ name: '⚠️ Action Required', value: 'Please log in and change your password immediately. You will also be asked to set up 2FA on first login.', inline: false });
+    dmFields.push({ name: 'Action Required', value: 'Please log in and change your password immediately. You will also be asked to set up 2FA on first login.', inline: false });
 
     await targetUser.send({ embeds: [new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle('👋 Welcome to Community Organisation')
+      .setTitle('Welcome to Community Organisation')
       .setDescription('Welcome to the CO team! Your staff portal account has been set up.')
       .addFields(...dmFields)
       .setFooter({ text: 'Community Organisation | Keep these credentials private' })
@@ -168,7 +169,7 @@ export async function handleModal(interaction) {
   // Reply
   await interaction.editReply({ embeds: [new EmbedBuilder()
     .setColor(0x22C55E)
-    .setTitle('✅ Onboarding Complete')
+    .setTitle('Onboarding Complete')
     .setDescription(`**${targetUser.tag}** has been onboarded as **${matchedPosition}**.`)
     .addFields(
       { name: 'Nickname', value: nickname, inline: true },
@@ -179,7 +180,7 @@ export async function handleModal(interaction) {
   ]});
 
   await logAction(interaction.client, {
-    action: '👋 Staff Onboarded',
+    action: 'Staff Onboarded',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: targetDiscordId, name: nickname },
     reason: `Position: ${matchedPosition}`,

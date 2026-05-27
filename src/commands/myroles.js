@@ -5,6 +5,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { getUserByDiscordId } from '../db.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('myroles')
@@ -13,7 +14,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('myroles', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   await interaction.deferReply({ ephemeral: true });
 
@@ -33,7 +34,7 @@ export async function execute(interaction) {
   }
 
   const embed = new EmbedBuilder()
-    .setTitle(`🏷️ Your roles — ${portalUser?.display_name || interaction.user.username}`)
+    .setTitle(`Your roles — ${portalUser?.display_name || interaction.user.username}`)
     .setColor(0x6366f1)
     .setThumbnail(interaction.user.displayAvatarURL());
 
@@ -44,7 +45,7 @@ export async function execute(interaction) {
       inline: false,
     });
   } else {
-    embed.addFields({ name: 'Portal account', value: '❌ Not linked — run `/verify` to set up', inline: false });
+    embed.addFields({ name: 'Portal account', value: `${E.cross} Not linked — run \`/verify\` to set up`, inline: false });
   }
 
   if (!perGuild.length) {

@@ -4,6 +4,7 @@ import { db } from '../utils/botDb.js';
 import { getUserByDiscordId } from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
 import Database from 'better-sqlite3';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('stats')
@@ -14,7 +15,7 @@ export async function execute(interaction) {
 
   const perm = await canUseCommand('stats', interaction);
   if (!perm.allowed) {
-    return interaction.editReply({ content: `❌ ${perm.reason}` });
+    return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
   }
 
   let portalDb;
@@ -57,29 +58,29 @@ export async function execute(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('📊 CO Organisation Statistics')
+    .setTitle('CO Organisation Statistics')
     .setDescription(`Real-time data from the portal, bot, and Discord.\n\u200b`)
     .addFields(
-      { name: '👥 Staff', value: [
+      { name: 'Staff', value: [
         `**Active:** ${activeStaff}`,
         `**Total:** ${totalStaff}`,
         `**On Leave:** ${onLeave}`,
         `**Suspended:** ${suspended}`,
         `**Verified (Discord):** ${verifiedMembers}`,
       ].join('\n'), inline: true },
-      { name: '📋 Cases & Leave', value: [
+      { name: 'Cases & Leave', value: [
         `**Open Cases:** ${openCases}`,
         `**Pending Leave:** ${pendingLeave}`,
         `**APS Active:** ${apsActive} staff (${apsTotalPoints} pts, w/c ${weekKey})`,
       ].join('\n'), inline: true },
-      { name: '🛡️ Moderation', value: [
+      { name: 'Moderation', value: [
         `**Total Infractions:** ${totalInfractions}`,
         `**Active Warnings:** ${activeWarnings}`,
         `**Active Suspensions:** ${activeSuspensions}`,
         `**AutoMod Today:** ${automodIncidentsToday}`,
         `**Active Lockdowns:** ${activeLockdowns}`,
       ].join('\n'), inline: true },
-      { name: '🌐 Discord', value: [
+      { name: 'Discord', value: [
         `**Servers:** ${guilds.size}`,
         `**Total Members:** ${totalMembers}`,
         `**Pending Reminders:** ${pendingReminders}`,

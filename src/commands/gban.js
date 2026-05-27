@@ -6,6 +6,7 @@ import { addInfraction, addGlobalBan, getActiveGlobalBan } from '../utils/botDb.
 import { logAction } from '../utils/logger.js';
 import { GBAN_UNGBAN_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('gban')
@@ -17,18 +18,18 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const perm = await canUseCommand('gban', interaction);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
   const target = interaction.options.getUser('user');
   const reason = interaction.options.getString('reason');
   const appealable = interaction.options.getString('appealable') !== 'no' ? 1 : 0;
 
   if (requiresSuperuserWarning(target.id)) {
-    return interaction.reply({ content: `⚠️ You are attempting to globally ban a Superuser. This has been logged.`, ephemeral: true });
+    return interaction.reply({ content: `${E.warning} You are attempting to globally ban a Superuser. This has been logged.`, ephemeral: true });
   }
 
   const existing = getActiveGlobalBan(target.id);
-  if (existing) return interaction.reply({ content: `❌ ${target.username} already has an active global ban.`, ephemeral: true });
+  if (existing) return interaction.reply({ content: `${E.cross} ${target.username} already has an active global ban.`, ephemeral: true });
 
   await interaction.deferReply();
 
@@ -54,7 +55,7 @@ export async function execute(interaction) {
   try {
     await target.send({
       embeds: [new EmbedBuilder()
-        .setTitle('🔨 Global Ban')
+        .setTitle('Global Ban')
         .setColor(0x7F1D1D)
         .setDescription('You have been globally banned from all Community Organisation servers.')
         .addFields(
@@ -66,7 +67,7 @@ export async function execute(interaction) {
     });
   } catch {}
 
-  const serverList = serverResults.map(s => `${s.success ? '🟢' : '🔴'} ${s.name}`).join('\n');
+  const serverList = serverResults.map(s => `${s.success ? E.check : E.cross} ${s.name}`).join('\n');
 
   // Discord caps field-value at 1024 chars; long disciplinary citations
   // overflow and the whole embed gets rejected with an AggregateError.
@@ -91,7 +92,7 @@ export async function execute(interaction) {
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()
-    .setTitle('🔨 Global Ban')
+    .setTitle('Global Ban')
     .setColor(0x7F1D1D)
     .setDescription(`**${target.username}** has been globally banned.`)
     .addFields(

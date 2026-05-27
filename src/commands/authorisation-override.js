@@ -6,6 +6,7 @@ import { ALL_SERVER_IDS } from '../config.js';
 import { logAction } from '../utils/logger.js';
 import { AUTH_OVERRIDE_LOG_CHANNEL_ID } from '../config.js';
 import { setAuthOverride, removeAuthOverride } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('authorisation-override')
@@ -34,7 +35,7 @@ export async function execute(interaction) {
 
     const perm = await canUseCommand('authorisation-override', interaction);
     if (!perm.allowed) {
-      return interaction.editReply({ content: `❌ ${perm.reason}` });
+      return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
     }
 
     const targetUser = interaction.options.getUser('user');
@@ -42,7 +43,7 @@ export async function execute(interaction) {
     const reason = interaction.options.getString('reason') || 'Not specified';
 
     if (!targetUser) {
-      return interaction.editReply({ content: '❌ Invalid user. Provide a mention or user ID.' });
+      return interaction.editReply({ content: `${E.cross} Invalid user. Provide a mention or user ID.` });
     }
 
     const targetUserId = targetUser.id;
@@ -52,7 +53,7 @@ export async function execute(interaction) {
       removeAuthOverride(targetUserId);
       return interaction.editReply({
         embeds: [new EmbedBuilder()
-          .setTitle('🔓 Auth Override Removed')
+          .setTitle('Auth Override Removed')
           .setColor(0xF59E0B)
           .setDescription(`Auth override for <@${targetUserId}> has been removed.\n\nTheir auth level will revert to their position-based level on next verification/role sync.`)
           .setTimestamp()
@@ -72,33 +73,33 @@ export async function execute(interaction) {
     for (const guildId of ALL_SERVER_IDS) {
       try {
         const guild = await interaction.client.guilds.fetch(guildId);
-        if (!guild) { results.push(`❌ ${guildId}: not found`); continue; }
+        if (!guild) { results.push(`${E.cross} ${guildId}: not found`); continue; }
 
         const member = await guild.members.fetch(targetUserId).catch(() => null);
-        if (!member) { results.push(`⚠️ ${guild.name}: not a member`); continue; }
+        if (!member) { results.push(`${E.warning} ${guild.name}: not a member`); continue; }
 
         const oldAuthRole = member.roles.cache.find(r => r.name.startsWith('Authorisation Level '));
         if (oldAuthRole) {
           if (previousLevel === null) previousLevel = parseInt(oldAuthRole.name.replace('Authorisation Level ', ''));
           await member.roles.remove(oldAuthRole).catch(e => console.warn(`[Auth Override] Remove error ${guild.name}: ${e.message}`));
-          results.push(`🔄 ${guild.name}: removed ${oldAuthRole.name}`);
+          results.push(`${guild.name}: removed ${oldAuthRole.name}`);
         }
 
         const newAuthRole = guild.roles.cache.find(r => r.name === newAuthLevelRoleName);
         if (newAuthRole) {
           await member.roles.add(newAuthRole).catch(e => console.warn(`[Auth Override] Add error ${guild.name}: ${e.message}`));
-          results.push(`✅ ${guild.name}: added ${newAuthRole.name}`);
+          results.push(`${E.check} ${guild.name}: added ${newAuthRole.name}`);
           updated++;
         } else {
-          results.push(`⚠️ ${guild.name}: role not found`);
+          results.push(`${E.warning} ${guild.name}: role not found`);
         }
       } catch (e) {
-        results.push(`❌ ${guildId}: ${e.message}`);
+        results.push(`${E.cross} ${guildId}: ${e.message}`);
       }
     }
 
     const embed = new EmbedBuilder()
-      .setTitle(`🔐 Authorisation Override — Level ${newAuthLevel}`)
+      .setTitle(`Authorisation Override — Level ${newAuthLevel}`)
       .setColor(updated > 0 ? 0x22c55e : 0xef4444)
       .addFields(
         { name: 'Target', value: `<@${targetUserId}>`, inline: false },
@@ -113,7 +114,7 @@ export async function execute(interaction) {
 
     // Log to auth-override channel
     await logAction(interaction.client, {
-      action: `🔐 Auth Override: Level ${previousLevel || 'None'} → Level ${newAuthLevel}`,
+      action: `Auth Override: Level ${previousLevel || 'None'} → Level ${newAuthLevel}`,
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       target: { discordId: targetUserId, name: targetUser.username },
       reason,
@@ -130,7 +131,7 @@ export async function execute(interaction) {
   } catch (err) {
     console.error('[Auth Override] Error:', err.message);
     try {
-      await interaction.editReply({ content: '❌ An error occurred.' });
+      await interaction.editReply({ content: `${E.cross} An error occurred.` });
     } catch (_) {}
   }
 }

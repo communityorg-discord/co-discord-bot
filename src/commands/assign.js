@@ -5,6 +5,7 @@ import { createAssignment, generateAssignmentNumber, getAssignment, updateAssign
 import { getUserByDiscordId, getTeamMembers } from '../db.js';
 import { logAction } from '../utils/logger.js';
 import fetch from 'node-fetch';
+import { E } from '../lib/emoji.js';
 
 const ASSIGNMENTS_CHANNEL_ID = '1487630065008115824';
 const SUPERUSER_IDS = ['723199054514749450', '415922272956710912', '1355367209249148928', '878775920180228127'];
@@ -111,21 +112,21 @@ const STATUS_COLOURS = {
 export function buildAssignmentEmbed(assignment, assignerName, assigneeName, opts = {}) {
   const status = assignment.status || 'pending';
   const statusLabels = {
-    pending: '🟣 PENDING',
-    awaiting_confirmation: '⏳ AWAITING CONFIRMATION',
-    complete: '✅ COMPLETE',
-    overdue: '🔴 OVERDUE',
-    cancelled: '⬛ CANCELLED',
+    pending: 'PENDING',
+    awaiting_confirmation: 'AWAITING CONFIRMATION',
+    complete: `${E.check} COMPLETE`,
+    overdue: 'OVERDUE',
+    cancelled: 'CANCELLED',
   };
 
   const isTeamAssignment = assignment.assigned_to === 'TEAM' && assignment.team;
 
   const embed = new EmbedBuilder()
-    .setTitle(`🗂️ ${opts.delegated ? 'DELEGATED ASSIGNMENT' : isTeamAssignment ? 'TEAM ASSIGNMENT' : 'NEW ASSIGNMENT'}`)
+    .setTitle(`${opts.delegated ? 'DELEGATED ASSIGNMENT' : isTeamAssignment ? 'TEAM ASSIGNMENT' : 'NEW ASSIGNMENT'}`)
     .setColor(STATUS_COLOURS[status] || 0x5865F2)
     .setDescription(assignment.title + (assignment.description ? `\n\n${assignment.description}` : ''))
     .addFields(
-      { name: 'Assigned To', value: isTeamAssignment ? `🏢 **${assignment.team}**` : (assignment.assigned_to && assignment.assigned_to !== 'TEAM' ? `<@${assignment.assigned_to}>` : 'Unassigned'), inline: true },
+      { name: 'Assigned To', value: isTeamAssignment ? `**${assignment.team}**` : (assignment.assigned_to && assignment.assigned_to !== 'TEAM' ? `<@${assignment.assigned_to}>` : 'Unassigned'), inline: true },
       { name: 'Assigned By', value: `<@${assignment.assigned_by}>`, inline: true },
       { name: 'Due Date', value: formatDate(assignment.due_date), inline: true },
       { name: 'Created', value: formatDateShort(assignment.created_at || new Date().toISOString()), inline: true },
@@ -154,49 +155,49 @@ export function buildAssignmentEmbed(assignment, assignerName, assigneeName, opt
         const bar = buildProgressBar(ackCount, total);
         const lines = members.map(m => {
           const acked = acks.some(a => a.discordId === m.discordId);
-          return acked ? `✅ <@${m.discordId}> — acknowledged` : `⬜ <@${m.discordId}> — pending`;
+          return acked ? `${E.check} <@${m.discordId}> — acknowledged` : `<@${m.discordId}> — pending`;
         }).join('\n');
 
-        embed.addFields({ name: `📋 Acknowledge (${ackCount}/${total})`, value: `${bar}\n\n${lines}`, inline: false });
+        embed.addFields({ name: `Acknowledge (${ackCount}/${total})`, value: `${bar}\n\n${lines}`, inline: false });
       } else {
         // Phase 2: Confirm completion
         const confCount = confs.length;
         const bar = buildProgressBar(confCount, total);
         const lines = members.map(m => {
           const confirmed = confs.some(c => c.discordId === m.discordId);
-          return confirmed ? `✅ <@${m.discordId}> — confirmed complete` : `🔲 <@${m.discordId}> — awaiting confirmation`;
+          return confirmed ? `${E.check} <@${m.discordId}> — confirmed complete` : `<@${m.discordId}> — awaiting confirmation`;
         }).join('\n');
 
         embed.addFields(
-          { name: '✅ All Members Acknowledged', value: 'Everyone has seen this task.', inline: false },
-          { name: `🏁 Confirm Complete (${confCount}/${total})`, value: `${bar}\n\n${lines}`, inline: false }
+          { name: 'All Members Acknowledged', value: 'Everyone has seen this task.', inline: false },
+          { name: `Confirm Complete (${confCount}/${total})`, value: `${bar}\n\n${lines}`, inline: false }
         );
       }
     }
   }
 
   if (assignment.completion_notes && status === 'awaiting_confirmation') {
-    embed.addFields({ name: '📝 Completion Notes', value: assignment.completion_notes, inline: false });
+    embed.addFields({ name: 'Completion Notes', value: assignment.completion_notes, inline: false });
   }
 
   if (opts.notes) {
-    embed.addFields({ name: '📋 Notes', value: opts.notes, inline: false });
+    embed.addFields({ name: 'Notes', value: opts.notes, inline: false });
   }
 
   if (opts.delegatedTo) {
-    embed.addFields({ name: '🔄 Delegated To', value: `<@${opts.delegatedTo}>`, inline: false });
+    embed.addFields({ name: 'Delegated To', value: `<@${opts.delegatedTo}>`, inline: false });
   }
 
   if (opts.completedBy) {
-    embed.addFields({ name: '✅ Completed By', value: opts.completedBy, inline: false });
+    embed.addFields({ name: 'Completed By', value: opts.completedBy, inline: false });
   }
 
   if (opts.extensionNote) {
-    embed.addFields({ name: '📅 Extension', value: opts.extensionNote, inline: false });
+    embed.addFields({ name: 'Extension', value: opts.extensionNote, inline: false });
   }
 
   if (opts.caseNumber) {
-    embed.addFields({ name: '📋 Case Raised', value: opts.caseNumber, inline: false });
+    embed.addFields({ name: 'Case Raised', value: opts.caseNumber, inline: false });
   }
 
   return embed;
@@ -220,21 +221,21 @@ export function buildAssignmentButtons(assignmentId, status, opts = {}) {
   if (isTeam && teamPhase === 'confirm') {
     // Phase 2: all acknowledged, now need to confirm completion
     return [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`assign_teamconfirm_${assignmentId}`).setLabel('Confirm Complete').setStyle(ButtonStyle.Success).setEmoji('🏁'),
-      new ButtonBuilder().setCustomId(`assign_cancel_${assignmentId}`).setLabel('Cancel').setStyle(ButtonStyle.Danger).setEmoji('❌'),
+      new ButtonBuilder().setCustomId(`assign_teamconfirm_${assignmentId}`).setLabel('Confirm Complete').setStyle(ButtonStyle.Success).setEmoji({ id: '1509040352626217000', name: 'check' }),
+      new ButtonBuilder().setCustomId(`assign_cancel_${assignmentId}`).setLabel('Cancel').setStyle(ButtonStyle.Danger).setEmoji({ id: '1509040355167834182', name: 'cross' }),
     )];
   }
   if (isTeam) {
     // Phase 1: acknowledge
     return [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`assign_ack_${assignmentId}`).setLabel('Acknowledge').setStyle(ButtonStyle.Success).setEmoji('✅'),
-      new ButtonBuilder().setCustomId(`assign_cancel_${assignmentId}`).setLabel('Cancel').setStyle(ButtonStyle.Danger).setEmoji('❌'),
+      new ButtonBuilder().setCustomId(`assign_ack_${assignmentId}`).setLabel('Acknowledge').setStyle(ButtonStyle.Success).setEmoji({ id: '1509040352626217000', name: 'check' }),
+      new ButtonBuilder().setCustomId(`assign_cancel_${assignmentId}`).setLabel('Cancel').setStyle(ButtonStyle.Danger).setEmoji({ id: '1509040355167834182', name: 'cross' }),
     )];
   }
   return [new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`assign_complete_${assignmentId}`).setLabel('Mark as Complete').setStyle(ButtonStyle.Success).setEmoji('✅'),
-    new ButtonBuilder().setCustomId(`assign_delegate_${assignmentId}`).setLabel('Delegate').setStyle(ButtonStyle.Primary).setEmoji('🔄'),
-    new ButtonBuilder().setCustomId(`assign_cancel_${assignmentId}`).setLabel('Cancel').setStyle(ButtonStyle.Danger).setEmoji('❌'),
+    new ButtonBuilder().setCustomId(`assign_complete_${assignmentId}`).setLabel('Mark as Complete').setStyle(ButtonStyle.Success).setEmoji({ id: '1509040352626217000', name: 'check' }),
+    new ButtonBuilder().setCustomId(`assign_delegate_${assignmentId}`).setLabel('Delegate').setStyle(ButtonStyle.Primary).setEmoji({ id: '1509040402529914880', name: 'acting' }),
+    new ButtonBuilder().setCustomId(`assign_cancel_${assignmentId}`).setLabel('Cancel').setStyle(ButtonStyle.Danger).setEmoji({ id: '1509040355167834182', name: 'cross' }),
   )];
 }
 
@@ -255,12 +256,12 @@ export async function execute(interaction) {
 
   const perm = await canUseCommand('assign', interaction);
   if (!perm.allowed) {
-    return interaction.editReply({ content: `❌ ${perm.reason}` });
+    return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
   }
 
   const assignerPortal = getPortalUser(interaction.user.id);
   if (!assignerPortal) {
-    return interaction.editReply({ content: '❌ Your Discord account is not linked to the CO Staff Portal.' });
+    return interaction.editReply({ content: `${E.cross} Your Discord account is not linked to the CO Staff Portal.` });
   }
 
   const targetUser = interaction.options.getUser('assigned_to');
@@ -271,7 +272,7 @@ export async function execute(interaction) {
   const notes = interaction.options.getString('notes');
 
   if (!targetUser && !team) {
-    return interaction.editReply({ content: '❌ You must provide either an `assigned_to` user or a `team`.' });
+    return interaction.editReply({ content: `${E.cross} You must provide either an \`assigned_to\` user or a \`team\`.` });
   }
 
   let assigneePortal = null;
@@ -279,7 +280,7 @@ export async function execute(interaction) {
   if (targetUser) {
     assigneePortal = getUserByDiscordId(targetUser.id);
     if (!assigneePortal) {
-      return interaction.editReply({ content: '❌ The assigned user is not linked to the CO Staff Portal.' });
+      return interaction.editReply({ content: `${E.cross} The assigned user is not linked to the CO Staff Portal.` });
     }
   }
 
@@ -287,13 +288,13 @@ export async function execute(interaction) {
   if (team && !targetUser) {
     teamMembers = getTeamMembers(team).filter(m => m.discord_id);
     if (teamMembers.length === 0) {
-      return interaction.editReply({ content: `❌ No active staff found in **${team}** with linked Discord accounts.` });
+      return interaction.editReply({ content: `${E.cross} No active staff found in **${team}** with linked Discord accounts.` });
     }
   }
 
   const dueDate = parseDuration(durationStr);
   if (!dueDate) {
-    return interaction.editReply({ content: '❌ Could not parse duration. Use formats like: `3 days`, `1 week`, `24 hours`, `until Sunday`' });
+    return interaction.editReply({ content: `${E.cross} Could not parse duration. Use formats like: \`3 days\`, \`1 week\`, \`24 hours\`, \`until Sunday\`` });
   }
 
   const weekKey = getWeekKey(dueDate.getTime());
@@ -384,7 +385,7 @@ export async function execute(interaction) {
   if (targetUser) {
     try {
       await targetUser.send({ embeds: [new EmbedBuilder()
-        .setTitle('📋 New Assignment')
+        .setTitle('New Assignment')
         .setColor(0x5865F2)
         .setDescription(`You have been assigned a new task by **${assignerPortal.display_name}**.\n\n**Task:** ${taskDesc}\n**Due:** ${formatDate(dueDate)}\n\nCheck <#${ASSIGNMENTS_CHANNEL_ID}> for details.`)
         .setFooter({ text: `Assignment: ${assignmentNumber} | Community Organisation` })
@@ -398,7 +399,7 @@ export async function execute(interaction) {
         const user = await interaction.client.users.fetch(member.discord_id).catch(() => null);
         if (user) {
           await user.send({ embeds: [new EmbedBuilder()
-            .setTitle('📋 New Team Assignment')
+            .setTitle('New Team Assignment')
             .setColor(0x5865F2)
             .setDescription(`A task has been assigned to **${team}** by **${assignerPortal.display_name}**.\n\n**Task:** ${taskDesc}\n**Due:** ${formatDate(dueDate)}\n\nPlease acknowledge this assignment in <#${ASSIGNMENTS_CHANNEL_ID}>.`)
             .setFooter({ text: `Assignment: ${assignmentNumber} | Community Organisation` })
@@ -410,7 +411,7 @@ export async function execute(interaction) {
   }
 
   await logAction(interaction.client, {
-    action: '📋 Assignment Created',
+    action: 'Assignment Created',
     moderator: { discordId: interaction.user.id, name: assignerPortal.display_name },
     target: { discordId: targetUser?.id || 'TEAM', name: assigneeName },
     reason: taskDesc,
@@ -424,7 +425,7 @@ export async function execute(interaction) {
     guildId: interaction.guildId
   });
 
-  return interaction.editReply({ content: `✅ Assignment **${assignmentNumber}** created${targetUser ? `. ${assigneePortal.display_name} has been notified.` : ` for **${team}**.`}` });
+  return interaction.editReply({ content: `${E.check} Assignment **${assignmentNumber}** created${targetUser ? `. ${assigneePortal.display_name} has been notified.` : ` for **${team}**.`}` });
 }
 
 // ── Button Handlers ──────────────────────────────────────────────────────────
@@ -436,8 +437,8 @@ export async function handleButton(interaction) {
   if (customId.startsWith('assign_ack_')) {
     const assignmentId = parseInt(customId.split('_')[2]);
     const assignment = getAssignment(assignmentId);
-    if (!assignment) return interaction.reply({ content: '❌ Assignment not found.', ephemeral: true });
-    if (assignment.status !== 'pending') return interaction.reply({ content: '❌ This assignment is no longer pending.', ephemeral: true });
+    if (!assignment) return interaction.reply({ content: `${E.cross} Assignment not found.`, ephemeral: true });
+    if (assignment.status !== 'pending') return interaction.reply({ content: `${E.cross} This assignment is no longer pending.`, ephemeral: true });
 
     let members = [];
     let acks = [];
@@ -446,8 +447,8 @@ export async function handleButton(interaction) {
 
     const isMember = members.some(m => m.discordId === interaction.user.id);
     const isSU = SUPERUSER_IDS.includes(interaction.user.id);
-    if (!isMember && !isSU) return interaction.reply({ content: '❌ You are not a member of this team.', ephemeral: true });
-    if (acks.some(a => a.discordId === interaction.user.id)) return interaction.reply({ content: '✅ You have already acknowledged this assignment.', ephemeral: true });
+    if (!isMember && !isSU) return interaction.reply({ content: `${E.cross} You are not a member of this team.`, ephemeral: true });
+    if (acks.some(a => a.discordId === interaction.user.id)) return interaction.reply({ content: `${E.check} You have already acknowledged this assignment.`, ephemeral: true });
 
     acks.push({ discordId: interaction.user.id, at: new Date().toISOString() });
     updateAssignment(assignmentId, { team_acknowledgements: JSON.stringify(acks) });
@@ -461,9 +462,9 @@ export async function handleButton(interaction) {
     await interaction.update({ embeds: [embed], components: buildAssignmentButtons(assignmentId, 'pending', { isTeam: true, teamPhase: phase }) });
 
     if (!allAcked) {
-      await interaction.followUp({ content: `✅ **${interaction.user.username}** acknowledged. (${acks.length}/${members.length})`, ephemeral: false }).catch(() => {});
+      await interaction.followUp({ content: `${E.check} **${interaction.user.username}** acknowledged. (${acks.length}/${members.length})`, ephemeral: false }).catch(() => {});
     } else {
-      await interaction.followUp({ content: `📋 All **${members.length}** members acknowledged! Now each member needs to **Confirm Complete** when the task is done.`, ephemeral: false }).catch(() => {});
+      await interaction.followUp({ content: `${E.logs} All **${members.length}** members acknowledged! Now each member needs to **Confirm Complete** when the task is done.`, ephemeral: false }).catch(() => {});
     }
     return;
   }
@@ -472,8 +473,8 @@ export async function handleButton(interaction) {
   if (customId.startsWith('assign_teamconfirm_')) {
     const assignmentId = parseInt(customId.split('_')[2]);
     const assignment = getAssignment(assignmentId);
-    if (!assignment) return interaction.reply({ content: '❌ Assignment not found.', ephemeral: true });
-    if (assignment.status !== 'pending') return interaction.reply({ content: '❌ This assignment is no longer pending.', ephemeral: true });
+    if (!assignment) return interaction.reply({ content: `${E.cross} Assignment not found.`, ephemeral: true });
+    if (assignment.status !== 'pending') return interaction.reply({ content: `${E.cross} This assignment is no longer pending.`, ephemeral: true });
 
     let members = [];
     let confs = [];
@@ -482,8 +483,8 @@ export async function handleButton(interaction) {
 
     const isMember = members.some(m => m.discordId === interaction.user.id);
     const isSU = SUPERUSER_IDS.includes(interaction.user.id);
-    if (!isMember && !isSU) return interaction.reply({ content: '❌ You are not a member of this team.', ephemeral: true });
-    if (confs.some(c => c.discordId === interaction.user.id)) return interaction.reply({ content: '✅ You have already confirmed this task.', ephemeral: true });
+    if (!isMember && !isSU) return interaction.reply({ content: `${E.cross} You are not a member of this team.`, ephemeral: true });
+    if (confs.some(c => c.discordId === interaction.user.id)) return interaction.reply({ content: `${E.check} You have already confirmed this task.`, ephemeral: true });
 
     confs.push({ discordId: interaction.user.id, at: new Date().toISOString() });
     updateAssignment(assignmentId, { team_confirmations: JSON.stringify(confs) });
@@ -514,15 +515,15 @@ export async function handleButton(interaction) {
         const assigner = await interaction.client.users.fetch(assignment.assigned_by);
         await assigner.send({
           embeds: [new EmbedBuilder()
-            .setTitle('🏁 Team Assignment — All Confirmed Complete')
+            .setTitle('Team Assignment — All Confirmed Complete')
             .setColor(0x22C55E)
             .setDescription(`All members of **${assignment.team}** have confirmed the task is complete:\n\n> "${assignment.title}"\n\n**Assignment:** ASN-${assignmentId}\n\nDo you approve?`)
             .setFooter({ text: 'Community Organisation | Staff Assistant' })
             .setTimestamp()
           ],
           components: [new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`assign_confirm_${assignmentId}`).setLabel('Approve').setStyle(ButtonStyle.Success).setEmoji('✅'),
-            new ButtonBuilder().setCustomId(`assign_reject_${assignmentId}`).setLabel('Not Satisfied').setStyle(ButtonStyle.Danger).setEmoji('❌'),
+            new ButtonBuilder().setCustomId(`assign_confirm_${assignmentId}`).setLabel('Approve').setStyle(ButtonStyle.Success).setEmoji({ id: '1509040352626217000', name: 'check' }),
+            new ButtonBuilder().setCustomId(`assign_reject_${assignmentId}`).setLabel('Not Satisfied').setStyle(ButtonStyle.Danger).setEmoji({ id: '1509040355167834182', name: 'cross' }),
           )]
         });
       } catch {}
@@ -532,10 +533,10 @@ export async function handleButton(interaction) {
     const embed = buildAssignmentEmbed(updated, null, null, { assignmentNumber: `ASN-${assignmentId}` });
     if (allConfirmed) {
       await interaction.update({ embeds: [embed], components: buildAssignmentButtons(assignmentId, 'awaiting_confirmation') });
-      await interaction.followUp({ content: `🎉 All **${members.length}** members confirmed! The assigner has been notified for approval.`, ephemeral: false }).catch(() => {});
+      await interaction.followUp({ content: `${E.check} All **${members.length}** members confirmed! The assigner has been notified for approval.`, ephemeral: false }).catch(() => {});
     } else {
       await interaction.update({ embeds: [embed], components: buildAssignmentButtons(assignmentId, 'pending', { isTeam: true, teamPhase: 'confirm' }) });
-      await interaction.followUp({ content: `🏁 **${interaction.user.username}** confirmed complete. (${confs.length}/${members.length})`, ephemeral: false }).catch(() => {});
+      await interaction.followUp({ content: `${E.check} **${interaction.user.username}** confirmed complete. (${confs.length}/${members.length})`, ephemeral: false }).catch(() => {});
     }
     return;
   }
@@ -544,13 +545,13 @@ export async function handleButton(interaction) {
   if (customId.startsWith('assign_complete_')) {
     const assignmentId = parseInt(customId.split('_')[2]);
     const assignment = getAssignment(assignmentId);
-    if (!assignment) return interaction.reply({ content: '❌ Assignment not found.', ephemeral: true });
+    if (!assignment) return interaction.reply({ content: `${E.cross} Assignment not found.`, ephemeral: true });
 
     const isSU = SUPERUSER_IDS.includes(interaction.user.id);
     const isAssignee = interaction.user.id === assignment.assigned_to;
 
     if (!isAssignee && !isSU) {
-      return interaction.reply({ content: '❌ Only the assigned person can mark this as complete.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Only the assigned person can mark this as complete.`, ephemeral: true });
     }
 
     // Superuser override — skip confirmation
@@ -584,7 +585,7 @@ export async function handleButton(interaction) {
       // DM assigned person
       try {
         const assignee = await interaction.client.users.fetch(assignment.assigned_to);
-        await assignee.send({ content: `✅ Your task **"${assignment.title}"** has been marked complete by **${suName}** (superuser override).` });
+        await assignee.send({ content: `${E.check} Your task **"${assignment.title}"** has been marked complete by **${suName}** (superuser override).` });
       } catch {}
       return;
     }
@@ -611,13 +612,13 @@ export async function handleButton(interaction) {
   if (customId.startsWith('assign_cancel_')) {
     const assignmentId = parseInt(customId.split('_')[2]);
     const assignment = getAssignment(assignmentId);
-    if (!assignment) return interaction.reply({ content: '❌ Assignment not found.', ephemeral: true });
+    if (!assignment) return interaction.reply({ content: `${E.cross} Assignment not found.`, ephemeral: true });
 
     const isSU = SUPERUSER_IDS.includes(interaction.user.id);
     const isAssigner = interaction.user.id === assignment.assigned_by;
 
     if (!isAssigner && !isSU) {
-      return interaction.reply({ content: '❌ Only the assigner or a superuser can cancel this.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Only the assigner or a superuser can cancel this.`, ephemeral: true });
     }
 
     updateAssignment(assignmentId, { status: 'cancelled' });
@@ -639,7 +640,7 @@ export async function handleButton(interaction) {
     try {
       const assignee = await interaction.client.users.fetch(assignment.assigned_to);
       const cancellerName = getUserByDiscordId(interaction.user.id)?.display_name || interaction.user.username;
-      await assignee.send({ content: `❌ Your assignment **"${assignment.title}"** has been cancelled by **${cancellerName}**.` });
+      await assignee.send({ content: `${E.cross} Your assignment **"${assignment.title}"** has been cancelled by **${cancellerName}**.` });
     } catch {}
   }
 
@@ -647,15 +648,15 @@ export async function handleButton(interaction) {
   if (customId.startsWith('assign_delegate_')) {
     const assignmentId = parseInt(customId.split('_')[2]);
     const assignment = getAssignment(assignmentId);
-    if (!assignment) return interaction.reply({ content: '❌ Assignment not found.', ephemeral: true });
+    if (!assignment) return interaction.reply({ content: `${E.cross} Assignment not found.`, ephemeral: true });
 
     if (interaction.user.id !== assignment.assigned_to) {
-      return interaction.reply({ content: '❌ Only the assigned person can delegate this task.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Only the assigned person can delegate this task.`, ephemeral: true });
     }
 
     const delegatorPortal = getPortalUser(interaction.user.id);
     if (!delegatorPortal || !canDelegate(delegatorPortal)) {
-      return interaction.reply({ content: '❌ Only the assigned person can delegate, and only if they hold a line manager or supervisor role.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Only the assigned person can delegate, and only if they hold a line manager or supervisor role.`, ephemeral: true });
     }
 
     await interaction.showModal(new ModalBuilder()
@@ -687,7 +688,7 @@ export async function handleButton(interaction) {
   if (customId.startsWith('assign_confirm_')) {
     const assignmentId = parseInt(customId.split('_')[2]);
     const assignment = getAssignment(assignmentId);
-    if (!assignment) return interaction.reply({ content: '❌ Assignment not found.', ephemeral: true });
+    if (!assignment) return interaction.reply({ content: `${E.cross} Assignment not found.`, ephemeral: true });
 
     updateAssignment(assignmentId, {
       status: 'complete',
@@ -720,10 +721,10 @@ export async function handleButton(interaction) {
     try {
       const assignee = await interaction.client.users.fetch(assignment.assigned_to);
       const confirmerName = getUserByDiscordId(interaction.user.id)?.display_name || interaction.user.username;
-      await assignee.send({ content: `✅ Your task completion for **"${assignment.title}"** has been confirmed by **${confirmerName}**. Well done.` });
+      await assignee.send({ content: `${E.check} Your task completion for **"${assignment.title}"** has been confirmed by **${confirmerName}**. Well done.` });
     } catch {}
 
-    await interaction.update({ content: '✅ Task completion confirmed. The assignee has been notified.', embeds: [], components: [] });
+    await interaction.update({ content: `${E.check} Task completion confirmed. The assignee has been notified.`, embeds: [], components: [] });
   }
 
   // ── Assigner rejects completion ──
@@ -755,7 +756,7 @@ export async function handleModal(interaction) {
   if (customId.startsWith('assign_complete_modal_')) {
     const assignmentId = parseInt(customId.split('_')[3]);
     const assignment = getAssignment(assignmentId);
-    if (!assignment) return interaction.reply({ content: '❌ Assignment not found.', ephemeral: true });
+    if (!assignment) return interaction.reply({ content: `${E.cross} Assignment not found.`, ephemeral: true });
 
     const completionNotes = interaction.fields.getTextInputValue('completion_notes') || '';
 
@@ -791,27 +792,27 @@ export async function handleModal(interaction) {
       const assigneeName = getUserByDiscordId(assignment.assigned_to)?.display_name || 'Unknown';
       await assigner.send({
         embeds: [new EmbedBuilder()
-          .setTitle('✅ Task Completion — Action Required')
+          .setTitle('Task Completion — Action Required')
           .setColor(0xF59E0B)
           .setDescription(`**${assigneeName}** has marked the following task as complete:\n\n> "${assignment.title}"\n\n**Assignment:** ASN-${assignmentId}\n**Completed at:** ${formatDate(new Date())}\n**Notes:** ${completionNotes || 'None provided'}\n\nDo you confirm this task was completed satisfactorily?`)
           .setFooter({ text: 'Community Organisation | Staff Assistant' })
           .setTimestamp()
         ],
         components: [new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId(`assign_confirm_${assignmentId}`).setLabel('Confirm Complete').setStyle(ButtonStyle.Success).setEmoji('✅'),
-          new ButtonBuilder().setCustomId(`assign_reject_${assignmentId}`).setLabel('Not Satisfied').setStyle(ButtonStyle.Danger).setEmoji('❌'),
+          new ButtonBuilder().setCustomId(`assign_confirm_${assignmentId}`).setLabel('Confirm Complete').setStyle(ButtonStyle.Success).setEmoji({ id: '1509040352626217000', name: 'check' }),
+          new ButtonBuilder().setCustomId(`assign_reject_${assignmentId}`).setLabel('Not Satisfied').setStyle(ButtonStyle.Danger).setEmoji({ id: '1509040355167834182', name: 'cross' }),
         )]
       });
     } catch (e) { console.error('[assign] assigner DM error:', e.message); }
 
-    await interaction.reply({ content: '✅ Marked as complete. Your assigner has been notified for confirmation.', ephemeral: true });
+    await interaction.reply({ content: `${E.check} Marked as complete. Your assigner has been notified for confirmation.`, ephemeral: true });
   }
 
   // ── Rejection reason modal ──
   if (customId.startsWith('assign_reject_modal_')) {
     const assignmentId = parseInt(customId.split('_')[3]);
     const assignment = getAssignment(assignmentId);
-    if (!assignment) return interaction.reply({ content: '❌ Assignment not found.', ephemeral: true });
+    if (!assignment) return interaction.reply({ content: `${E.cross} Assignment not found.`, ephemeral: true });
 
     const rejectReason = interaction.fields.getTextInputValue('reject_reason');
 
@@ -846,7 +847,7 @@ export async function handleModal(interaction) {
       const assignee = await interaction.client.users.fetch(assignment.assigned_to);
       const assignerName = getUserByDiscordId(assignment.assigned_by)?.display_name || 'Your assigner';
       await assignee.send({ embeds: [new EmbedBuilder()
-        .setTitle('❌ Task Completion Not Accepted')
+        .setTitle('Task Completion Not Accepted')
         .setColor(0xEF4444)
         .setDescription(`Your task completion was not accepted by **${assignerName}**.\n\n**Task:** ${assignment.title}\n**Reason:** ${rejectReason}\n\nThe task remains open. Please address the feedback and mark it complete again when ready.`)
         .setFooter({ text: 'Community Organisation | Staff Assistant' })
@@ -854,21 +855,21 @@ export async function handleModal(interaction) {
       ]});
     } catch {}
 
-    await interaction.update({ content: '✅ Rejection sent. The assignee has been notified with your feedback.', embeds: [], components: [] });
+    await interaction.update({ content: `${E.check} Rejection sent. The assignee has been notified with your feedback.`, embeds: [], components: [] });
   }
 
   // ── Delegation modal ──
   if (customId.startsWith('assign_delegate_modal_')) {
     const assignmentId = parseInt(customId.split('_')[3]);
     const assignment = getAssignment(assignmentId);
-    if (!assignment) return interaction.reply({ content: '❌ Assignment not found.', ephemeral: true });
+    if (!assignment) return interaction.reply({ content: `${E.cross} Assignment not found.`, ephemeral: true });
 
     const delegateToId = interaction.fields.getTextInputValue('delegate_to').trim().replace(/[<@!>]/g, '');
     const delegateReason = interaction.fields.getTextInputValue('delegate_reason');
 
     const delegatePortal = getUserByDiscordId(delegateToId);
     if (!delegatePortal) {
-      return interaction.reply({ content: '❌ That user is not linked to the CO Staff Portal.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} That user is not linked to the CO Staff Portal.`, ephemeral: true });
     }
 
     const weekKey = getWeekKey(new Date(assignment.due_date).getTime());
@@ -945,7 +946,7 @@ export async function handleModal(interaction) {
     try {
       const delegateUser = await interaction.client.users.fetch(delegateToId);
       await delegateUser.send({ embeds: [new EmbedBuilder()
-        .setTitle('🔄 Delegated Assignment')
+        .setTitle('Delegated Assignment')
         .setColor(0x5865F2)
         .setDescription(`**${delegatorName}** has delegated a task to you.\n\n**Task:** ${assignment.title}\n**Due:** ${formatDate(assignment.due_date)}\n**Reason:** ${delegateReason}\n\nCheck <#${ASSIGNMENTS_CHANNEL_ID}> for details.`)
         .setFooter({ text: `Assignment: ${assignmentNumber} | Community Organisation` })
@@ -956,16 +957,16 @@ export async function handleModal(interaction) {
     // DM original assignee
     try {
       await interaction.client.users.fetch(interaction.user.id).then(u => u.send({
-        content: `🔄 You have delegated **"${assignment.title}"** to **${delegateName}**. Remember: delegation does not remove your responsibility — you are still accountable for ensuring this task is completed.`
+        content: `You have delegated **"${assignment.title}"** to **${delegateName}**. Remember: delegation does not remove your responsibility — you are still accountable for ensuring this task is completed.`
       }));
     } catch {}
 
     // DM original assigner
     try {
       const assigner = await interaction.client.users.fetch(assignment.assigned_by);
-      await assigner.send({ content: `🔄 **${delegatorName}** has delegated your task **"${assignment.title}"** to **${delegateName}**. You will be notified when it is completed.` });
+      await assigner.send({ content: `**${delegatorName}** has delegated your task **"${assignment.title}"** to **${delegateName}**. You will be notified when it is completed.` });
     } catch {}
 
-    await interaction.reply({ content: `✅ Task delegated to **${delegateName}** (${assignmentNumber}).`, ephemeral: true });
+    await interaction.reply({ content: `${E.check} Task delegated to **${delegateName}** (${assignmentNumber}).`, ephemeral: true });
   }
 }

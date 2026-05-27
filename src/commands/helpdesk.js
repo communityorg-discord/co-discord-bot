@@ -6,6 +6,7 @@ import {
   getRecentHelpdeskTickets,
 } from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 const STATUS_EMOJI = {
   open: '🟢',
@@ -43,7 +44,7 @@ export async function execute(interaction) {
   const checkName = sub ? `helpdesk:${sub}` : 'helpdesk';
   const perm = await canUseCommand(checkName, interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
 
   // Every subcommand other than 'new' needs a linked portal user.
@@ -59,23 +60,23 @@ export async function execute(interaction) {
   if (!portalUser) {
     return interaction.reply({
       ephemeral: true,
-      content: '❌ Your Discord account is not linked to a CO Staff Portal account. Contact IT to link it.',
+      content: `${E.cross} Your Discord account is not linked to a CO Staff Portal account. Contact IT to link it.`,
     });
   }
 
   if (sub === 'my') {
     const tickets = getRecentHelpdeskTickets(portalUser.id, { limit: 5 });
     if (!tickets.length) {
-      return interaction.reply({ ephemeral: true, content: '📭 No Help Desk tickets for you yet.' });
+      return interaction.reply({ ephemeral: true, content: `${E.inbox} No Help Desk tickets for you yet.` });
     }
     const embed = new EmbedBuilder()
-      .setTitle('🎫 Your recent Help Desk tickets')
+      .setTitle('Your recent Help Desk tickets')
       .setColor(0xc9a84c)
       .setURL(PORTAL_URL);
     for (const t of tickets.slice(0, 5)) {
       const badges = [
-        t.escalated ? '🔥 Escalated' : null,
-        t.sla_breached ? '⏰ SLA breach' : null,
+        t.escalated ? 'Escalated' : null,
+        t.sla_breached ? 'SLA breach' : null,
       ].filter(Boolean).join(' · ');
       embed.addFields({
         name: `${STATUS_EMOJI[t.status] || '•'} \`${t.ticket_ref}\` — ${title(t.status)}`,
@@ -90,7 +91,7 @@ export async function execute(interaction) {
     const ref = interaction.options.getString('ref', true).trim().toUpperCase();
     const t = getHelpdeskTicketByRef(ref);
     if (!t) {
-      return interaction.reply({ ephemeral: true, content: `❌ No Help Desk ticket with ref \`${ref}\`.` });
+      return interaction.reply({ ephemeral: true, content: `${E.cross} No Help Desk ticket with ref \`${ref}\`.` });
     }
     const embed = new EmbedBuilder()
       .setTitle(`${STATUS_EMOJI[t.status] || '•'} ${ref} — ${title(t.status)}`)
@@ -102,8 +103,8 @@ export async function execute(interaction) {
         { name: 'Type', value: title(t.type), inline: true },
         { name: 'Submitter', value: t.submitter_name || t.submitter_username || (t.external_name || 'External'), inline: true },
       );
-    if (t.escalated) embed.addFields({ name: '🔥 Escalated', value: t.escalation_reason || 'Yes', inline: false });
-    if (t.sla_breached) embed.addFields({ name: '⏰ SLA', value: 'Breached', inline: true });
+    if (t.escalated) embed.addFields({ name: 'Escalated', value: t.escalation_reason || 'Yes', inline: false });
+    if (t.sla_breached) embed.addFields({ name: 'SLA', value: 'Breached', inline: true });
     embed.addFields({ name: 'Created', value: fmtDate(t.created_at), inline: false });
     return interaction.reply({ ephemeral: true, embeds: [embed] });
   }

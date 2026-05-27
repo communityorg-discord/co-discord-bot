@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import db, { getUserByDiscordId } from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('case')
@@ -12,14 +13,14 @@ export async function execute(interaction) {
   try {
     const perm = await canUseCommand('case', interaction);
     if (!perm.allowed) {
-      return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+      return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
     }
     const caller = getUserByDiscordId(interaction.user.id);
     if (!caller) {
-      return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Your Discord account is not linked to a CO Staff Portal account.`, ephemeral: true });
     }
     const ref = (interaction.options.getString('ref') || '').trim();
-    if (!ref) return interaction.reply({ content: '❌ Please supply a case reference.', ephemeral: true });
+    if (!ref) return interaction.reply({ content: `${E.cross} Please supply a case reference.`, ephemeral: true });
 
     const row = db.prepare(`
       SELECT c.*,
@@ -35,7 +36,7 @@ export async function execute(interaction) {
     `).get(ref);
 
     if (!row) {
-      return interaction.reply({ content: `❌ Case \`${ref}\` not found.`, ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Case \`${ref}\` not found.`, ephemeral: true });
     }
 
     // Permission: a user can see a case if they're the raiser, subject,
@@ -45,17 +46,16 @@ export async function execute(interaction) {
       || caller.id === row.assigned_to
       || caller.id === row.subject_user_id;
     if (!canView) {
-      return interaction.reply({ content: `❌ You don't have access to \`${ref}\`.`, ephemeral: true });
+      return interaction.reply({ content: `${E.cross} You don't have access to \`${ref}\`.`, ephemeral: true });
     }
 
-    const typeEmojis = { DISCIPLINARY: '⚖️', INVESTIGATION: '🔍', WELLBEING: '💚', TRANSFER: '🔄', LEAVE_QUERY: '🏖️', APS_DISPUTE: '📊', OFFBOARDING: '🚪', PROBATION_REVIEW: '⏳', PERFORMANCE_REVIEW: '🎯', RETURN_TO_WORK: '🔁', SHUTDOWN_WORK_REQUEST: '🗓️', GENERAL_HR: '📋', LETTER_REQUEST: '✉️', DOCUMENT_SIGNING: '✍️' };
     const statusColour = { open: 0x60a5fa, new: 0x60a5fa, in_progress: 0xfbbf24, pending: 0xa78bfa, escalated: 0xef4444, resolved: 0x10b981, closed: 0x64748b }[row.status] || 0x5865F2;
 
     const ageH = Math.round((Date.now() - new Date(row.created_at).getTime()) / 3600000);
     const ageStr = ageH < 48 ? `${ageH}h ago` : `${Math.round(ageH / 24)}d ago`;
 
     const embed = new EmbedBuilder()
-      .setTitle(`${typeEmojis[row.case_type] || '📋'} ${row.case_number}`)
+      .setTitle(`${row.case_number}`)
       .setDescription(row.subject || '_No subject_')
       .setColor(statusColour)
       .addFields(
@@ -70,7 +70,7 @@ export async function execute(interaction) {
       embed.addFields({ name: 'Subject', value: row.subject_name || row.subject_full || '—', inline: true });
     }
     if (row.sla_breached) {
-      embed.addFields({ name: 'SLA', value: '🚨 **Breached**', inline: true });
+      embed.addFields({ name: 'SLA', value: `${E.warning} **Breached**`, inline: true });
     }
     embed.addFields({ name: 'Opened', value: ageStr, inline: true });
 

@@ -6,6 +6,7 @@ import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import { resolveUser } from '../utils/resolveUser.js';
+import { E } from '../lib/emoji.js';
 
 function parseDuration(str) {
   if (!str) return null;
@@ -59,7 +60,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const perm = await canUseCommand('serverban', interaction);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
   const userArg = interaction.options.getString('user');
   const durationStr = interaction.options.getString('duration');
@@ -67,16 +68,16 @@ export async function execute(interaction) {
   const deleteDays = interaction.options.getInteger('delete_messages') ?? 0;
 
   if (!interaction.inGuild()) {
-    return interaction.reply({ content: '❌ This command cannot be used in DMs.' , ephemeral: true });
+    return interaction.reply({ content: `${E.cross} This command cannot be used in DMs.` , ephemeral: true });
   }
 
   if (deleteDays < 0 || deleteDays > 7) {
-    return interaction.reply({ content: '❌ Delete messages must be between 0 and 7 days.' , ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Delete messages must be between 0 and 7 days.` , ephemeral: true });
   }
 
   const resolved = await resolveUser(userArg, interaction.guild);
   if (!resolved) {
-    return interaction.reply({ content: `❌ Could not find user: ${userArg}. Use @mention or a user ID.`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Could not find user: ${userArg}. Use @mention or a user ID.`, ephemeral: true });
   }
   const { id: targetId, user: target } = resolved;
 
@@ -86,7 +87,7 @@ export async function execute(interaction) {
   // Check if already banned
   try {
     await interaction.guild.bans.fetch(targetId);
-    return interaction.reply({ content: `❌ <@${targetId}> is already banned from this server.`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} <@${targetId}> is already banned from this server.`, ephemeral: true });
   } catch {}
 
   const isTempBan = !!durationStr;
@@ -94,10 +95,10 @@ export async function execute(interaction) {
   if (isTempBan) {
     durationMs = parseDuration(durationStr);
     if (!durationMs || durationMs < 60000) {
-      return interaction.reply({ content: '❌ Minimum temp ban duration is 1 minute. Use formats like: 1d, 7d, 12h, 30m' , ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Minimum temp ban duration is 1 minute. Use formats like: 1d, 7d, 12h, 30m` , ephemeral: true });
     }
     if (durationMs > 604800000) {
-      return interaction.reply({ content: '❌ Maximum temp ban duration is 7 days.' , ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Maximum temp ban duration is 7 days.` , ephemeral: true });
     }
   }
 
@@ -111,7 +112,7 @@ export async function execute(interaction) {
       deleteMessageSeconds: deleteDays * 86400,
     });
   } catch (err) {
-    return interaction.editReply({ content: `❌ Failed to ban <@${targetId}>: ${err.message}` });
+    return interaction.editReply({ content: `${E.cross} Failed to ban <@${targetId}>: ${err.message}` });
   }
 
   const inf = addInfraction(targetId, isTempBan ? 'temp_ban' : 'ban', reason, interaction.user.id, interaction.user.username);
@@ -119,12 +120,12 @@ export async function execute(interaction) {
   try {
     await target.send({
       embeds: [new EmbedBuilder()
-        .setTitle(isTempBan ? '⏱️ You Have Been Temporarily Banned' : '🔨 You Have Been Banned')
+        .setTitle(isTempBan ? 'You Have Been Temporarily Banned' : 'You Have Been Banned')
         .setColor(0xEF4444)
         .setDescription(`You have been banned from **${interaction.guild.name}**.`)
         .addFields(
-          { name: '📋 Reason', value: reason, inline: false },
-          ...(isTempBan ? [{ name: '⏱️ Duration', value: formatDuration(durationMs), inline: true }, { name: 'Expires', value: `<t:${Math.floor((Date.now() + durationMs) / 1000)}:R>`, inline: true }] : []),
+          { name: 'Reason', value: reason, inline: false },
+          ...(isTempBan ? [{ name: 'Duration', value: formatDuration(durationMs), inline: true }, { name: 'Expires', value: `<t:${Math.floor((Date.now() + durationMs) / 1000)}:R>`, inline: true }] : []),
           { name: 'Banned By', value: `<@${interaction.user.id}>`, inline: true },
         )
         .setFooter({ text: 'Community Organisation | Staff Assistant' })
@@ -134,7 +135,7 @@ export async function execute(interaction) {
   } catch {}
 
   await logAction(interaction.client, {
-    action: `${isTempBan ? '⏱️ Temporary Ban' : '🔨 User Banned'}`,
+    action: `${isTempBan ? 'Temporary Ban' : 'User Banned'}`,
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: targetId, name: targetName },
     reason,
@@ -155,7 +156,7 @@ export async function execute(interaction) {
 
   await interaction.editReply({
     embeds: [new EmbedBuilder()
-      .setTitle(isTempBan ? '⏱️ User Temporarily Banned' : '🔨 User Banned')
+      .setTitle(isTempBan ? 'User Temporarily Banned' : 'User Banned')
       .setColor(0xEF4444)
       .setDescription(`**${targetName}** has been banned from this server.`)
       .addFields(
@@ -178,7 +179,7 @@ export async function execute(interaction) {
       try {
         await interaction.guild.members.unban(targetId, `Temporary ban (${durationStr}) expired.`);
         await logAction(interaction.client, {
-          action: '✅ Temp Ban Expired — Auto Unbanned',
+          action: 'Temp Ban Expired — Auto Unbanned',
           moderator: { discordId: 'SYSTEM', name: 'Auto (Duration Expired)' },
           target: { discordId: targetId, name: targetName },
           reason: `Temp ban (${durationStr}) expired. Originally banned by <@${interaction.user.id}>`,

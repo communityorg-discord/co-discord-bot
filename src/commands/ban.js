@@ -4,6 +4,7 @@ import { logAction } from '../utils/logger.js';
 import db, { addInfraction } from '../utils/botDb.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { ALL_SERVER_IDS } from '../config.js';
+import { E } from '../lib/emoji.js';
 
 // Uses ALL_SERVER_IDS from config.js
 
@@ -29,11 +30,11 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
     const perm = await canUseCommand('ban', interaction);
     if (!perm.allowed) {
-      return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+      return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
     }
 
     if (!interaction.inGuild()) {
-      return interaction.reply({ content: '❌ This command cannot be used in DMs.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} This command cannot be used in DMs.`, ephemeral: true });
     }
 
     const targetUserId = interaction.options.getString('user_id').replace(/[<@!>]/g, '');
@@ -41,7 +42,7 @@ export async function execute(interaction) {
     const reason = interaction.options.getString('reason') || 'Not specified';
 
     if (!/^\d{17,19}$/.test(targetUserId)) {
-      return interaction.reply({ content: '❌ Invalid user ID format.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Invalid user ID format.`, ephemeral: true });
     }
 
     // Parse duration (e.g. "30s", "5m", "2h", "1d")
@@ -50,23 +51,23 @@ export async function execute(interaction) {
     if (isTempBan) {
       const match = durationStr.match(/^(\d+)([smhd])$/);
       if (!match) {
-        return interaction.reply({ content: '❌ Invalid duration format. Use: 30s, 5m, 2h, 1d', ephemeral: true });
+        return interaction.reply({ content: `${E.cross} Invalid duration format. Use: 30s, 5m, 2h, 1d`, ephemeral: true });
       }
       const value = parseInt(match[1]);
       const unit = match[2];
       const multipliers = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
       durationMs = value * multipliers[unit];
       if (durationMs < 30000) {
-        return interaction.reply({ content: '❌ Minimum ban duration is 30 seconds.', ephemeral: true });
+        return interaction.reply({ content: `${E.cross} Minimum ban duration is 30 seconds.`, ephemeral: true });
       }
       if (durationMs > 604800000) {
-        return interaction.reply({ content: '❌ Maximum ban duration is 7 days.', ephemeral: true });
+        return interaction.reply({ content: `${E.cross} Maximum ban duration is 7 days.`, ephemeral: true });
       }
     }
 
     const existingBan = db.prepare("SELECT * FROM banned_users WHERE discord_id = ?").get(targetUserId);
     if (existingBan) {
-      return interaction.reply({ content: `❌ <@${targetUserId}> is already in the global ban list.`, ephemeral: true });
+      return interaction.reply({ content: `${E.cross} <@${targetUserId}> is already in the global ban list.`, ephemeral: true });
     }
 
     await interaction.deferReply({ ephemeral: true });
@@ -98,7 +99,7 @@ export async function execute(interaction) {
     }
 
     if (results.length === 0 && alreadyBanned.length === 0) {
-      return interaction.reply({ content: `❌ Failed to ban <@${targetUserId}> from all servers.`, ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Failed to ban <@${targetUserId}> from all servers.`, ephemeral: true });
     }
 
     // Save to DB
@@ -109,7 +110,7 @@ export async function execute(interaction) {
 
     const inf = addInfraction(targetUserId, isTempBan ? 'temp_ban' : 'global_ban', reason, interaction.user.id, interaction.user.username, isTempBan ? new Date(Date.now() + durationMs).toISOString() : null, 1);
 
-    const titlePrefix = isTempBan ? '⏱️ Temporary Ban' : '🔨 Global Ban';
+    const titlePrefix = isTempBan ? 'Temporary Ban' : 'Global Ban';
     const statusColor = failedGuilds.length === 0 && results.length > 0 ? 0xef4444 : 0xf59e0b;
     const unbanTs = isTempBan ? Math.floor((Date.now() + durationMs) / 1000) : null;
 
@@ -150,7 +151,7 @@ export async function execute(interaction) {
         db.prepare("DELETE FROM banned_users WHERE discord_id = ? AND unban_at IS NOT NULL").run(targetUserId);
 
         await logAction(interaction.client, {
-          action: `⏱️ Temp Ban Expired — Auto Unbanned`,
+          action: `Temp Ban Expired — Auto Unbanned`,
           moderator: { discordId: 'SYSTEM', name: 'Auto (Duration Expired)' },
           target: { discordId: targetUserId, name: targetUserId },
           reason: `Temp ban (${durationStr}) expired. Originally banned by <@${interaction.user.id}>`,

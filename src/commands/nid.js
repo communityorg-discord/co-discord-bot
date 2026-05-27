@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { getUserByDiscordId } from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('nid')
@@ -18,11 +19,11 @@ export async function execute(interaction) {
   try {
   const perm = await canUseCommand('nid', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   const supervisor = getUserByDiscordId(interaction.user.id);
   if (!supervisor) {
-    return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Your Discord account is not linked to a CO Staff Portal account.`, ephemeral: true });
   }
 
   const staffInput = interaction.options.getString('staff');
@@ -37,11 +38,11 @@ export async function execute(interaction) {
   }
 
   if (!targetUser) {
-    return interaction.reply({ content: `❌ Could not find staff member "${staffInput}". Use a Discord mention (@user).`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Could not find staff member "${staffInput}". Use a Discord mention (@user).`, ephemeral: true });
   }
 
   const embed = new EmbedBuilder()
-    .setTitle('⚖️ Raise Non-Investigational Disciplinary Action')
+    .setTitle('Raise Non-Investigational Disciplinary Action')
     .setColor(0xF59E0B)
     .addFields(
       { name: 'Staff Member', value: targetUser.display_name || targetUser.full_name, inline: true },

@@ -6,6 +6,7 @@ import { logAction } from '../utils/logger.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { SUPERUSER_IDS } from '../config.js';
 import Database from 'better-sqlite3';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('eliminate')
@@ -18,7 +19,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('eliminate', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
 
   const targetId = interaction.options.getString('user').replace(/[<@!>]/g, '').trim();
@@ -27,11 +28,11 @@ export async function execute(interaction) {
   const reason = interaction.options.getString('reason') || 'Eliminated by superuser';
 
   if (confirm !== 'CONFIRM') {
-    return interaction.reply({ content: '❌ You must type `CONFIRM` exactly (case sensitive) to proceed with elimination.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} You must type \`CONFIRM\` exactly (case sensitive) to proceed with elimination.`, ephemeral: true });
   }
 
   if (SUPERUSER_IDS.includes(targetId)) {
-    return interaction.reply({ content: '❌ Cannot eliminate a superuser.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Cannot eliminate a superuser.`, ephemeral: true });
   }
 
   await interaction.deferReply({ ephemeral: true });
@@ -40,7 +41,7 @@ export async function execute(interaction) {
   const targetUsername = targetUser?.tag || targetId;
   const results = { guilds: 0, messagesDeleted: 0, infractionsDeleted: 0, errors: [] };
 
-  await interaction.editReply({ content: `⏳ Eliminating **${targetUsername}**... This may take several minutes.` });
+  await interaction.editReply({ content: `${E.pending} Eliminating **${targetUsername}**... This may take several minutes.` });
 
   // Process each guild
   for (const guild of interaction.client.guilds.cache.values()) {
@@ -116,7 +117,7 @@ export async function execute(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor(0x7F1D1D)
-    .setTitle('🗑️ ELIMINATION COMPLETE')
+    .setTitle('ELIMINATION COMPLETE')
     .addFields(
       { name: 'Target', value: `${targetUsername} (${targetId})`, inline: false },
       { name: 'Guilds Processed', value: String(results.guilds), inline: true },
@@ -136,7 +137,7 @@ export async function execute(interaction) {
   await interaction.editReply({ content: null, embeds: [embed] });
 
   await logAction(interaction.client, {
-    action: '🗑️ USER ELIMINATED',
+    action: 'USER ELIMINATED',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: targetId, name: targetUsername },
     reason,

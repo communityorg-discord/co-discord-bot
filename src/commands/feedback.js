@@ -11,6 +11,7 @@ import {
   ActionRowBuilder,
 } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 // Same maintainer set as /bot info
 const MAINTAINER_IDS = [
@@ -19,10 +20,10 @@ const MAINTAINER_IDS = [
 ];
 
 const KIND_LABEL = {
-  bug: '🐛 Bug',
-  feature: '💡 Feature request',
-  question: '❓ Question',
-  other: '✏️ Other',
+  bug: 'Bug',
+  feature: 'Feature request',
+  question: 'Question',
+  other: 'Other',
 };
 
 export const data = new SlashCommandBuilder()
@@ -33,16 +34,16 @@ export const data = new SlashCommandBuilder()
     .setDescription('What kind of feedback?')
     .setRequired(true)
     .addChoices(
-      { name: '🐛 Bug — something broken', value: 'bug' },
-      { name: '💡 Feature — would be nice if…', value: 'feature' },
-      { name: '❓ Question — how do I…', value: 'question' },
-      { name: '✏️ Other', value: 'other' },
+      { name: 'Bug — something broken', value: 'bug' },
+      { name: 'Feature — would be nice if…', value: 'feature' },
+      { name: 'Question — how do I…', value: 'question' },
+      { name: 'Other', value: 'other' },
     ));
 
 export async function execute(interaction) {
   const perm = await canUseCommand('feedback', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
 
   const kind = interaction.options.getString('kind');
@@ -127,8 +128,8 @@ export async function handleModalSubmit(interaction) {
 
   await interaction.editReply({
     content: dmDelivered > 0
-      ? `✅ Thanks — your ${KIND_LABEL[kind] || kind} has been sent to ${dmDelivered} maintainer${dmDelivered === 1 ? '' : 's'}.${dmFailed ? ` (${dmFailed} couldn't be reached.)` : ''}`
-      : `⚠️ Could not deliver to any maintainer (${dmFailed} failed). Please ping <@${MAINTAINER_IDS[0]}> directly.`,
+      ? `${E.check} Thanks — your ${KIND_LABEL[kind] || kind} has been sent to ${dmDelivered} maintainer${dmDelivered === 1 ? '' : 's'}.${dmFailed ? ` (${dmFailed} couldn't be reached.)` : ''}`
+      : `${E.warning} Could not deliver to any maintainer (${dmFailed} failed). Please ping <@${MAINTAINER_IDS[0]}> directly.`,
   });
   return true;
 }

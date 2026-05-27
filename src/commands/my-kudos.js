@@ -5,6 +5,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { db } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('my-kudos')
@@ -16,7 +17,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('my-kudos', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   const target = interaction.options.getUser('user') || interaction.user;
   const isSelf = target.id === interaction.user.id;
@@ -30,7 +31,7 @@ export async function execute(interaction) {
   const last30Received = db.prepare(`SELECT COUNT(*) c FROM kudos WHERE to_discord_id = ? AND created_at >= datetime('now', '-30 days')`).get(target.id).c;
 
   const embed = new EmbedBuilder()
-    .setTitle(isSelf ? '🙏 Your kudos' : `🙏 ${target.username}'s kudos`)
+    .setTitle(isSelf ? 'Your kudos' : `${target.username}'s kudos`)
     .setColor(0xfacc15)
     .setThumbnail(target.displayAvatarURL())
     .addFields(
@@ -41,7 +42,7 @@ export async function execute(interaction) {
 
   if (received.length === 0) {
     embed.setDescription(isSelf
-      ? '_No kudos yet. The leaderboard\'s wide open — keep helping people 🌱_'
+      ? '_No kudos yet. The leaderboard\'s wide open — keep helping people_'
       : `_${target.username} hasn't received any kudos yet._`);
   } else {
     const lines = received.map(k => {

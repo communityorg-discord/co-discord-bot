@@ -11,6 +11,7 @@ import {
   markdownToDiscord, paginateText,
 } from '../services/emailService.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 const PAGE_SIZE = 8;
 
@@ -106,13 +107,13 @@ export async function execute(interaction) {
   await interaction.deferReply({ ephemeral: true });
   const perm = await canUseCommand('inbox', interaction);
   if (!perm.allowed) {
-    return interaction.editReply({ content: `❌ ${perm.reason}` });
+    return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
   }
   const discordUserId = interaction.user.id;
   const discordRoleIds = interaction.member?.roles?.cache?.map(r => r.id) || [];
   const accessibleInboxes = await getAccessibleInboxes(discordUserId, discordRoleIds);
   if (accessibleInboxes.length === 0) {
-    return interaction.editReply({ content: '❌ You do not have access to any email inboxes.' });
+    return interaction.editReply({ content: `${E.cross} You do not have access to any email inboxes.` });
   }
   if (accessibleInboxes.length === 1) {
     const inbox = accessibleInboxes[0];
@@ -120,7 +121,7 @@ export async function execute(interaction) {
   }
   const selectRow = await buildInboxSelect(discordUserId, discordRoleIds);
   const embed = new EmbedBuilder()
-    .setTitle('📬 Select an Inbox')
+    .setTitle('Select an Inbox')
     .setColor(0x1a73e8)
     .setDescription('Choose an inbox to access:')
     .addFields(accessibleInboxes.map(ib => ({
@@ -137,7 +138,7 @@ async function showInbox(interaction, inbox, discordUserId, discordRoleIds, page
   }
   const verified = await verifyAccess(inbox.inbox_id, discordUserId, discordRoleIds);
   if (!verified) {
-    return interaction.editReply({ content: '❌ Access denied to this inbox.', components: [] });
+    return interaction.editReply({ content: `${E.cross} Access denied to this inbox.`, components: [] });
   }
   try {
     const result = await fetchInboxEmails(inbox, page, PAGE_SIZE);
@@ -152,14 +153,14 @@ async function showInbox(interaction, inbox, discordUserId, discordRoleIds, page
     const navRow = buildPaginationRow(inbox.inbox_id, page, totalPages);
     const backRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('inbox_back').setLabel('← Change Inbox').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`inbox_compose|${inbox.inbox_id}`).setLabel('✉️ Compose').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`inbox_compose|${inbox.inbox_id}`).setLabel('Compose').setStyle(ButtonStyle.Primary),
     );
     await interaction.editReply({
       embeds: [embed],
       components: rows.length > 0 ? [selectRow, navRow, backRow] : [backRow],
     });
   } catch (err) {
-    return interaction.editReply({ content: `⚠️ Error loading inbox: \`${err.message}\`` });
+    return interaction.editReply({ content: `${E.warning} Error loading inbox: \`${err.message}\`` });
   }
 }
 
@@ -169,7 +170,7 @@ async function showEmail(interaction, inbox, uid, discordUserId, discordRoleIds,
   }
   const verified = await verifyAccess(inbox.inbox_id, discordUserId, discordRoleIds);
   if (!verified) {
-    return interaction.editReply({ content: '❌ Access denied.' });
+    return interaction.editReply({ content: `${E.cross} Access denied.` });
   }
   try {
     const email = await fetchEmailBody(inbox, uid);
@@ -204,7 +205,7 @@ async function showEmail(interaction, inbox, uid, discordUserId, discordRoleIds,
       await interaction.followUp({ content: chunks[i], ephemeral: true });
     }
   } catch (err) {
-    return interaction.editReply({ content: `⚠️ Error loading email: \`${err.message}\`` });
+    return interaction.editReply({ content: `${E.warning} Error loading email: \`${err.message}\`` });
   }
 }
 
@@ -212,7 +213,7 @@ async function showComposeModal(interaction, inboxId, cc) {
   const safeCc = (cc || '').slice(0, 40).replace(/\|/g, '');
   const modal = new ModalBuilder()
     .setCustomId(`inbox_compose_submit|${inboxId}|${safeCc}`)
-    .setTitle('✉️ Compose New Email');
+    .setTitle('Compose New Email');
   modal.addComponents(
     new ActionRowBuilder().addComponents(
       new TextInputBuilder()
@@ -263,9 +264,9 @@ export async function handleInboxInteraction(interaction) {
       const inboxId = interaction.values[0];
       const config = await fetchEmailConfig();
       const inbox = config[inboxId];
-      if (!inbox) return interaction.editReply({ content: '❌ Inbox not found.' });
+      if (!inbox) return interaction.editReply({ content: `${E.cross} Inbox not found.` });
       const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
-      if (!verified) return interaction.editReply({ content: '❌ Access denied.' });
+      if (!verified) return interaction.editReply({ content: `${E.cross} Access denied.` });
       return showInbox(interaction, inbox, discordUserId, discordRoleIds, 0);
     }
 
@@ -274,13 +275,13 @@ export async function handleInboxInteraction(interaction) {
       const inboxId = parts[1];
       const page = parseInt(parts[2]) || 0;
       const uid = interaction.values[0];
-      if (uid === 'none') return interaction.reply({ content: '❌ No email selected.', ephemeral: true });
+      if (uid === 'none') return interaction.reply({ content: `${E.cross} No email selected.`, ephemeral: true });
       await interaction.deferReply({ ephemeral: true }).catch(() => {});
       const config = await fetchEmailConfig();
       const inbox = config[inboxId];
-      if (!inbox) return interaction.editReply({ content: '❌ Inbox not found.' });
+      if (!inbox) return interaction.editReply({ content: `${E.cross} Inbox not found.` });
       const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
-      if (!verified) return interaction.editReply({ content: '❌ Access denied.' });
+      if (!verified) return interaction.editReply({ content: `${E.cross} Access denied.` });
       await interaction.message.delete().catch(() => {});
       return showEmail(interaction, inbox, uid, discordUserId, discordRoleIds, page);
     }
@@ -290,14 +291,14 @@ export async function handleInboxInteraction(interaction) {
       await interaction.message.delete().catch(() => {});
       const accessibleInboxes = await getAccessibleInboxes(discordUserId, discordRoleIds);
       if (accessibleInboxes.length === 0) {
-        return interaction.editReply({ content: '❌ You do not have access to any email inboxes.' });
+        return interaction.editReply({ content: `${E.cross} You do not have access to any email inboxes.` });
       }
       if (accessibleInboxes.length === 1) {
         return showInbox(interaction, accessibleInboxes[0], discordUserId, discordRoleIds, 0);
       }
       const selectRow = await buildInboxSelect(discordUserId, discordRoleIds);
       const embed = new EmbedBuilder()
-        .setTitle('📬 Select an Inbox')
+        .setTitle('Select an Inbox')
         .setColor(0x1a73e8)
         .setDescription('Choose an inbox to access:')
         .addFields(accessibleInboxes.map(ib => ({
@@ -317,9 +318,9 @@ export async function handleInboxInteraction(interaction) {
       await interaction.deferReply({ ephemeral: true }).catch(() => {});
       const config = await fetchEmailConfig();
       const inbox = config[inboxId];
-      if (!inbox) return interaction.editReply({ content: '❌ Inbox not found.' });
+      if (!inbox) return interaction.editReply({ content: `${E.cross} Inbox not found.` });
       const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
-      if (!verified) return interaction.editReply({ content: '❌ Access denied.' });
+      if (!verified) return interaction.editReply({ content: `${E.cross} Access denied.` });
       await interaction.message.delete().catch(() => {});
       return showInbox(interaction, inbox, discordUserId, discordRoleIds, newPage);
     }
@@ -331,9 +332,9 @@ export async function handleInboxInteraction(interaction) {
       await interaction.deferReply({ ephemeral: true }).catch(() => {});
       const config = await fetchEmailConfig();
       const inbox = config[inboxId];
-      if (!inbox) return interaction.editReply({ content: '❌ Inbox not found.' });
+      if (!inbox) return interaction.editReply({ content: `${E.cross} Inbox not found.` });
       const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
-      if (!verified) return interaction.editReply({ content: '❌ Access denied.' });
+      if (!verified) return interaction.editReply({ content: `${E.cross} Access denied.` });
       await interaction.message.delete().catch(() => {});
       return showEmail(interaction, inbox, uid, discordUserId, discordRoleIds, 0);
     }
@@ -346,7 +347,7 @@ export async function handleInboxInteraction(interaction) {
 
       const config = await fetchEmailConfig();
       const inbox = config[inboxId];
-      if (!inbox) return interaction.reply({ content: '❌ Inbox not found.', ephemeral: true });
+      if (!inbox) return interaction.reply({ content: `${E.cross} Inbox not found.`, ephemeral: true });
 
       let original = {};
       try {
@@ -389,7 +390,7 @@ export async function handleInboxInteraction(interaction) {
 
       const config = await fetchEmailConfig();
       const inbox = config[inboxId];
-      if (!inbox) return interaction.reply({ content: '❌ Inbox not found.', ephemeral: true });
+      if (!inbox) return interaction.reply({ content: `${E.cross} Inbox not found.`, ephemeral: true });
 
       let original = {};
       try {
@@ -451,7 +452,7 @@ export async function handleInboxInteraction(interaction) {
         );
         await interaction.deferReply({ ephemeral: true }).catch(() => {});
         return interaction.editReply({
-          content: '**✉️ New Email — Step 1:** Select team inboxes to CC (optional), or skip:',
+          content: `**${E.dm} New Email — Step 1:** Select team inboxes to CC (optional), or skip:`,
           components: [ccRow, skipRow],
         });
       } else {
@@ -479,19 +480,19 @@ export async function handleInboxInteraction(interaction) {
       await interaction.deferReply({ ephemeral: true }).catch(() => {});
       const config = await fetchEmailConfig();
       const inbox = config[inboxId];
-      if (!inbox) return interaction.editReply({ content: '❌ Inbox not found.' });
+      if (!inbox) return interaction.editReply({ content: `${E.cross} Inbox not found.` });
       const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
-      if (!verified) return interaction.editReply({ content: '❌ Access denied.' });
+      if (!verified) return interaction.editReply({ content: `${E.cross} Access denied.` });
       try {
         const email = await fetchEmailBody(inbox, uid);
         const content = `**From:** ${email.from?.address || 'Unknown'}\n**To:** ${email.to?.map(t => t.address).join(', ') || ''}\n**Subject:** ${email.subject}\n\n${email.text || '(no content)'}`;
         const chunks = paginateText(content, 1900);
-        await interaction.editReply({ content: `📄 **${email.subject}**\n\n${chunks[0]}` });
+        await interaction.editReply({ content: `**${email.subject}**\n\n${chunks[0]}` });
         for (let i = 1; i < chunks.length; i++) {
           await interaction.followUp({ content: chunks[i], ephemeral: true });
         }
       } catch (err) {
-        await interaction.editReply({ content: `⚠️ Copy failed: \`${err.message}\`` });
+        await interaction.editReply({ content: `${E.warning} Copy failed: \`${err.message}\`` });
       }
     }
 
@@ -503,16 +504,16 @@ export async function handleInboxInteraction(interaction) {
       await interaction.deferReply({ ephemeral: true }).catch(() => {});
       const config = await fetchEmailConfig();
       const inbox = config[inboxId];
-      if (!inbox) return interaction.editReply({ content: '❌ Inbox not found.' });
+      if (!inbox) return interaction.editReply({ content: `${E.cross} Inbox not found.` });
       const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
-      if (!verified) return interaction.editReply({ content: '❌ Access denied.' });
+      if (!verified) return interaction.editReply({ content: `${E.cross} Access denied.` });
       try {
         await archiveEmail(inbox, uid);
-        await interaction.editReply({ content: '✅ Email archived.' });
+        await interaction.editReply({ content: `${E.check} Email archived.` });
         await interaction.message.delete().catch(() => {});
         return showInbox(interaction, inbox, discordUserId, discordRoleIds, page);
       } catch (err) {
-        await interaction.editReply({ content: `⚠️ Archive failed: \`${err.message}\`` });
+        await interaction.editReply({ content: `${E.warning} Archive failed: \`${err.message}\`` });
       }
     }
 
@@ -523,16 +524,16 @@ export async function handleInboxInteraction(interaction) {
       await interaction.deferReply({ ephemeral: true }).catch(() => {});
       const config = await fetchEmailConfig();
       const inbox = config[inboxId];
-      if (!inbox) return interaction.editReply({ content: '❌ Inbox not found.' });
+      if (!inbox) return interaction.editReply({ content: `${E.cross} Inbox not found.` });
       const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
-      if (!verified) return interaction.editReply({ content: '❌ Access denied.' });
+      if (!verified) return interaction.editReply({ content: `${E.cross} Access denied.` });
       await interaction.message.delete().catch(() => {});
       return showInbox(interaction, inbox, discordUserId, discordRoleIds, page);
     }
 
   } catch (err) {
     console.error('[inbox] handleInboxInteraction error:', err.message);
-    const msg = { content: `⚠️ An error occurred: \`${err.message}\``, ephemeral: true };
+    const msg = { content: `${E.warning} An error occurred: \`${err.message}\``, ephemeral: true };
     try {
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp(msg).catch(() => {});
@@ -554,10 +555,10 @@ export async function handleNotifButton(interaction) {
 
   const config = await fetchEmailConfig();
   const inbox = config[inboxId];
-  if (!inbox) return interaction.reply({ content: '❌ Inbox not found.', ephemeral: true });
+  if (!inbox) return interaction.reply({ content: `${E.cross} Inbox not found.`, ephemeral: true });
 
   const verified = await verifyAccess(inboxId, discordUserId, discordRoleIds);
-  if (!verified) return interaction.reply({ content: '❌ Access denied.', ephemeral: true });
+  if (!verified) return interaction.reply({ content: `${E.cross} Access denied.`, ephemeral: true });
 
   if (action === 'inbox_notif_view') {
     await interaction.deferReply({ ephemeral: true });
@@ -580,7 +581,7 @@ export async function handleNotifButton(interaction) {
 
     const modal = new ModalBuilder()
       .setCustomId(`inbox_notif_reply_send|${inboxId}|${uid}`)
-      .setTitle('↩️ Reply to Email');
+      .setTitle('Reply to Email');
     modal.addComponents(
       new ActionRowBuilder().addComponents(
         new TextInputBuilder().setCustomId('reply_to').setLabel('To').setStyle(1)
@@ -601,7 +602,7 @@ export async function handleNotifButton(interaction) {
   if (action === 'inbox_notif_forward') {
     const modal = new ModalBuilder()
       .setCustomId(`inbox_notif_forward_send|${inboxId}|${uid}`)
-      .setTitle('↪️ Forward Email');
+      .setTitle('Forward Email');
     modal.addComponents(
       new ActionRowBuilder().addComponents(
         new TextInputBuilder().setCustomId('forward_to').setLabel('To').setStyle(1)
@@ -628,12 +629,12 @@ export async function handlePersonalEmailButton(interaction) {
   const uid = parseInt(parts[2]);
 
   if (interaction.user.id !== ownerDiscordId) {
-    return interaction.reply({ content: '❌ This is not your email.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} This is not your email.`, ephemeral: true });
   }
 
   const { getPersonalEmailSetup } = await import('../utils/botDb.js');
   const setup = getPersonalEmailSetup(ownerDiscordId);
-  if (!setup) return interaction.reply({ content: '❌ Email setup not found.', ephemeral: true });
+  if (!setup) return interaction.reply({ content: `${E.cross} Email setup not found.`, ephemeral: true });
 
   const fakeInbox = {
     inbox_id: `personal_${ownerDiscordId}`,
@@ -665,7 +666,7 @@ export async function handlePersonalEmailButton(interaction) {
 
     const modal = new ModalBuilder()
       .setCustomId(`inbox_personal_reply_send|${ownerDiscordId}|${uid}`)
-      .setTitle('↩️ Reply to Email');
+      .setTitle('Reply to Email');
     modal.addComponents(
       new ActionRowBuilder().addComponents(
         new TextInputBuilder().setCustomId('reply_to').setLabel('To').setStyle(1)
@@ -686,7 +687,7 @@ export async function handlePersonalEmailButton(interaction) {
   if (action === 'inbox_personal_forward') {
     const modal = new ModalBuilder()
       .setCustomId(`inbox_personal_forward_send|${ownerDiscordId}|${uid}`)
-      .setTitle('↪️ Forward Email');
+      .setTitle('Forward Email');
     modal.addComponents(
       new ActionRowBuilder().addComponents(
         new TextInputBuilder().setCustomId('forward_to').setLabel('To').setStyle(1)

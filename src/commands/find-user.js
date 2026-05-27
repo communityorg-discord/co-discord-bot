@@ -8,6 +8,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { getEffectiveAllServerIds } from '../config.js';
 import { db as botDb } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('find-user')
@@ -21,7 +22,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('find-user', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   await interaction.deferReply({ ephemeral: true });
 
@@ -64,7 +65,7 @@ export async function execute(interaction) {
 
   if (matches.size === 0) {
     return interaction.editReply({
-      content: `🔍 No matches for \`${q}\` across ${serverIds.length} CO guild${serverIds.length === 1 ? '' : 's'}.`,
+      content: `${E.investigate} No matches for \`${q}\` across ${serverIds.length} CO guild${serverIds.length === 1 ? '' : 's'}.`,
     });
   }
 
@@ -74,7 +75,7 @@ export async function execute(interaction) {
 
   const lines = ranked.map(m => {
     const v = verifiedMap.get(m.id);
-    const tag = v ? ` · 👔 ${v.position}` : (m.isBot ? ' · 🤖 bot' : '');
+    const tag = v ? ` · ${E.staff} ${v.position}` : (m.isBot ? ` · ${E.bot} bot` : '');
     const guildStr = m.guilds.size === serverIds.length
       ? `all ${serverIds.length} guilds`
       : `${m.guilds.size}/${serverIds.length}`;
@@ -82,7 +83,7 @@ export async function execute(interaction) {
   });
 
   const embed = new EmbedBuilder()
-    .setTitle(`🔍 ${matches.size} match${matches.size === 1 ? '' : 'es'} for "${q}"`)
+    .setTitle(`${matches.size} match${matches.size === 1 ? '' : 'es'} for "${q}"`)
     .setColor(0x6366f1)
     .setDescription(lines.join('\n').slice(0, 4096))
     .setFooter({

@@ -14,14 +14,15 @@ import {
   PermissionFlagsBits,
 } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 const COLOR_CHOICES = [
-  { name: '🔵 Indigo (default)', value: 'indigo' },
-  { name: '🟢 Emerald (success)', value: 'emerald' },
-  { name: '🟡 Amber (warning)', value: 'amber' },
-  { name: '🔴 Red (alert)', value: 'red' },
-  { name: '🟣 Violet (info)', value: 'violet' },
-  { name: '⚫ Slate (neutral)', value: 'slate' },
+  { name: 'Indigo (default)', value: 'indigo' },
+  { name: 'Emerald (success)', value: 'emerald' },
+  { name: 'Amber (warning)', value: 'amber' },
+  { name: 'Red (alert)', value: 'red' },
+  { name: 'Violet (info)', value: 'violet' },
+  { name: 'Slate (neutral)', value: 'slate' },
 ];
 const COLOR_HEX = {
   indigo: 0x6366f1, emerald: 0x22c55e, amber: 0xf59e0b,
@@ -43,7 +44,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('embed', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
 
   const target = interaction.options.getChannel('channel') || interaction.channel;
@@ -55,7 +56,7 @@ export async function execute(interaction) {
   const myPerms = target.permissionsFor(me);
   if (!myPerms?.has(PermissionFlagsBits.SendMessages) || !myPerms?.has(PermissionFlagsBits.EmbedLinks)) {
     return interaction.reply({
-      content: `❌ Bot can't post in ${target} — missing SendMessages or EmbedLinks. Run \`/bot-perms\` to audit.`,
+      content: `${E.cross} Bot can't post in ${target} — missing SendMessages or EmbedLinks. Run \`/bot-perms\` to audit.`,
       ephemeral: true,
     });
   }
@@ -102,7 +103,7 @@ export async function handleModalSubmit(interaction) {
 
   const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
   if (!channel) {
-    return interaction.editReply({ content: '❌ Channel no longer accessible.' });
+    return interaction.editReply({ content: `${E.cross} Channel no longer accessible.` });
   }
 
   const embed = new EmbedBuilder()
@@ -118,10 +119,10 @@ export async function handleModalSubmit(interaction) {
   try {
     const sent = await channel.send({ embeds: [embed] });
     await interaction.editReply({
-      content: `✅ Posted to <#${channel.id}> — [jump to message](${sent.url})`,
+      content: `${E.check} Posted to <#${channel.id}> — [jump to message](${sent.url})`,
     });
   } catch (e) {
-    await interaction.editReply({ content: `❌ Send failed: ${e.message}` });
+    await interaction.editReply({ content: `${E.cross} Send failed: ${e.message}` });
   }
   return true;
 }

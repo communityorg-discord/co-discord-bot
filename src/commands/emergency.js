@@ -16,7 +16,7 @@ export async function execute(interaction) {
   const { code, expiresAt } = createEmergencyCode(interaction.user.id, interaction.user.username);
   const embed = new EmbedBuilder()
     .setColor(0xf87171)
-    .setTitle('🚨 Emergency override code')
+    .setTitle('Emergency override code')
     .setDescription(`\`\`\`\n${code}\n\`\`\`\nEnter this on the dev site’s **Pending approvals** to push a pending action through **without the second admin** — for emergencies only.\n\n• Single use\n• Expires <t:${Math.floor(expiresAt / 1000)}:R>`)
     .setFooter({ text: 'Community Organisation · emergency override' });
   return interaction.reply({ embeds: [embed], flags: 64 });

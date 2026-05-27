@@ -5,6 +5,7 @@ import { getPortalUser } from '../utils/verifyHelper.js';
 import { addInvestigationRole, removeInvestigationRole, restorePositionRoles } from '../utils/roleManager.js';
 import { addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('investigate')
@@ -23,7 +24,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('investigate', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
 
   const target = interaction.options.getUser('user');
@@ -35,7 +36,7 @@ export async function execute(interaction) {
   const caseRef = `INV-${Date.now().toString(36).toUpperCase()}`;
 
   const embed = new EmbedBuilder()
-    .setTitle('📋 Investigation Opened')
+    .setTitle('Investigation Opened')
     .setColor(0xF59E0B)
     .setDescription(`Investigation **${caseRef}** opened for **${displayName}**.\n\nReason: ${reason}`)
     .addFields(
@@ -48,7 +49,7 @@ export async function execute(interaction) {
   await interaction.reply({ embeds: [embed] });
 
   await logAction(interaction.client, {
-    action: '🔍 Investigation Opened',
+    action: 'Investigation Opened',
     target: { discordId: target.id, name: displayName },
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     color: 0xF59E0B,
@@ -76,7 +77,7 @@ export async function handleSelect(interaction) {
     const target = await interaction.client.users.fetch(caseData.discord_id).catch(() => null);
     const displayName = caseData.portal_user?.display_name || target?.username || caseData.discord_id;
     const embed = new EmbedBuilder()
-      .setTitle(`📋 Case ${caseData.case_ref}`)
+      .setTitle(`Case ${caseData.case_ref}`)
       .setColor(0xF59E0B)
       .setDescription(caseData.description || 'No description provided.')
       .addFields(
@@ -98,7 +99,7 @@ export async function handleSelect(interaction) {
     if (caseData.status === 'open') {
       await addInvestigationRole(interaction.client, target.id);
       await logAction(interaction.client, {
-        action: '🔍 Investigation Started',
+        action: 'Investigation Started',
         target: { discordId: target.id, name: displayName },
         moderator: { discordId: interaction.user.id, name: interaction.user.username },
         color: 0xF59E0B,
@@ -106,7 +107,7 @@ export async function handleSelect(interaction) {
       });
 
       const embed = new EmbedBuilder()
-        .setTitle('🔍 Investigation Started')
+        .setTitle('Investigation Started')
         .setColor(0xF59E0B)
         .setDescription(`Investigation **${caseData.case_ref}** has been started for **${displayName}**.\n\nThis user has been notified via DM and their access has been restricted.`)
         .addFields(
@@ -124,15 +125,15 @@ export async function handleSelect(interaction) {
       const displayName = portalUser?.display_name || caseData.discord_id;
 
       const outcomeOptions = [
-        { label: '🔒 Suspend', value: 'suspend', description: 'Suspend the staff member' },
-        { label: '🔨 Staff Ban', value: 'staff_ban', description: 'Staff ban the member' },
-        { label: '🌐 Global Ban', value: 'global_ban', description: 'Globally ban the member' },
-        { label: '❌ Terminate', value: 'terminate', description: 'Terminate employment' },
-        { label: '⚠️ NFA — No Further Action', value: 'nfa', description: 'Close with no action' },
+        { label: 'Suspend', value: 'suspend', description: 'Suspend the staff member' },
+        { label: 'Staff Ban', value: 'staff_ban', description: 'Staff ban the member' },
+        { label: 'Global Ban', value: 'global_ban', description: 'Globally ban the member' },
+        { label: 'Terminate', value: 'terminate', description: 'Terminate employment' },
+        { label: 'NFA — No Further Action', value: 'nfa', description: 'Close with no action' },
       ];
 
       const embed = new EmbedBuilder()
-        .setTitle(`📋 Case ${caseData.case_ref} — Investigation In Progress`)
+        .setTitle(`Case ${caseData.case_ref} — Investigation In Progress`)
         .setColor(0xF59E0B)
         .setDescription(`Investigation for **${displayName}** is currently in progress.\n\nUse the select menu below to record the outcome.`)
         .addFields(
@@ -167,10 +168,10 @@ export async function handleSelect(interaction) {
 
     const outcomeLabels = { nfa: 'No Further Action', strike: 'Staff Strike', verbal_warning: 'Verbal Warning', suspend: 'Suspended', staff_ban: 'Staff Ban', global_ban: 'Global Ban', terminate: 'Terminated' };
     const outcomeManualNote = {
-      suspend: '⚠️ Please run /suspend to apply the suspension.',
-      staff_ban: '⚠️ Please run /ban to apply the staff ban.',
-      global_ban: '⚠️ Please run /gban to apply the global ban.',
-      terminate: '⚠️ Please run /terminate to end employment.',
+      suspend: `${E.warning} Please run /suspend to apply the suspension.`,
+      staff_ban: `${E.warning} Please run /ban to apply the staff ban.`,
+      global_ban: `${E.warning} Please run /gban to apply the global ban.`,
+      terminate: `${E.warning} Please run /terminate to end employment.`,
     };
 
     if (outcome === 'nfa') {
@@ -180,14 +181,14 @@ export async function handleSelect(interaction) {
     }
 
     await interaction.editReply({ embeds: [new EmbedBuilder()
-      .setTitle('📋 Investigation Ended')
+      .setTitle('Investigation Ended')
       .setColor(outcome === 'nfa' ? 0x22C55E : 0xEF4444)
       .setDescription(`Investigation ended for **${displayName}**.`)
       .addFields(
         { name: 'Outcome', value: outcomeLabels[outcome], inline: true },
         { name: 'Reason', value: reason2, inline: false },
         { name: 'Moderator', value: interaction.user.username, inline: true },
-        ...(outcomeManualNote[outcome] ? [{ name: '⚠️ Next Step', value: outcomeManualNote[outcome], inline: false }] : [])
+        ...(outcomeManualNote[outcome] ? [{ name: 'Next Step', value: outcomeManualNote[outcome], inline: false }] : [])
       )
       .setTimestamp()
     ], ephemeral: true });

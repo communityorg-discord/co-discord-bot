@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { getDmExemptions } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('dm-exempt')
@@ -9,7 +10,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const perm = await canUseCommand('dm-exempt', interaction);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
   try {
     await interaction.deferReply({ ephemeral: true });
@@ -19,7 +20,7 @@ export async function execute(interaction) {
     const buildEmbed = () => {
       if (exempts.length === 0) {
         return new EmbedBuilder()
-          .setTitle('📋 DM Exemptions')
+          .setTitle('DM Exemptions')
           .setColor(0x5865F2)
           .setDescription('No users are currently exempt from mass/team DMs.')
           .setFooter({ text: 'Community Organisation | Staff Assistant' })
@@ -32,7 +33,7 @@ export async function execute(interaction) {
       );
 
       return new EmbedBuilder()
-        .setTitle(`📋 DM Exemptions (${exempts.length})`)
+        .setTitle(`DM Exemptions (${exempts.length})`)
         .setColor(0x5865F2)
         .setDescription(rows.join('\n\n'))
         .setFooter({ text: 'Community Organisation | Staff Assistant' })
@@ -50,9 +51,9 @@ export async function execute(interaction) {
   } catch (e) {
     console.error('[/dm-exempt]', e.message);
     if (interaction.deferred) {
-      await interaction.editReply({ content: `❌ Error: ${e.message}` }).catch(() => {});
+      await interaction.editReply({ content: `${E.cross} Error: ${e.message}` }).catch(() => {});
     } else {
-      await interaction.reply({ content: `❌ Error: ${e.message}`, ephemeral: true }).catch(() => {});
+      await interaction.reply({ content: `${E.cross} Error: ${e.message}`, ephemeral: true }).catch(() => {});
     }
   }
 }

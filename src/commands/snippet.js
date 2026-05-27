@@ -14,6 +14,7 @@ import {
 import { canUseCommand } from '../utils/permissions.js';
 import { db } from '../utils/botDb.js';
 import { isSuperuser } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('snippet')
@@ -41,7 +42,7 @@ function findSnippet(ownerId, name) {
 export async function execute(interaction) {
   const perm = await canUseCommand('snippet', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   const sub = interaction.options.getSubcommand();
 
@@ -49,10 +50,10 @@ export async function execute(interaction) {
     const name = interaction.options.getString('name').trim().toLowerCase();
     const shared = interaction.options.getBoolean('shared') || false;
     if (shared && !isSuperuser(interaction.user.id)) {
-      return interaction.reply({ content: '❌ Only superusers can save shared snippets.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Only superusers can save shared snippets.`, ephemeral: true });
     }
     if (!/^[a-z0-9._-]+$/.test(name)) {
-      return interaction.reply({ content: '❌ Name must be lowercase letters/numbers/`-`/`_`/`.`', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Name must be lowercase letters/numbers/\`-\`/\`_\`/\`.\``, ephemeral: true });
     }
     const ownerId = shared ? null : interaction.user.id;
     const existing = ownerId
@@ -79,7 +80,7 @@ export async function execute(interaction) {
     const isPublic = interaction.options.getBoolean('public') || false;
     const sn = findSnippet(interaction.user.id, name);
     if (!sn) {
-      return interaction.reply({ content: `❌ No snippet named \`${name}\` (yours or shared).`, ephemeral: true });
+      return interaction.reply({ content: `${E.cross} No snippet named \`${name}\` (yours or shared).`, ephemeral: true });
     }
     db.prepare('UPDATE snippets SET use_count = use_count + 1 WHERE id = ?').run(sn.id);
     await interaction.reply({
@@ -94,7 +95,7 @@ export async function execute(interaction) {
     const personal = db.prepare('SELECT name, use_count FROM snippets WHERE owner_id = ? ORDER BY name').all(interaction.user.id);
     const shared = db.prepare('SELECT name, use_count FROM snippets WHERE owner_id IS NULL ORDER BY name').all();
     const embed = new EmbedBuilder()
-      .setTitle('🔖 Snippets')
+      .setTitle('Snippets')
       .setColor(0x6366f1)
       .addFields(
         {
@@ -117,16 +118,16 @@ export async function execute(interaction) {
     const name = interaction.options.getString('name').trim().toLowerCase();
     const r = db.prepare('DELETE FROM snippets WHERE owner_id = ? AND name = ?').run(interaction.user.id, name);
     if (r.changes > 0) {
-      return interaction.reply({ content: `🗑️ Deleted \`${name}\`.`, ephemeral: true });
+      return interaction.reply({ content: `Deleted \`${name}\`.`, ephemeral: true });
     }
     // Maybe it's a shared one and the user is a superuser
     if (isSuperuser(interaction.user.id)) {
       const r2 = db.prepare('DELETE FROM snippets WHERE owner_id IS NULL AND name = ?').run(name);
       if (r2.changes > 0) {
-        return interaction.reply({ content: `🗑️ Deleted shared \`${name}\`.`, ephemeral: true });
+        return interaction.reply({ content: `Deleted shared \`${name}\`.`, ephemeral: true });
       }
     }
-    return interaction.reply({ content: `❌ No snippet of yours named \`${name}\`.`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} No snippet of yours named \`${name}\`.`, ephemeral: true });
   }
 }
 
@@ -159,10 +160,10 @@ export async function handleModalSubmit(interaction) {
   if (existing) {
     db.prepare('UPDATE snippets SET content = ?, updated_at = strftime(\'%Y-%m-%dT%H:%M:%fZ\', \'now\') WHERE id = ?')
       .run(content, existing.id);
-    await interaction.reply({ content: `✏️ Updated ${scope === 'shared' ? 'shared ' : ''}snippet \`${name}\`.`, ephemeral: true });
+    await interaction.reply({ content: `Updated ${scope === 'shared' ? 'shared ' : ''}snippet \`${name}\`.`, ephemeral: true });
   } else {
     db.prepare('INSERT INTO snippets (owner_id, name, content) VALUES (?, ?, ?)').run(ownerId, name, content);
-    await interaction.reply({ content: `✅ Saved ${scope === 'shared' ? 'shared ' : ''}snippet \`${name}\`. Use it with \`/snippet use name:${name}\`.`, ephemeral: true });
+    await interaction.reply({ content: `${E.check} Saved ${scope === 'shared' ? 'shared ' : ''}snippet \`${name}\`. Use it with \`/snippet use name:${name}\`.`, ephemeral: true });
   }
   return true;
 }

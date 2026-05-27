@@ -1,6 +1,7 @@
 // COMMAND_PERMISSION_FALLBACK: everyone
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -44,7 +45,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('bot', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
 
   await interaction.deferReply();
@@ -64,7 +65,7 @@ export async function execute(interaction) {
   const maintainerLines = MAINTAINERS.map(id => `<@${id}>`).join(' · ');
 
   const embed = new EmbedBuilder()
-    .setTitle('🤖 CO Bot — system info')
+    .setTitle('CO Bot — system info')
     .setColor(0x5865F2)
     .setThumbnail(client.user.displayAvatarURL())
     .addFields(

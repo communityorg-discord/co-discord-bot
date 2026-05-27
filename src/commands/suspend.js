@@ -6,6 +6,7 @@ import { addInfraction, addSuspension } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { SUSPEND_UNSUSPEND_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
+import { E } from '../lib/emoji.js';
 
 function formatDuration(ms) {
   if (!ms) return 'Indefinite';
@@ -28,7 +29,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const perm = await canUseCommand('suspend', interaction);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
   const target = interaction.options.getUser('user');
   const reason = interaction.options.getString('reason');
@@ -40,7 +41,7 @@ export async function execute(interaction) {
   if (durationStr) {
     const { default: ms } = await import('ms');
     duration = ms(durationStr);
-    if (!duration) return interaction.reply({ content: `❌ Invalid duration format. Use e.g. \`7d\`, \`24h\`, \`30m\`.`, ephemeral: true });
+    if (!duration) return interaction.reply({ content: `${E.cross} Invalid duration format. Use e.g. \`7d\`, \`24h\`, \`30m\`.`, ephemeral: true });
   }
 
   const expiresAt = duration ? new Date(Date.now() + duration).toISOString() : null;
@@ -53,7 +54,7 @@ export async function execute(interaction) {
 
   // Prevent suspending superusers (auth level 99)
   if (portalUser && Number(portalUser.auth_level) >= 99) {
-    await interaction.editReply({ content: '❌ Cannot suspend a superuser. Use /terminate instead.', components: [] });
+    await interaction.editReply({ content: `${E.cross} Cannot suspend a superuser. Use /terminate instead.`, components: [] });
     return;
   }
 
@@ -66,14 +67,14 @@ export async function execute(interaction) {
   try {
     await target.send({
       embeds: [new EmbedBuilder()
-        .setTitle('🔴 You Have Been Suspended')
+        .setTitle('You Have Been Suspended')
         .setColor(0xEF4444)
         .setDescription(`You have been suspended from **Community Organisation**.\n\nIf you believe this is an error, you may appeal in the Appeals Server.`)
         .addFields(
-          { name: '📋 Reason', value: reason, inline: false },
-          { name: '⏱️ Duration', value: durationDisplay, inline: true },
-          { name: '📅 Expires', value: expiresDisplay, inline: true },
-          { name: '👤 Actioned By', value: `<@${interaction.user.id}>`, inline: true },
+          { name: 'Reason', value: reason, inline: false },
+          { name: 'Duration', value: durationDisplay, inline: true },
+          { name: 'Expires', value: expiresDisplay, inline: true },
+          { name: 'Actioned By', value: `<@${interaction.user.id}>`, inline: true },
         )
         .setFooter({ text: 'Community Organisation | Staff Assistant' })
         .setTimestamp()
@@ -83,15 +84,15 @@ export async function execute(interaction) {
 
   // Audit log
   await logAction(interaction.client, {
-    action: '🔴 Staff Suspended',
+    action: 'Staff Suspended',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: target.id, name: targetName },
     reason,
     color: 0xEF4444,
     fields: [
-      { name: '⏱️ Duration', value: durationDisplay, inline: true },
-      { name: '📅 Expires', value: expiresDisplay, inline: true },
-      { name: '👤 Actioned By', value: `<@${interaction.user.id}> (${interaction.user.username})`, inline: true },
+      { name: 'Duration', value: durationDisplay, inline: true },
+      { name: 'Expires', value: expiresDisplay, inline: true },
+      { name: 'Actioned By', value: `<@${interaction.user.id}> (${interaction.user.username})`, inline: true },
     ],
     specificChannelId: SUSPEND_UNSUSPEND_LOG_CHANNEL_ID,
     guildId: interaction.guildId,
@@ -108,7 +109,7 @@ export async function execute(interaction) {
       try {
         await target.send({
           embeds: [new EmbedBuilder()
-            .setTitle('✅ Suspension Lifted')
+            .setTitle('Suspension Lifted')
             .setColor(0x22C55E)
             .setDescription(`Your suspension from **Community Organisation** has ended and your roles have been restored.`)
             .setFooter({ text: 'Community Organisation | Staff Assistant' })
@@ -117,14 +118,14 @@ export async function execute(interaction) {
         });
       } catch {}
       await logAction(interaction.client, {
-        action: '✅ Suspension Lifted (Auto)',
+        action: 'Suspension Lifted (Auto)',
         moderator: { discordId: 'SYSTEM', name: 'Automated' },
         target: { discordId: target.id, name: targetName },
         reason: 'Suspension duration expired',
         color: 0x22C55E,
         fields: [
-          { name: '⏱️ Original Duration', value: durationDisplay, inline: true },
-          { name: '👤 Originally Actioned By', value: `<@${interaction.user.id}> (${interaction.user.username})`, inline: true },
+          { name: 'Original Duration', value: durationDisplay, inline: true },
+          { name: 'Originally Actioned By', value: `<@${interaction.user.id}> (${interaction.user.username})`, inline: true },
         ],
         specificChannelId: SUSPEND_UNSUSPEND_LOG_CHANNEL_ID,
       });
@@ -134,14 +135,14 @@ export async function execute(interaction) {
   // Reply embed
   await interaction.editReply({
     embeds: [new EmbedBuilder()
-      .setTitle('🔴 Staff Suspended')
+      .setTitle('Staff Suspended')
       .setColor(0xEF4444)
       .setDescription(`**${targetName}** has been suspended from Community Organisation.`)
       .addFields(
-        { name: '📋 Reason', value: reason, inline: false },
-        { name: '⏱️ Duration', value: durationDisplay, inline: true },
-        { name: '📅 Expires', value: expiresDisplay, inline: true },
-        { name: '👤 Actioned By', value: `<@${interaction.user.id}>`, inline: true },
+        { name: 'Reason', value: reason, inline: false },
+        { name: 'Duration', value: durationDisplay, inline: true },
+        { name: 'Expires', value: expiresDisplay, inline: true },
+        { name: 'Actioned By', value: `<@${interaction.user.id}>`, inline: true },
       )
       .setFooter({ text: 'Community Organisation | Staff Assistant' })
       .setTimestamp()

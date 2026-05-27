@@ -6,6 +6,7 @@ import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import { resolveUser } from '../utils/resolveUser.js';
+import { E } from '../lib/emoji.js';
 
 function parseDuration(str) {
   if (!str) return null;
@@ -69,7 +70,7 @@ export async function execute(interaction) {
 
   const checkName = sub ? `timeout:${sub}` : 'timeout';
   const perm = await canUseCommand(checkName, interaction);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
   if (sub === 'add') {
     await handleAddTimeout(interaction);
@@ -84,26 +85,26 @@ async function handleAddTimeout(interaction) {
   const reason = interaction.options.getString('reason') || 'Not specified';
 
   if (!interaction.inGuild()) {
-    return interaction.reply({ content: '❌ This command cannot be used in DMs.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} This command cannot be used in DMs.`, ephemeral: true });
   }
 
   const resolved = await resolveUser(userArg, interaction.guild);
   if (!resolved) {
-    return interaction.reply({ content: `❌ Could not find user: ${userArg}. Use @mention or a user ID.`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Could not find user: ${userArg}. Use @mention or a user ID.`, ephemeral: true });
   }
   const { id: targetId, user: target } = resolved;
 
   const durationMs = parseDuration(durationStr);
   if (!durationMs || durationMs < 10000) {
-    return interaction.reply({ content: '❌ Invalid duration. Use formats like: 10s, 5m, 2h, 1d, 1 minute, 30 seconds, 1 hour 30 minutes', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Invalid duration. Use formats like: 10s, 5m, 2h, 1d, 1 minute, 30 seconds, 1 hour 30 minutes`, ephemeral: true });
   }
   if (durationMs > 2419200000) {
-    return interaction.reply({ content: '❌ Maximum timeout duration is 28 days.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Maximum timeout duration is 28 days.`, ephemeral: true });
   }
 
   const member = await interaction.guild.members.fetch(targetId).catch(() => null);
   if (!member) {
-    return interaction.reply({ content: `❌ Could not find user <@${targetId}> in this server.` });
+    return interaction.reply({ content: `${E.cross} Could not find user <@${targetId}> in this server.` });
   }
 
   const portalUser = getUserByDiscordId(targetId);
@@ -115,7 +116,7 @@ async function handleAddTimeout(interaction) {
   try {
     await member.timeout(durationMs, reason);
   } catch (err) {
-    return interaction.editReply({ content: `❌ Failed to timeout <@${targetId}>: ${err.message}` });
+    return interaction.editReply({ content: `${E.cross} Failed to timeout <@${targetId}>: ${err.message}` });
   }
 
   const inf = addInfraction(targetId, 'timeout', reason, interaction.user.id, interaction.user.username);
@@ -124,12 +125,12 @@ async function handleAddTimeout(interaction) {
   try {
     await target.send({
       embeds: [new EmbedBuilder()
-        .setTitle('⏱️ You Have Been Timed Out')
+        .setTitle('You Have Been Timed Out')
         .setColor(0xF59E0B)
         .setDescription(`You have been timed out in **Community Organisation**.`)
         .addFields(
-          { name: '📋 Reason', value: reason, inline: false },
-          { name: '⏱️ Duration', value: durationDisplay, inline: true },
+          { name: 'Reason', value: reason, inline: false },
+          { name: 'Duration', value: durationDisplay, inline: true },
           { name: 'Expires', value: `<t:${Math.floor(expiresAt.getTime() / 1000)}:R>`, inline: true },
           { name: 'Issued By', value: `<@${interaction.user.id}>`, inline: true },
         )
@@ -140,7 +141,7 @@ async function handleAddTimeout(interaction) {
   } catch {}
 
   await logAction(interaction.client, {
-    action: '⏱️ User Timed Out',
+    action: 'User Timed Out',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: targetId, name: targetName },
     reason,
@@ -158,7 +159,7 @@ async function handleAddTimeout(interaction) {
 
   await interaction.editReply({
     embeds: [new EmbedBuilder()
-      .setTitle('⏱️ User Timed Out')
+      .setTitle('User Timed Out')
       .setColor(0xF59E0B)
       .setDescription(`**${targetName}** has been timed out.`)
       .addFields(
@@ -180,18 +181,18 @@ async function handleRemoveTimeout(interaction) {
   const reason = interaction.options.getString('reason') || 'Not specified';
 
   if (!interaction.inGuild()) {
-    return interaction.reply({ content: '❌ This command cannot be used in DMs.' });
+    return interaction.reply({ content: `${E.cross} This command cannot be used in DMs.` });
   }
 
   const resolved = await resolveUser(userArg, interaction.guild);
   if (!resolved) {
-    return interaction.reply({ content: `❌ Could not find user: ${userArg}. Use @mention or a user ID.` });
+    return interaction.reply({ content: `${E.cross} Could not find user: ${userArg}. Use @mention or a user ID.` });
   }
   const { id: targetId, user: target } = resolved;
 
   const member = await interaction.guild.members.fetch(targetId).catch(() => null);
   if (!member) {
-    return interaction.reply({ content: `❌ Could not find user <@${targetId}> in this server.` });
+    return interaction.reply({ content: `${E.cross} Could not find user <@${targetId}> in this server.` });
   }
 
   const portalUser = getUserByDiscordId(targetId);
@@ -202,13 +203,13 @@ async function handleRemoveTimeout(interaction) {
   try {
     await member.timeout(null, reason);
   } catch (err) {
-    return interaction.editReply({ content: `❌ Failed to remove timeout: ${err.message}` });
+    return interaction.editReply({ content: `${E.cross} Failed to remove timeout: ${err.message}` });
   }
 
   try {
     await target.send({
       embeds: [new EmbedBuilder()
-        .setTitle('✅ Timeout Removed')
+        .setTitle('Timeout Removed')
         .setColor(0x22C55E)
         .setDescription(`Your timeout in **Community Organisation** has been removed.`)
         .addFields(
@@ -222,7 +223,7 @@ async function handleRemoveTimeout(interaction) {
   } catch {}
 
   await logAction(interaction.client, {
-    action: '✅ Timeout Removed',
+    action: 'Timeout Removed',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: targetId, name: targetName },
     reason,
@@ -238,7 +239,7 @@ async function handleRemoveTimeout(interaction) {
 
   await interaction.editReply({
     embeds: [new EmbedBuilder()
-      .setTitle('✅ Timeout Removed')
+      .setTitle('Timeout Removed')
       .setColor(0x22C55E)
       .setDescription(`Timeout for **${targetName}** has been removed.`)
       .addFields(

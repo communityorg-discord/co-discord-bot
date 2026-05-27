@@ -3,6 +3,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { db } from '../utils/botDb.js';
 import { getUserByDiscordId } from '../db.js';
+import { E } from '../lib/emoji.js';
 
 // Ensure scheduled_dms table exists
 db.exec(`CREATE TABLE IF NOT EXISTS scheduled_dms (
@@ -85,7 +86,7 @@ export async function execute(interaction) {
 
   const perm = await canUseCommand('schedule-dm', interaction);
   if (!perm.allowed) {
-    return interaction.editReply({ content: `❌ ${perm.reason}` });
+    return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
   }
 
   const targetUser = interaction.options.getUser('user');
@@ -95,16 +96,16 @@ export async function execute(interaction) {
 
   const sendAt = parseWhen(whenStr);
   if (!sendAt) {
-    return interaction.editReply({ content: '❌ Could not parse the time. Use formats like `2h`, `30m`, `1d`, `tomorrow 9am`.' });
+    return interaction.editReply({ content: `${E.cross} Could not parse the time. Use formats like \`2h\`, \`30m\`, \`1d\`, \`tomorrow 9am\`.` });
   }
 
   if (sendAt <= new Date()) {
-    return interaction.editReply({ content: '❌ The scheduled time must be in the future.' });
+    return interaction.editReply({ content: `${E.cross} The scheduled time must be in the future.` });
   }
 
   // Max 30 days in advance
   if (sendAt - Date.now() > 30 * 24 * 60 * 60 * 1000) {
-    return interaction.editReply({ content: '❌ Cannot schedule more than 30 days in advance.' });
+    return interaction.editReply({ content: `${E.cross} Cannot schedule more than 30 days in advance.` });
   }
 
   const sendAtIso = sendAt.toISOString().replace('T', ' ').slice(0, 19);
@@ -118,7 +119,7 @@ export async function execute(interaction) {
   const senderName = senderPortal?.display_name || interaction.user.username;
 
   const embed = new EmbedBuilder()
-    .setTitle('📨 DM Scheduled')
+    .setTitle('DM Scheduled')
     .setColor(0x22C55E)
     .addFields(
       { name: 'Recipient', value: `<@${targetUser.id}>`, inline: true },

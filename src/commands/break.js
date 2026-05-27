@@ -6,6 +6,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { db } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('break')
@@ -22,7 +23,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('break', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   const minutes = interaction.options.getInteger('minutes') || 15;
   const reason = (interaction.options.getString('reason') || '').trim();
@@ -52,7 +53,7 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setAuthor({ name: `${display} is AFK`, iconURL: interaction.user.displayAvatarURL() })
     .setColor(0xf59e0b)
-    .setDescription(`☕ Back <t:${ts}:R> (~${minutes} min)${reason ? `\n_${reason}_` : ''}`)
+    .setDescription(`${E.break} Back <t:${ts}:R> (~${minutes} min)${reason ? `\n_${reason}_` : ''}`)
     .setFooter({ text: 'Set with /break — reminder goes back to me when the timer fires.' });
 
   await interaction.reply({ embeds: [embed] });

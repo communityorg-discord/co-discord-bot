@@ -6,9 +6,9 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { db as botDb } from '../utils/botDb.js';
 import { getEffectiveAllServerIds, getEffectiveStaffHqId } from '../config.js';
+import { E } from '../lib/emoji.js';
 
 const STATUS_BUCKETS = ['online', 'idle', 'dnd'];
-const STATUS_EMOJI = { online: '🟢', idle: '🟡', dnd: '🔴' };
 
 export const data = new SlashCommandBuilder()
   .setName('staff-online')
@@ -17,7 +17,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('staff-online', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   await interaction.deferReply({ ephemeral: true });
 
@@ -33,7 +33,7 @@ export async function execute(interaction) {
   const hqId = getEffectiveStaffHqId(client) || interaction.guildId;
   const guild = client.guilds.cache.get(hqId);
   if (!guild) {
-    return interaction.editReply({ content: '❌ Staff HQ guild not in cache.' });
+    return interaction.editReply({ content: `${E.cross} Staff HQ guild not in cache.` });
   }
   await guild.members.fetch().catch(() => null);
 
@@ -56,7 +56,7 @@ export async function execute(interaction) {
   const onlineTotal = buckets.online.length + buckets.idle.length + buckets.dnd.length;
 
   const embed = new EmbedBuilder()
-    .setTitle(`👥 Staff online — ${onlineTotal} of ${verified.length}`)
+    .setTitle(`Staff online — ${onlineTotal} of ${verified.length}`)
     .setColor(onlineTotal === 0 ? 0x64748b : 0x22c55e)
     .setFooter({ text: `Presence sourced from ${guild.name}` })
     .setTimestamp();
@@ -66,7 +66,7 @@ export async function execute(interaction) {
     if (!list.length) continue;
     const lines = list.map(s => `<@${s.discord_id}> — ${s.position}`).join('\n');
     embed.addFields({
-      name: `${STATUS_EMOJI[status]} ${status} (${list.length})`,
+      name: `${status} (${list.length})`,
       value: lines.slice(0, 1024),
       inline: false,
     });
@@ -76,7 +76,7 @@ export async function execute(interaction) {
     embed.setDescription(`_All ${verified.length} verified staff are offline._`);
   } else if (buckets.offline.length > 0) {
     embed.addFields({
-      name: `⚫ offline (${buckets.offline.length})`,
+      name: `offline (${buckets.offline.length})`,
       value: '_(hidden — use `/staff` to see everyone)_',
       inline: false,
     });

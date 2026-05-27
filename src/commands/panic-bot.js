@@ -10,6 +10,7 @@
 
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 import { spawn } from 'child_process';
 
 const RESET_INSTRUCTIONS = [
@@ -27,7 +28,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const perm = await canUseCommand('panic-bot', interaction);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, flags: MessageFlags.Ephemeral });
+  if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, flags: MessageFlags.Ephemeral });
 
   const reason = interaction.options.getString('reason');
   const scorched = interaction.options.getBoolean('scorched');
@@ -35,7 +36,7 @@ export async function execute(interaction) {
   const who = interaction.user.tag;
 
   await interaction.reply({
-    content: `🛑 **Bot stopping in 5-10 sec.**\nTriggered by: ${who}\nReason: ${reason}\nScorched earth (leave all guilds): **${doScorch}**\nDion + Evan have been DM'd reset instructions.\n\nTo restart:\n${RESET_INSTRUCTIONS}`,
+    content: `${E.warning} **Bot stopping in 5-10 sec.**\nTriggered by: ${who}\nReason: ${reason}\nScorched earth (leave all guilds): **${doScorch}**\nDion + Evan have been DM'd reset instructions.\n\nTo restart:\n${RESET_INSTRUCTIONS}`,
     flags: MessageFlags.Ephemeral,
   });
 
@@ -46,7 +47,7 @@ export async function execute(interaction) {
       const u = await interaction.client.users.fetch(uid).catch(() => null);
       if (!u) continue;
       const dm = await u.createDM().catch(() => null);
-      if (dm) await dm.send(`🚨 **BOT PANIC via /panic-bot**\nBy: ${who}\nReason: ${reason}\nScorched earth: **${doScorch}**\nTime: ${new Date().toUTCString()}\n\nReset instructions:\n${RESET_INSTRUCTIONS}`).catch(() => {});
+      if (dm) await dm.send(`${E.warning} **BOT PANIC via /panic-bot**\nBy: ${who}\nReason: ${reason}\nScorched earth: **${doScorch}**\nTime: ${new Date().toUTCString()}\n\nReset instructions:\n${RESET_INSTRUCTIONS}`).catch(() => {});
     } catch {}
   }
 

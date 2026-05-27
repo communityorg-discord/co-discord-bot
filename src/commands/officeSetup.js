@@ -8,6 +8,7 @@ import {
   upsertWaitingRoom, deleteWaitingRoom, listWaitingRooms,
 } from '../services/officeManager.js';
 import { logAction } from '../utils/logger.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('office')
@@ -82,11 +83,11 @@ export async function execute(interaction) {
   const checkName = sub ? `office:${sub}` : 'office';
   const perm = await canUseCommand(checkName, interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
 
   const guild = interaction.guild;
-  if (!guild) return interaction.reply({ content: '❌ Use this in a server.', ephemeral: true });
+  if (!guild) return interaction.reply({ content: `${E.cross} Use this in a server.`, ephemeral: true });
 
   if (sub === 'configure') {
     await interaction.deferReply({ ephemeral: true });
@@ -100,13 +101,13 @@ export async function execute(interaction) {
 
     const list = ids.length > 0 ? ids.map(i => `<@${i}>`).join(', ') : '*(empty — only superusers can join)*';
     await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('✅ Office configured')
+      embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Office configured')
         .setDescription(`<#${channel.id}> is now managed.\n\n**Allowlist:** ${list}`)
         .setFooter({ text: 'Anyone not on the allowlist gets kicked and DMd a request button.' })]
     });
 
     await logAction(interaction.client, {
-      action: '🏢 Office Configured',
+      action: 'Office Configured',
       moderator: { discordId: interaction.user.id, name: interaction.user.tag },
       target: { discordId: channel.id, name: channel.name },
       reason: `Allowlist set: ${ids.length} user(s)`,
@@ -122,7 +123,7 @@ export async function execute(interaction) {
 
     const office = getOffice(channel.id);
     if (!office) {
-      return interaction.editReply({ content: `❌ <#${channel.id}> isn't managed. Run \`/office configure\` first.` });
+      return interaction.editReply({ content: `${E.cross} <#${channel.id}> isn't managed. Run \`/office configure\` first.` });
     }
 
     if (sub === 'add') {
@@ -135,12 +136,12 @@ export async function execute(interaction) {
     const list = getAllowlist(channel.id);
     await interaction.editReply({
       embeds: [new EmbedBuilder().setColor(sub === 'add' ? 0x22C55E : 0xF59E0B)
-        .setTitle(`${sub === 'add' ? '✅ Added' : '🗑️ Removed'} ${user.tag}`)
+        .setTitle(`${sub === 'add' ? 'Added' : 'Removed'} ${user.tag}`)
         .setDescription(`<#${channel.id}> allowlist (${list.length}): ${list.length ? list.map(i => `<@${i}>`).join(', ') : '*(empty)*'}`)]
     });
 
     await logAction(interaction.client, {
-      action: sub === 'add' ? '🏢 Office Allowlist Add' : '🏢 Office Allowlist Remove',
+      action: sub === 'add' ? 'Office Allowlist Add' : 'Office Allowlist Remove',
       moderator: { discordId: interaction.user.id, name: interaction.user.tag },
       target: { discordId: user.id, name: user.tag },
       reason: `${sub === 'add' ? 'Added to' : 'Removed from'} ${channel.name} allowlist`,
@@ -153,17 +154,17 @@ export async function execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
     const channel = interaction.options.getChannel('channel');
     const office = getOffice(channel.id);
-    if (!office) return interaction.editReply({ content: `❌ <#${channel.id}> isn't managed.` });
+    if (!office) return interaction.editReply({ content: `${E.cross} <#${channel.id}> isn't managed.` });
 
     deleteOffice(channel.id);
 
     await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(0xF59E0B).setTitle('🗑️ Unmanaged')
+      embeds: [new EmbedBuilder().setColor(0xF59E0B).setTitle('Unmanaged')
         .setDescription(`<#${channel.id}> is no longer managed.`)]
     });
 
     await logAction(interaction.client, {
-      action: '🏢 Office Unmanaged',
+      action: 'Office Unmanaged',
       moderator: { discordId: interaction.user.id, name: interaction.user.tag },
       target: { discordId: channel.id, name: channel.name },
       reason: 'Channel removed from office management',
@@ -185,7 +186,7 @@ export async function execute(interaction) {
       : '*No managed channels.*';
     const wrLines = wrs.length > 0 ? wrs.map(w => `<#${w.channel_id}>`).join('\n') : '*None — run `/office waiting`*';
     await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🏢 Managed Offices')
+      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Managed Offices')
         .setDescription(officeLines)
         .addFields(
           { name: 'Waiting rooms', value: wrLines, inline: false },
@@ -200,11 +201,11 @@ export async function execute(interaction) {
     const channel = interaction.options.getChannel('channel');
     setRequestFeed(guild.id, channel.id);
     await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('✅ Request feed set')
+      embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Request feed set')
         .setDescription(`Office access requests will be posted in <#${channel.id}>.`)]
     });
     await logAction(interaction.client, {
-      action: '🏢 Office Request Feed Set',
+      action: 'Office Request Feed Set',
       moderator: { discordId: interaction.user.id, name: interaction.user.tag },
       target: { discordId: channel.id, name: channel.name },
       reason: 'Set as request feed channel',
@@ -218,11 +219,11 @@ export async function execute(interaction) {
     const channel = interaction.options.getChannel('channel');
     upsertWaitingRoom(guild.id, channel.id, channel.name);
     await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('✅ Waiting room registered')
+      embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Waiting room registered')
         .setDescription(`<#${channel.id}> is now a waiting room. Anyone joining will trigger an access request in the feed channel.`)]
     });
     await logAction(interaction.client, {
-      action: '🛎️ Office Waiting Room Set',
+      action: 'Office Waiting Room Set',
       moderator: { discordId: interaction.user.id, name: interaction.user.tag },
       target: { discordId: channel.id, name: channel.name },
       reason: 'Channel registered as office waiting room',
@@ -236,11 +237,11 @@ export async function execute(interaction) {
     const channel = interaction.options.getChannel('channel');
     deleteWaitingRoom(channel.id);
     await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(0xF59E0B).setTitle('🗑️ Waiting room removed')
+      embeds: [new EmbedBuilder().setColor(0xF59E0B).setTitle('Waiting room removed')
         .setDescription(`<#${channel.id}> is no longer a waiting room.`)]
     });
     await logAction(interaction.client, {
-      action: '🛎️ Office Waiting Room Removed',
+      action: 'Office Waiting Room Removed',
       moderator: { discordId: interaction.user.id, name: interaction.user.tag },
       target: { discordId: channel.id, name: channel.name },
       reason: 'Waiting room unregistered',

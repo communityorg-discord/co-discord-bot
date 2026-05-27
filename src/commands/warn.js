@@ -6,11 +6,12 @@ import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import { resolveUser } from '../utils/resolveUser.js';
+import { E } from '../lib/emoji.js';
 
 // Auto-escalation thresholds for active warnings
 const THRESHOLDS = [
-  { count: 5, action: 'ban', label: 'Banned', color: 0x7F1D1D, emoji: '🔨' },
-  { count: 3, action: 'kick', label: 'Kicked', color: 0xEF4444, emoji: '👢' },
+  { count: 5, action: 'ban', label: 'Banned', color: 0x7F1D1D },
+  { count: 3, action: 'kick', label: 'Kicked', color: 0xEF4444 },
 ];
 
 export const data = new SlashCommandBuilder()
@@ -21,18 +22,18 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const perm = await canUseCommand('warn', interaction);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
   const userArg = interaction.options.getString('user');
   const reason = interaction.options.getString('reason');
 
   if (!interaction.inGuild()) {
-    return interaction.reply({ content: '❌ This command cannot be used in DMs.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} This command cannot be used in DMs.`, ephemeral: true });
   }
 
   const resolved = await resolveUser(userArg, interaction.guild);
   if (!resolved) {
-    return interaction.reply({ content: `❌ Could not find user: ${userArg}. Use @mention or a user ID.`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Could not find user: ${userArg}. Use @mention or a user ID.`, ephemeral: true });
   }
   const { id: targetId, user: target } = resolved;
 
@@ -47,11 +48,11 @@ export async function execute(interaction) {
   try {
     await target.send({
       embeds: [new EmbedBuilder()
-        .setTitle('⚠️ Warning Issued')
+        .setTitle('Warning Issued')
         .setColor(0xF59E0B)
         .setDescription(`You have received a warning in **Community Organisation**.`)
         .addFields(
-          { name: '📋 Reason', value: reason, inline: false },
+          { name: 'Reason', value: reason, inline: false },
           { name: 'Issued By', value: `<@${interaction.user.id}>`, inline: true },
         )
         .setFooter({ text: 'Community Organisation | Staff Assistant' })
@@ -95,7 +96,7 @@ export async function execute(interaction) {
       try {
         await target.send({
           embeds: [new EmbedBuilder()
-            .setTitle(`${escalation.emoji} Auto-Escalation — ${escalation.label}`)
+            .setTitle(`Auto-Escalation — ${escalation.label}`)
             .setColor(escalation.color)
             .setDescription(`You have been **${escalation.label.toLowerCase()}** from **Community Organisation** due to reaching **${warningCount} active warnings**.`)
             .addFields(
@@ -110,7 +111,7 @@ export async function execute(interaction) {
 
       // Log escalation
       await logAction(interaction.client, {
-        action: `${escalation.emoji} Auto-Escalation — ${escalation.label}`,
+        action: `Auto-Escalation — ${escalation.label}`,
         moderator: { discordId: 'AUTOMOD', name: 'Auto-Escalation' },
         target: { discordId: targetId, name: targetName },
         reason: escalationReason,
@@ -129,7 +130,7 @@ export async function execute(interaction) {
 
   // Log the warning itself
   await logAction(interaction.client, {
-    action: '⚠️ Warning Issued',
+    action: 'Warning Issued',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: targetId, name: targetName },
     reason,
@@ -138,7 +139,7 @@ export async function execute(interaction) {
       { name: 'User', value: `<@${targetId}>`, inline: true },
       { name: 'Reason', value: reason, inline: false },
       { name: 'Active Warnings', value: `${warningCount}`, inline: true },
-      ...(escalation ? [{ name: '⚠️ AUTO-ESCALATION', value: `**${escalation.label}** triggered (${escalation.count} warning threshold)`, inline: false }] : []),
+      ...(escalation ? [{ name: 'AUTO-ESCALATION', value: `**${escalation.label}** triggered (${escalation.count} warning threshold)`, inline: false }] : []),
     ],
     specificChannelId: MOD_LOG_CHANNEL_ID,
     guildId: interaction.guildId,
@@ -147,7 +148,7 @@ export async function execute(interaction) {
 
   // Build reply embed
   const replyEmbed = new EmbedBuilder()
-    .setTitle('⚠️ Warning Issued')
+    .setTitle('Warning Issued')
     .setColor(escalation ? escalation.color : 0xF59E0B)
     .setDescription(`**${targetName}** has been warned.`)
     .addFields(
@@ -161,7 +162,7 @@ export async function execute(interaction) {
 
   if (escalation) {
     replyEmbed.addFields({
-      name: `${escalation.emoji} AUTO-ESCALATION TRIGGERED`,
+      name: `AUTO-ESCALATION TRIGGERED`,
       value: `User has been **${escalation.label.toLowerCase()}** — reached ${warningCount} active warnings.`,
       inline: false
     });

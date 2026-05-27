@@ -6,6 +6,7 @@ import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import { resolveUser } from '../utils/resolveUser.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('kick')
@@ -15,27 +16,27 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const perm = await canUseCommand('kick', interaction);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
   const userArg = interaction.options.getString('user');
   const reason = interaction.options.getString('reason') || 'Not specified';
 
   if (!interaction.inGuild()) {
-    return interaction.reply({ content: '❌ This command cannot be used in DMs.' , ephemeral: true });
+    return interaction.reply({ content: `${E.cross} This command cannot be used in DMs.` , ephemeral: true });
   }
 
   const resolved = await resolveUser(userArg, interaction.guild);
   if (!resolved) {
-    return interaction.reply({ content: `❌ Could not find user: ${userArg}. Use @mention or a user ID.`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Could not find user: ${userArg}. Use @mention or a user ID.`, ephemeral: true });
   }
   const { id: targetId, user: target } = resolved;
 
   const member = await interaction.guild.members.fetch(targetId).catch(() => null);
   if (!member) {
-    return interaction.reply({ content: `❌ Could not find user <@${targetId}> in this server.`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Could not find user <@${targetId}> in this server.`, ephemeral: true });
   }
   if (!member.kickable) {
-    return interaction.reply({ content: `❌ I cannot kick <@${targetId}>. They may have higher permissions than me.`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} I cannot kick <@${targetId}>. They may have higher permissions than me.`, ephemeral: true });
   }
 
   const portalUser = getUserByDiscordId(targetId);
@@ -46,17 +47,17 @@ export async function execute(interaction) {
   const inf = addInfraction(targetId, 'kick', reason, interaction.user.id, interaction.user.username);
 
   await member.kick(reason).catch(err => {
-    return interaction.editReply({ content: `❌ Failed to kick <@${targetId}>: ${err.message}` });
+    return interaction.editReply({ content: `${E.cross} Failed to kick <@${targetId}>: ${err.message}` });
   });
 
   try {
     await target.send({
       embeds: [new EmbedBuilder()
-        .setTitle('👢 You Have Been Kicked')
+        .setTitle('You Have Been Kicked')
         .setColor(0xEF4444)
         .setDescription(`You have been kicked from **${interaction.guild.name}**. You may rejoin if you believe this was a mistake.`)
         .addFields(
-          { name: '📋 Reason', value: reason, inline: false },
+          { name: 'Reason', value: reason, inline: false },
           { name: 'Server', value: interaction.guild.name, inline: true },
           { name: 'Kicked By', value: `<@${interaction.user.id}>`, inline: true },
         )
@@ -67,7 +68,7 @@ export async function execute(interaction) {
   } catch {}
 
   await logAction(interaction.client, {
-    action: '👢 User Kicked',
+    action: 'User Kicked',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: targetId, name: targetName },
     reason,
@@ -84,7 +85,7 @@ export async function execute(interaction) {
 
   await interaction.editReply({
     embeds: [new EmbedBuilder()
-      .setTitle('👢 User Kicked')
+      .setTitle('User Kicked')
       .setColor(0xEF4444)
       .setDescription(`**${targetName}** has been kicked from the server.`)
       .addFields(

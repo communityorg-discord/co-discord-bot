@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import db, { getUserByDiscordId } from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 // Monday-anchored week key — matches portal getWeekKey() and bot getBragWeekKey().
 // Format: YYYY-MM-DD of the Monday at the start of the week. Previously this
@@ -41,11 +42,11 @@ export async function execute(interaction) {
   try {
     const perm = await canUseCommand('aps', interaction);
     if (!perm.allowed) {
-      return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+      return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
     }
     const user = getUserByDiscordId(interaction.user.id);
     if (!user) {
-      return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Your Discord account is not linked to a CO Staff Portal account.`, ephemeral: true });
     }
     const wk = weekKey();
     const showHistory = interaction.options.getBoolean('history') || false;
@@ -82,7 +83,6 @@ export async function execute(interaction) {
       : total >= userTier.red_target   ? 'red'
       : 'black';
 
-    const gradeEmoji = { green: '🟢', amber: '🟡', red: '🔴', black: '⚫', pending: '⏳' }[grade];
     const gradeColor = { green: 0x10b981, amber: 0xfbbf24, red: 0xef4444, black: 0x475569, pending: 0x64748b }[grade];
 
     const catLines = Object.entries(byCat)
@@ -94,7 +94,7 @@ export async function execute(interaction) {
     const catsNeeded = Math.max(0, 3 - catsMet);
 
     const embed = new EmbedBuilder()
-      .setTitle(`${gradeEmoji} APS — ${user.display_name || user.full_name || 'You'}`)
+      .setTitle(`APS — ${user.display_name || user.full_name || 'You'}`)
       .setColor(gradeColor)
       .setDescription(`Week **${wk}** · Tier **${userTier.team_name}**`)
       .addFields(
@@ -116,12 +116,7 @@ export async function execute(interaction) {
         const k = weekKeyOffset(w);
         const r = db.prepare('SELECT SUM(points) total FROM activity_point_records WHERE user_id = ? AND week_key = ?').get(user.id, k);
         const t = Number(r?.total) || 0;
-        const g = t === 0 ? '⚫'
-          : (t >= userTier.green_target) ? '🟢'
-          : (t >= userTier.amber_target) ? '🟡'
-          : (t >= userTier.red_target)   ? '🔴'
-          : '⚫';
-        history.push(`${g} **${k}** — ${t}pt${t === 1 ? '' : 's'}`);
+        history.push(`**${k}** — ${t}pt${t === 1 ? '' : 's'}`);
       }
       embed.addFields({ name: 'Previous 4 weeks', value: history.join('\n'), inline: false });
     }

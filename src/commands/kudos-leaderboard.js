@@ -5,6 +5,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { db } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 const WINDOW_DAYS = { week: 7, month: 30, all: null };
 
@@ -23,7 +24,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('kudos-leaderboard', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   const winKey = interaction.options.getString('window') || 'month';
   const days = WINDOW_DAYS[winKey];
@@ -44,19 +45,18 @@ export async function execute(interaction) {
 
   if (!recipients.length) {
     return interaction.reply({
-      content: `🤷 No kudos in the ${winKey === 'all' ? 'all-time' : `last ${days}d`} window. Be the first — try \`/thanks\`!`,
+      content: `No kudos in the ${winKey === 'all' ? 'all-time' : `last ${days}d`} window. Be the first — try \`/thanks\`!`,
       ephemeral: true,
     });
   }
 
-  const medals = ['🥇', '🥈', '🥉'];
   const lines = recipients.map((r, i) =>
-    `${medals[i] || `**${i + 1}.**`} <@${r.to_discord_id}> — ${r.c} kudo${r.c === 1 ? '' : 's'}`
+    `**${i + 1}.** <@${r.to_discord_id}> — ${r.c} kudo${r.c === 1 ? '' : 's'}`
   );
 
   const totalThisWindow = recipients.reduce((s, r) => s + r.c, 0);
   const embed = new EmbedBuilder()
-    .setTitle(`🙏 Kudos leaderboard — ${winKey === 'all' ? 'all time' : `last ${days}d`}`)
+    .setTitle(`Kudos leaderboard — ${winKey === 'all' ? 'all time' : `last ${days}d`}`)
     .setColor(0xfacc15)
     .setDescription(lines.join('\n'))
     .setFooter({ text: `${totalThisWindow} kudo${totalThisWindow === 1 ? '' : 's'} across ${recipients.length} staff · use /thanks to add to it` })

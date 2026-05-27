@@ -5,6 +5,7 @@ import { getUserByDiscordId } from '../db.js';
 import { randomBytes } from 'crypto';
 import { logAction } from '../utils/logger.js';
 import { PURGE_SCRIBE_LOG_CHANNEL_ID } from '../config.js';
+import { E } from '../lib/emoji.js';
 
 function generateHTML(messages, channel, guild, requestedBy, limit) {
   const rows = messages.map(m => {
@@ -139,7 +140,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const perm = await canUseCommand('scribe', interaction);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
   const limit = interaction.options.getInteger('limit') || 100;
   const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
@@ -172,7 +173,7 @@ export async function execute(interaction) {
     if (targetUser) allMessages = allMessages.filter(m => m.author.id === targetUser.id);
 
     if (allMessages.length === 0) {
-      return interaction.editReply({ content: '❌ No messages found.' });
+      return interaction.editReply({ content: `${E.cross} No messages found.` });
     }
 
     // Sort oldest first
@@ -216,7 +217,7 @@ export async function execute(interaction) {
 
     // Log to purge-scribe-logs + full-mod-logs
     await logAction(interaction.client, {
-      action: '📜 Channel Transcribed',
+      action: 'Channel Transcribed',
       moderator: { discordId: interaction.user.id, name: requestedBy },
       target: { discordId: targetUser?.id || 'MULTIPLE', name: targetUser ? (getUserByDiscordId(targetUser.id)?.display_name || targetUser.username) : 'All messages' },
       reason: `Channel: #${targetChannel.name}`,
@@ -234,12 +235,12 @@ export async function execute(interaction) {
     });
 
     await interaction.editReply({ embeds: [new EmbedBuilder()
-      .setTitle('📜 Transcript Generated')
+      .setTitle('Transcript Generated')
       .setColor(0x22c55e)
       .setDescription(`Captured **${allMessages.length}** message${allMessages.length !== 1 ? 's' : ''} from <#${targetChannel.id}>.`)
       .addFields(
-        { name: '📄 Transcript', value: `[View at portal.communityorg.co.uk](${transcriptUrl})`, inline: false },
-        { name: '⏳ Expires', value: 'After 1 year', inline: true },
+        { name: 'Transcript', value: `[View at portal.communityorg.co.uk](${transcriptUrl})`, inline: false },
+        { name: 'Expires', value: 'After 1 year', inline: true },
       )
       .setFooter({ text: 'Community Organisation | Staff Assistant' })
       .setTimestamp()
@@ -247,6 +248,6 @@ export async function execute(interaction) {
 
   } catch (e) {
     console.error('[/scribe]', e.message);
-    await interaction.editReply({ content: `❌ Failed to generate transcript: ${e.message}` });
+    await interaction.editReply({ content: `${E.cross} Failed to generate transcript: ${e.message}` });
   }
 }

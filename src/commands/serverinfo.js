@@ -4,6 +4,7 @@
 // "click around in Server Settings" workflow when staff want a quick read.
 import { SlashCommandBuilder, EmbedBuilder, ChannelType } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('serverinfo')
@@ -12,12 +13,12 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('serverinfo', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   await interaction.deferReply({ ephemeral: true });
 
   const g = interaction.guild;
-  if (!g) return interaction.editReply({ content: '❌ Run in a server.' });
+  if (!g) return interaction.editReply({ content: `${E.cross} Run in a server.` });
 
   const channels = await g.channels.fetch();
   const counts = {
@@ -63,10 +64,10 @@ export async function execute(interaction) {
     counts.thread && `${counts.thread} thread`,
   ].filter(Boolean).join(' · ') || '_no channels_';
 
-  const presenceLine = `🟢 ${presence.online} · 🟡 ${presence.idle} · 🔴 ${presence.dnd} · ⚫ ${presence.offline}${presence.bots ? ` · 🤖 ${presence.bots}` : ''}`;
+  const presenceLine = `Online ${presence.online} · Idle ${presence.idle} · DND ${presence.dnd} · Offline ${presence.offline}${presence.bots ? ` · ${E.bot} ${presence.bots}` : ''}`;
 
   const embed = new EmbedBuilder()
-    .setTitle(`🏛️ ${g.name}`)
+    .setTitle(`${g.name}`)
     .setColor(0x6366f1)
     .setThumbnail(g.iconURL() || null)
     .addFields(

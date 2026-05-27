@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { getTicketPanelById, getTicketPanelByName, deleteTicketPanel, getAllTicketPanels } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('ticket-panel-delete')
@@ -16,7 +17,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('ticket-panel-delete', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
 
   const panelName = interaction.options.getString('name');
@@ -28,7 +29,7 @@ export async function execute(interaction) {
       ? allPanels.map(p => `• **${p.name}**`).join('\n')
       : 'No panels exist.';
     return interaction.reply({
-      content: `❌ Panel **${panelName}** not found.\n\nAvailable panels:\n${panelList}`,
+      content: `${E.cross} Panel **${panelName}** not found.\n\nAvailable panels:\n${panelList}`,
       ephemeral: true
     });
   }
@@ -36,7 +37,7 @@ export async function execute(interaction) {
   deleteTicketPanel(panel.id);
 
   await interaction.reply({
-    content: `✅ Panel **${panel.name}** has been deleted.`,
+    content: `${E.check} Panel **${panel.name}** has been deleted.`,
     ephemeral: true
   });
 }

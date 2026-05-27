@@ -4,6 +4,7 @@ import { canRunCommand, canUseCommand, isSuperuser } from '../utils/permissions.
 import { logAction } from '../utils/logger.js';
 import { getTicketChannelByChannelId, closeTicket, getTicketPanelById } from '../utils/botDb.js';
 import { closeTicketWithTranscript } from '../utils/ticketTranscript.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('ticket-options')
@@ -13,14 +14,14 @@ export async function execute(interaction) {
   try {
   const perm = await canUseCommand('ticket-options', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
 
   const channelId = interaction.channel.id;
   const ticket = getTicketChannelByChannelId(channelId);
 
   if (!ticket) {
-    return interaction.reply({ content: '❌ This channel is not registered as a ticket.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} This channel is not registered as a ticket.`, ephemeral: true });
   }
 
   const guild = interaction.guild;
@@ -31,35 +32,35 @@ export async function execute(interaction) {
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`ticketopts_close_${channelId}`)
-      .setLabel('🔴 Close')
+      .setLabel('Close')
       .setStyle(ButtonStyle.Danger)
       .setDisabled(ticket.status === 'closed'),
     new ButtonBuilder()
       .setCustomId(`ticketopts_delete_${channelId}`)
-      .setLabel('🗑️ Delete Channel')
+      .setLabel('Delete Channel')
       .setStyle(ButtonStyle.Danger)
       .setDisabled(ticket.status !== 'closed'),
     new ButtonBuilder()
       .setCustomId(`ticketopts_rename_${channelId}`)
-      .setLabel('✏️ Rename')
+      .setLabel('Rename')
       .setStyle(ButtonStyle.Secondary),
   );
 
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`ticketopts_unclaim_${channelId}`)
-      .setLabel('🔓 Unclaim')
+      .setLabel('Unclaim')
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(!isClaimer && !isSuper),
     new ButtonBuilder()
       .setCustomId(`ticketopts_reopen_${channelId}`)
-      .setLabel('🔓 Reopen')
+      .setLabel('Reopen')
       .setStyle(ButtonStyle.Success)
       .setDisabled(ticket.status !== 'closed'),
   );
 
   const embed = new EmbedBuilder()
-    .setTitle('🎫 Ticket Options')
+    .setTitle('Ticket Options')
     .setColor(0x5865F2)
     .setDescription('Select an action to manage this ticket.')
     .addFields(
@@ -94,10 +95,10 @@ export async function handleTicketOptionsButton(interaction) {
   const channelId = parts.slice(2).join('_');
   const guild = interaction.guild;
 
-  if (!guild) return interaction.reply({ content: '❌ Not in a server.', flags: 64 });
+  if (!guild) return interaction.reply({ content: `${E.cross} Not in a server.`, flags: 64 });
 
   const ticket = getTicketChannelByChannelId(channelId);
-  if (!ticket) return interaction.reply({ content: '❌ Ticket not found in database.', flags: 64 });
+  if (!ticket) return interaction.reply({ content: `${E.cross} Ticket not found in database.`, flags: 64 });
 
   const isClaimer = ticket.claimed_by === interaction.user.id;
   const isSuper = await isSuperuser(interaction.user.id);
@@ -125,34 +126,34 @@ export async function handleTicketOptionsButton(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
   if (action === 'close') {
-    if (!auth.allowed && !isClaimer) return interaction.editReply({ content: `❌ ${auth.reason}` });
+    if (!auth.allowed && !isClaimer) return interaction.editReply({ content: `${E.cross} ${auth.reason}` });
     const panel = getTicketPanelById(ticket.panel_id);
     const ticketChannel = guild.channels.cache.get(channelId);
     const transcriptUrl = await closeTicketWithTranscript(ticket, ticketChannel, panel, interaction, closeTicket);
-    const transcriptNote = transcriptUrl ? `\n📄 Transcript: ${transcriptUrl}` : '';
-    return interaction.editReply({ content: `🔴 Ticket closed.${transcriptNote}` });
+    const transcriptNote = transcriptUrl ? `\nTranscript: ${transcriptUrl}` : '';
+    return interaction.editReply({ content: `Ticket closed.${transcriptNote}` });
   }
 
   if (action === 'delete') {
-    if (!auth.allowed) return interaction.editReply({ content: `❌ ${auth.reason}` });
+    if (!auth.allowed) return interaction.editReply({ content: `${E.cross} ${auth.reason}` });
     const ticketChannel = guild.channels.cache.get(channelId);
     if (ticketChannel) await ticketChannel.delete('Ticket deleted by staff').catch(() => {});
-    return interaction.editReply({ content: '🗑️ Ticket channel deleted.' });
+    return interaction.editReply({ content: 'Ticket channel deleted.' });
   }
 
   if (action === 'unclaim') {
-    if (!auth.allowed && !isClaimer) return interaction.editReply({ content: `❌ ${auth.reason}` });
+    if (!auth.allowed && !isClaimer) return interaction.editReply({ content: `${E.cross} ${auth.reason}` });
     unclaimTicket(channelId);
     const ticketChannel = guild.channels.cache.get(channelId);
     if (ticketChannel) {
       await ticketChannel.permissionOverwrites.edit(interaction.user.id, { SendMessages: null }).catch(() => {});
       await ticketChannel.permissionOverwrites.edit(ticket.user_id, { SendMessages: true }).catch(() => {});
     }
-    return interaction.editReply({ content: '🔓 Ticket unclaimed. User can now reply again.' });
+    return interaction.editReply({ content: 'Ticket unclaimed. User can now reply again.' });
   }
 
   if (action === 'reopen') {
-    if (!auth.allowed) return interaction.editReply({ content: `❌ ${auth.reason}` });
+    if (!auth.allowed) return interaction.editReply({ content: `${E.cross} ${auth.reason}` });
     reopenTicket(channelId);
     const ticketChannel = guild.channels.cache.get(channelId);
     if (ticketChannel) {
@@ -164,7 +165,7 @@ export async function handleTicketOptionsButton(interaction) {
         await ticketChannel.setName(newName).catch(() => {});
       }
     }
-    return interaction.editReply({ content: '🔓 Ticket reopened.' });
+    return interaction.editReply({ content: 'Ticket reopened.' });
   }
 }
 
@@ -177,17 +178,17 @@ export async function handleTicketOptionsModal(interaction) {
   const newName = interaction.fields.getTextInputValue('new_name').trim().replace(/\s+/g, '-').toLowerCase().slice(0, 100);
 
   const guild = interaction.guild;
-  if (!guild) return interaction.editReply({ content: '❌ Not in a server.' });
+  if (!guild) return interaction.editReply({ content: `${E.cross} Not in a server.` });
 
   const ticketChannel = guild.channels.cache.get(channelId);
   if (ticketChannel) {
     await ticketChannel.setName(newName).catch(() => {});
   }
 
-  await interaction.editReply({ content: `✏️ Channel renamed to \`${newName}\`.` });
+  await interaction.editReply({ content: `Channel renamed to \`${newName}\`.` });
 
     await logAction(interaction.client, {
-      action: '✏️ Ticket Renamed',
+      action: 'Ticket Renamed',
       target: { discordId: interaction.user.id, name: interaction.user.username },
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       color: 0x6366F1,

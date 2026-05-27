@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getUserByDiscordId, getRecentCases } from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('cases')
@@ -11,37 +12,37 @@ export async function execute(interaction) {
   try {
   const perm = await canUseCommand('cases', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   const user = getUserByDiscordId(interaction.user.id);
   if (!user) {
-    return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Your Discord account is not linked to a CO Staff Portal account.`, ephemeral: true });
   }
 
   const cases = getRecentCases(user.id);
 
   if (!cases.length) {
-    return interaction.reply({ content: '📂 You have no cases in Case Management.', ephemeral: true });
+    return interaction.reply({ content: `You have no cases in Case Management.`, ephemeral: true });
   }
 
   const typeEmojis = {
-    DISCIPLINARY: '⚖️',
-    GENERAL_HR: '📁',
-    OFFBOARDING: '👋',
-    RETURN_TO_WORK: '🔁',
-    PERFORMANCE_ADJUSTMENT: '📈',
-    LETTER_REQUEST: '✉️',
-    LEAVE_QUERY: '🏖️',
-    APS_DISPUTE: '🎯',
+    DISCIPLINARY: E.gavel,
+    GENERAL_HR: E.logs,
+    OFFBOARDING: E.member,
+    RETURN_TO_WORK: '',
+    PERFORMANCE_ADJUSTMENT: E.aps,
+    LETTER_REQUEST: E.dm,
+    LEAVE_QUERY: '',
+    APS_DISPUTE: E.aps,
     // Legacy types still in the map for any historical rows
-    WELLBEING: '💚', TRANSFER: '🔄', LEAVE: '🏖️', BRAG: '📊', GENERAL: '📋',
+    WELLBEING: '', TRANSFER: '', LEAVE: '', BRAG: E.aps, GENERAL: E.logs,
   };
 
   const embed = new EmbedBuilder()
-    .setTitle(`📂 Recent Cases — ${user.display_name || user.full_name}`)
+    .setTitle(`Recent Cases — ${user.display_name || user.full_name}`)
     .setColor(0x5865F2)
     .setDescription(cases.map(c =>
-      `${typeEmojis[c.case_type] || '📋'} **${c.case_number}** — ${c.case_type}\n` +
+      `${typeEmojis[c.case_type] || E.logs} **${c.case_number}** — ${c.case_type}\n` +
       `Status: \`${c.status?.toUpperCase()}\` | Stage: \`${c.stage}\`\n` +
       `${c.subject || 'No subject'}`
     ).join('\n\n'))

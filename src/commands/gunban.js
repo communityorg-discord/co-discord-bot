@@ -6,6 +6,7 @@ import { getActiveGlobalBan } from '../utils/botDb.js';
 import db, { addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { GBAN_UNGBAN_LOG_CHANNEL_ID } from '../config.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('gunban')
@@ -15,7 +16,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const perm = await canUseCommand('gunban', interaction);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
   const userId = interaction.options.getString('userid');
   const reason = interaction.options.getString('reason');
@@ -45,7 +46,7 @@ export async function execute(interaction) {
 
   const inf = addInfraction(userId, 'global_unban', reason, interaction.user.id, interaction.user.username);
 
-  const serverList = serverResults.map(s => `${s.success ? '🟢' : '🔴'} ${s.name}`).join('\n');
+  const serverList = serverResults.map(s => `${s.success ? E.check : E.cross} ${s.name}`).join('\n');
 
   // Discord field-value cap is 1024 chars — long reasons overflow & 500
   // the whole embed. Truncate; full reason persists in infractions table.
@@ -67,7 +68,7 @@ export async function execute(interaction) {
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()
-    .setTitle('✅ Global Unban')
+    .setTitle('Global Unban')
     .setColor(0x22C55E)
     .setDescription(`Global ban removed from <@${userId}>.`)
     .addFields(

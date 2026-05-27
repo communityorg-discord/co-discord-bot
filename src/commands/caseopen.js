@@ -4,6 +4,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getUserByDiscordId } from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 const PORTAL_HTTP = process.env.PORTAL_HTTP || 'http://localhost:3016';
 const PORTAL_URL  = process.env.PORTAL_URL  || 'https://portal.communityorg.co.uk';
@@ -28,11 +29,11 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   try {
     const perm = await canUseCommand('caseopen', interaction);
-    if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
     const user = getUserByDiscordId(interaction.user.id);
     if (!user) {
-      return interaction.reply({ content: '❌ Your Discord account is not linked to a CO Staff Portal account.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Your Discord account is not linked to a CO Staff Portal account.`, ephemeral: true });
     }
 
     const subject     = interaction.options.getString('subject', true);
@@ -61,11 +62,11 @@ export async function execute(interaction) {
       resp = await r.json();
       if (!r.ok) throw new Error(resp?.error || `HTTP ${r.status}`);
     } catch (e) {
-      return interaction.editReply({ content: `❌ Couldn't open case: ${e.message}` });
+      return interaction.editReply({ content: `${E.cross} Couldn't open case: ${e.message}` });
     }
 
     const embed = new EmbedBuilder()
-      .setTitle(`📂 Case opened — ${resp.case_number}`)
+      .setTitle(`Case opened — ${resp.case_number}`)
       .setColor(0x10b981)
       .setDescription(`**${subject}**\n\nA case officer will be in touch.`)
       .addFields(
@@ -80,9 +81,9 @@ export async function execute(interaction) {
   } catch (err) {
     console.error('[caseopen] error:', err);
     if (interaction.deferred || interaction.replied) {
-      try { await interaction.editReply({ content: '❌ An error occurred opening the case.' }); } catch {}
+      try { await interaction.editReply({ content: `${E.cross} An error occurred opening the case.` }); } catch {}
     } else {
-      try { await interaction.reply({ content: '❌ An error occurred opening the case.', ephemeral: true }); } catch {}
+      try { await interaction.reply({ content: `${E.cross} An error occurred opening the case.`, ephemeral: true }); } catch {}
     }
   }
 }

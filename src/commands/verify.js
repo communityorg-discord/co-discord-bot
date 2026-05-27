@@ -6,6 +6,7 @@ import { POSITIONS, getAuthLevelRole } from '../utils/positions.js';
 import db from '../utils/botDb.js';
 import { VERIFY_UNVERIFY_LOG_CHANNEL_ID, OFFICIAL_BYPASS_IDS } from '../config.js';
 import { logAction } from '../utils/logger.js';
+import { E } from '../lib/emoji.js';
 
 // Official account bypass IDs — can verify as CO | Official Account without portal entry
 function isOfficialBypass(discordId) {
@@ -46,11 +47,11 @@ async function sendWelcomeDM(client, discordUser, entry, approvedBy) {
   const inviteLines = await gatherWelcomeInvites(client);
   await discordUser.send({
     embeds: [new EmbedBuilder()
-      .setTitle('🏛️ Welcome to the Community Organisation!')
+      .setTitle('Welcome to the Community Organisation!')
       .setColor(0x22C55E)
       .setDescription(WELCOME_DESCRIPTION)
       .addFields(
-        { name: '📌 Server Invites', value: inviteLines.join('\n') || 'No invites available', inline: false },
+        { name: 'Server Invites', value: inviteLines.join('\n') || 'No invites available', inline: false },
         { name: 'Your Position', value: entry.position, inline: true },
         { name: 'Approved By', value: `<@${approvedBy}>`, inline: true },
       )
@@ -70,7 +71,7 @@ export async function execute(interaction) {
 
     const perm = await canUseCommand('verify', interaction);
     if (!perm.allowed) {
-      return interaction.editReply({ content: `❌ ${perm.reason}` });
+      return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
     }
 
     const discordId = interaction.user.id;
@@ -79,7 +80,7 @@ export async function execute(interaction) {
     // Check if already pending
     const pending = db.prepare("SELECT id FROM verification_queue WHERE discord_id = ? AND status = 'pending'").get(discordId);
     if (pending) {
-      return interaction.editReply({ content: '⏳ You already have a pending verification request. Please wait for it to be reviewed.' });
+      return interaction.editReply({ content: `${E.pending} You already have a pending verification request. Please wait for it to be reviewed.` });
     }
 
     // Official account bypass — verify as CO | Official Account without portal
@@ -93,11 +94,11 @@ export async function execute(interaction) {
       // Look up in portal
       portalUser = await getPortalUser(discordId);
       if (!portalUser) {
-        return interaction.editReply({ content: '❌ You are not found in the CO Staff Portal. You must be an active staff member to verify.\n\nIf you believe this is an error, please contact a superuser.' });
+        return interaction.editReply({ content: `${E.cross} You are not found in the CO Staff Portal. You must be an active staff member to verify.\n\nIf you believe this is an error, please contact a superuser.` });
       }
       position = portalUser.position;
       if (!position || !POSITIONS[position]) {
-        return interaction.editReply({ content: `❌ Your position **${position || 'Unknown'}** is not recognised in the roles system. Please contact a superuser.` });
+        return interaction.editReply({ content: `${E.cross} Your position **${position || 'Unknown'}** is not recognised in the roles system. Please contact a superuser.` });
       }
     }
 
@@ -106,7 +107,7 @@ export async function execute(interaction) {
     try {
       verifyChannel = await getOrCreateVerificationChannel(interaction.client);
     } catch (e) {
-      return interaction.editReply({ content: '❌ Could not find the verification channel. Please contact a superuser.' });
+      return interaction.editReply({ content: `${E.cross} Could not find the verification channel. Please contact a superuser.` });
     }
 
     // Determine if user is on probation
@@ -155,10 +156,10 @@ export async function execute(interaction) {
     // Save message ID
     db.prepare("UPDATE verification_queue SET message_id = ? WHERE id = ?").run(msg.id, queueId);
 
-    await interaction.editReply({ content: `✅ Your verification request **#${queueId}** has been submitted and is awaiting approval from a superuser.` });
+    await interaction.editReply({ content: `${E.check} Your verification request **#${queueId}** has been submitted and is awaiting approval from a superuser.` });
 
     await logAction(interaction.client, {
-      action: '📝 Verification Request Submitted',
+      action: 'Verification Request Submitted',
       target: { discordId: interaction.user.id, name: interaction.user.username },
       moderator: null,
       color: 0x22C55E,
@@ -168,7 +169,7 @@ export async function execute(interaction) {
   } catch (err) {
     console.error('[Verify] Error:', err.message);
     try {
-      await interaction.editReply({ content: '❌ An error occurred while processing your verification. Please try again or contact a superuser.' });
+      await interaction.editReply({ content: `${E.cross} An error occurred while processing your verification. Please try again or contact a superuser.` });
     } catch (_) {}
   }
 }
@@ -178,27 +179,27 @@ function buildGuildResultsField(results, type) {
   const lines = [];
   for (const r of results) {
     if (r.error && !r.success) {
-      lines.push(`❌ **${r.guild}** — ${r.error}`);
+      lines.push(`${E.cross} **${r.guild}** — ${r.error}`);
       continue;
     }
     if (type === 'verify') {
-      let line = `✅ **${r.guild}**`;
+      let line = `${E.check} **${r.guild}**`;
       const parts = [];
       if (r.nicknameSet) parts.push('Nickname set');
       else if (r.nicknameError) parts.push(`Nickname failed: ${r.nicknameError}`);
       if (r.rolesAdded.length) parts.push(`+${r.rolesAdded.length} role(s)`);
-      if (r.rolesRemoveFailed.length) parts.push(`⚠️ Could not remove: ${r.rolesRemoveFailed.join(', ')}`);
-      if (r.rolesAddFailed.length) parts.push(`⚠️ Could not add: ${r.rolesAddFailed.join(', ')}`);
+      if (r.rolesRemoveFailed.length) parts.push(`${E.warning} Could not remove: ${r.rolesRemoveFailed.join(', ')}`);
+      if (r.rolesAddFailed.length) parts.push(`${E.warning} Could not add: ${r.rolesAddFailed.join(', ')}`);
       if (!parts.length && !r.nicknameSet) parts.push('No changes needed');
       if (parts.length) line += ` — ${parts.join(' | ')}`;
       lines.push(line);
     } else {
-      let line = r.success ? `✅ **${r.guild}**` : `❌ **${r.guild}**`;
+      let line = r.success ? `${E.check} **${r.guild}**` : `${E.cross} **${r.guild}**`;
       const parts = [];
       if (r.nicknameReset) parts.push('Nickname reset');
       else if (r.nicknameError) parts.push(`Nickname failed: ${r.nicknameError}`);
       if (r.rolesRemoved.length) parts.push(`-${r.rolesRemoved.length} role(s)`);
-      if (r.rolesRemoveFailed.length) parts.push(`⚠️ Could not remove: ${r.rolesRemoveFailed.join(', ')}`);
+      if (r.rolesRemoveFailed.length) parts.push(`${E.warning} Could not remove: ${r.rolesRemoveFailed.join(', ')}`);
       if (!parts.length) parts.push('No roles to remove');
       line += ` — ${parts.join(' | ')}`;
       lines.push(line);
@@ -224,7 +225,7 @@ export async function handleSelect(interaction) {
         return;
       }
       if (!(await isSuperuser(interaction.user.id)) && !(await hasPortalAuth(interaction.user.id, 6))) {
-        await interaction.reply({ content: '❌ You need auth level 6+ to approve verification requests.', ephemeral: true });
+        await interaction.reply({ content: `${E.cross} You need auth level 6+ to approve verification requests.`, ephemeral: true });
         return;
       }
       await interaction.deferUpdate();
@@ -250,11 +251,11 @@ export async function handleButton(interaction) {
     const overrideLevel = parseInt(interaction.values[0]);
 
     if (!(await isSuperuser(interaction.user.id)) && !(await hasPortalAuth(interaction.user.id, 6))) {
-      return interaction.reply({ content: '❌ Only superusers can approve verifications.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Only superusers can approve verifications.`, ephemeral: true });
     }
 
     const entry = db.prepare("SELECT * FROM verification_queue WHERE id = ? AND status = 'pending'").get(queueId);
-    if (!entry) return interaction.reply({ content: '❌ Request not found or already processed.', ephemeral: true });
+    if (!entry) return interaction.reply({ content: `${E.cross} Request not found or already processed.`, ephemeral: true });
 
     await interaction.deferUpdate();
 
@@ -287,7 +288,7 @@ export async function handleButton(interaction) {
 
     const updatedEmbed = new EmbedBuilder()
       .setColor(0x22C55E)
-      .setTitle(`✅ Verification #${queueId} — Approved [Lvl ${overrideLevel} Override]${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
+      .setTitle(`Verification #${queueId} — Approved [Lvl ${overrideLevel} Override]${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
       .addFields(...fields)
       .setTimestamp();
 
@@ -310,14 +311,14 @@ export async function handleButton(interaction) {
     // Acknowledge the select menu interaction with an ephemeral confirmation
     const ackEmbed = new EmbedBuilder()
       .setColor(0x22C55E)
-      .setTitle(`✅ Verification #${queueId} Approved`)
+      .setTitle(`Verification #${queueId} Approved`)
       .setDescription(`Approved <@${entry.discord_id}> at **Level ${overrideLevel}** override.`)
       .setTimestamp();
 
     await interaction.editReply({ embeds: [ackEmbed] });
 
     await logAction(interaction.client, {
-      action: `✅ Staff Verified [Lvl ${overrideLevel} Override]${isOfficial ? ' [Official Account]' : ''}`,
+      action: `Staff Verified [Lvl ${overrideLevel} Override]${isOfficial ? ' [Official Account]' : ''}`,
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       target: { discordId: entry.discord_id, name: entry.requested_nickname },
       reason: entry.position,
@@ -326,7 +327,7 @@ export async function handleButton(interaction) {
         { name: 'Position', value: entry.position, inline: true },
         { name: 'Auth Level', value: `Override → Level ${overrideLevel}`, inline: true },
         { name: 'Nickname', value: entry.requested_nickname, inline: true },
-        { name: 'Servers Applied', value: `${successCount} ✅ | ${partialCount} ⚠️ | ${failedCount} ❌`, inline: false },
+        { name: 'Servers Applied', value: `${successCount} ${E.check} | ${partialCount} ${E.warning} | ${failedCount} ${E.cross}`, inline: false },
         { name: 'Per-Server Results', value: guildFieldLines.slice(0, 1024) || 'None', inline: false },
       ],
       specificChannelId: VERIFY_UNVERIFY_LOG_CHANNEL_ID,
@@ -345,7 +346,7 @@ export async function handleButton(interaction) {
     } catch (e) {
       console.error('[Verify Auth Select] error:', e.message, e.stack);
       try {
-        await interaction.editReply({ content: '❌ An error occurred processing your selection.' });
+        await interaction.editReply({ content: `${E.cross} An error occurred processing your selection.` });
       } catch (_) {}
     }
   }
@@ -354,18 +355,18 @@ export async function handleButton(interaction) {
   if (customId.startsWith('verify_auth_override_')) {
     const queueId = customId.replace('verify_auth_override_', '');
     if (!(await isSuperuser(interaction.user.id)) && !(await hasPortalAuth(interaction.user.id, 6))) {
-      return interaction.reply({ content: '❌ Only superusers can use this.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Only superusers can use this.`, ephemeral: true });
     }
 
     const entry = db.prepare("SELECT * FROM verification_queue WHERE id = ?").get(queueId);
-    if (!entry) return interaction.reply({ content: '❌ Request not found.', ephemeral: true });
+    if (!entry) return interaction.reply({ content: `${E.cross} Request not found.`, ephemeral: true });
 
     // Immediately clear original buttons to prevent double-verify race condition
     try {
       const channel = await interaction.client.channels.fetch(entry.channel_id);
       const origMsg = await channel.messages.fetch(entry.message_id);
       const waitEmbed = new EmbedBuilder(origMsg.embeds[0]?.toJSON() || {}).setDescription(
-        (origMsg.embeds[0]?.data?.description || '') + '\n\n⏳ *Awaiting authorisation level override selection...*'
+        (origMsg.embeds[0]?.data?.description || '') + `\n\n${E.pending} *Awaiting authorisation level override selection...*`
       );
       await origMsg.edit({ embeds: [waitEmbed], components: [] });
     } catch (e) {
@@ -389,7 +390,7 @@ export async function handleButton(interaction) {
 
     const infoEmbed = new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle('🔐 Authorisation Level Override')
+      .setTitle('Authorisation Level Override')
       .setDescription(`Select the authorisation level to assign for verification request **#${queueId}**.\n\nThe selected level will be applied across all servers.`)
       .setTimestamp();
 
@@ -404,11 +405,11 @@ export async function handleButton(interaction) {
     const overrideLevel = parts.length > 1 ? parseInt(parts[1]) : 0;
 
     if (!(await isSuperuser(interaction.user.id)) && !(await hasPortalAuth(interaction.user.id, 6))) {
-      return interaction.reply({ content: '❌ Only superusers can approve verifications.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Only superusers can approve verifications.`, ephemeral: true });
     }
 
     const entry = db.prepare("SELECT * FROM verification_queue WHERE id = ? AND status = 'pending'").get(queueId);
-    if (!entry) return interaction.reply({ content: '❌ Request not found or already processed.', ephemeral: true });
+    if (!entry) return interaction.reply({ content: `${E.cross} Request not found or already processed.`, ephemeral: true });
 
     // Show modal for approver to input the nickname
     const modal = new ModalBuilder()
@@ -435,7 +436,7 @@ export async function handleButton(interaction) {
     const queueId = customId.replace('verify_deny_', '');
 
     if (!(await isSuperuser(interaction.user.id)) && !(await hasPortalAuth(interaction.user.id, 6))) {
-      return interaction.reply({ content: '❌ Only superusers can deny verifications.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Only superusers can deny verifications.`, ephemeral: true });
     }
 
     const modal = new ModalBuilder()
@@ -466,7 +467,7 @@ export async function handleModal(interaction) {
     const nickname = interaction.fields.getTextInputValue('nickname').trim();
 
     const entry = db.prepare("SELECT * FROM verification_queue WHERE id = ? AND status = 'pending'").get(queueId);
-    if (!entry) return interaction.reply({ content: '❌ Request not found or already processed.', ephemeral: true });
+    if (!entry) return interaction.reply({ content: `${E.cross} Request not found or already processed.`, ephemeral: true });
 
     const isOfficial = Number(entry.verified_official) === 1;
 
@@ -503,7 +504,7 @@ export async function handleModal(interaction) {
     // Check if nickname failed in any guild due to hierarchy
     const nicknameFailed = results.filter(r => r.nicknameError);
     const nicknameWarning = nicknameFailed.length > 0
-      ? `\n⚠️ Nickname could not be set automatically in ${nicknameFailed.length} server(s) — please set manually: \`${nickname}\``
+      ? `\n${E.warning} Nickname could not be set automatically in ${nicknameFailed.length} server(s) — please set manually: \`${nickname}\``
       : '';
 
     const fields = [
@@ -517,7 +518,7 @@ export async function handleModal(interaction) {
 
     const updatedEmbed = new EmbedBuilder()
       .setColor(nicknameFailed.length > 0 ? 0xF59E0B : 0x22C55E)
-      .setTitle(`✅ Verification #${queueId} — Approved${overrideLevel > 0 ? ` [Lvl ${overrideLevel} Override]` : ''}${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
+      .setTitle(`Verification #${queueId} — Approved${overrideLevel > 0 ? ` [Lvl ${overrideLevel} Override]` : ''}${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
       .setDescription(nicknameWarning || null)
       .addFields(...fields)
       .setTimestamp();
@@ -528,7 +529,7 @@ export async function handleModal(interaction) {
         await interaction.user.send({
           embeds: [new EmbedBuilder()
             .setColor(0xF59E0B)
-            .setTitle('⚠️ Nickname Could Not Be Set')
+            .setTitle('Nickname Could Not Be Set')
             .setDescription(`I was unable to set <@${entry.discord_id}>'s nickname to **${nickname}** in ${nicknameFailed.length} server(s) due to Discord role hierarchy.\n\nPlease set it manually.`)
             .setTimestamp()
           ]
@@ -541,7 +542,7 @@ export async function handleModal(interaction) {
     }
 
     await logAction(interaction.client, {
-      action: `✅ Staff Verified${overrideLevel > 0 ? ` [Lvl ${overrideLevel} Override]` : ''}${isOfficial ? ' [Official Account]' : ''}`,
+      action: `Staff Verified${overrideLevel > 0 ? ` [Lvl ${overrideLevel} Override]` : ''}${isOfficial ? ' [Official Account]' : ''}`,
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       target: { discordId: entry.discord_id, name: nickname },
       reason: entry.position,
@@ -550,7 +551,7 @@ export async function handleModal(interaction) {
         { name: 'Position', value: entry.position, inline: true },
         { name: 'Auth Level', value: overrideLevel > 0 ? `Override → Level ${overrideLevel}` : 'Default (No Override)', inline: true },
         { name: 'Nickname', value: nickname, inline: true },
-        { name: 'Servers Applied', value: `${successCount} ✅ | ${partialCount} ⚠️ | ${failedCount} ❌`, inline: false },
+        { name: 'Servers Applied', value: `${successCount} ${E.check} | ${partialCount} ${E.warning} | ${failedCount} ${E.cross}`, inline: false },
       ],
       specificChannelId: VERIFY_UNVERIFY_LOG_CHANNEL_ID,
       guildId: interaction.guildId,
@@ -579,7 +580,7 @@ export async function handleModal(interaction) {
 
   const updatedEmbed = new EmbedBuilder()
     .setColor(0xef4444)
-    .setTitle(`❌ Verification Request #${queueId} — Denied`)
+    .setTitle(`Verification Request #${queueId} — Denied`)
     .addFields(
       { name: 'User', value: `<@${entry.discord_id}> (${entry.discord_id})`, inline: false },
       { name: 'Position Requested', value: entry.position, inline: false },
@@ -613,7 +614,7 @@ export async function handleModal(interaction) {
     await user.send({
       embeds: [new EmbedBuilder()
         .setColor(0xef4444)
-        .setTitle('❌ CO Verification Denied')
+        .setTitle('CO Verification Denied')
         .setDescription(`Your CO staff verification request has been denied.\n\n**Reason:** ${reason}\n\nIf you believe this is an error, please contact a superuser.`)
         .setTimestamp()
       ]

@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { logAction } from '../utils/logger.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('gnick')
@@ -14,7 +15,7 @@ export async function execute(interaction) {
 
   const perm = await canUseCommand('gnick', interaction);
   if (!perm.allowed) {
-    return interaction.editReply({ content: `❌ ${perm.reason}` });
+    return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
   }
 
   const targetUser = interaction.options.getUser('user');
@@ -31,15 +32,15 @@ export async function execute(interaction) {
     try {
       await member.setNickname(truncated, `gnick by ${interaction.user.username}`);
       success++;
-      results.push(`✅ ${guild.name}`);
+      results.push(`${E.check} ${guild.name}`);
     } catch (e) {
       failed++;
-      results.push(`❌ ${guild.name} — ${e.message.includes('Missing') ? 'Missing Permissions' : e.message}`);
+      results.push(`${E.cross} ${guild.name} — ${e.message.includes('Missing') ? 'Missing Permissions' : e.message}`);
     }
   }
 
   await logAction(interaction.client, {
-    action: nickname ? '✏️ Global Nickname Set' : '✏️ Global Nickname Reset',
+    action: nickname ? 'Global Nickname Set' : 'Global Nickname Reset',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: targetUser.id, name: targetUser.username },
     reason: nickname || 'Reset to default',
@@ -50,7 +51,7 @@ export async function execute(interaction) {
   return interaction.editReply({
     embeds: [new EmbedBuilder()
       .setColor(failed > 0 ? 0xF59E0B : 0x22C55E)
-      .setTitle(nickname ? '✏️ Global Nickname Set' : '✏️ Global Nickname Reset')
+      .setTitle(nickname ? 'Global Nickname Set' : 'Global Nickname Reset')
       .setDescription(`${nickname ? `Set **${truncated}** for` : 'Reset nickname for'} <@${targetUser.id}>\n\n${results.join('\n')}`)
       .addFields(
         { name: 'Success', value: String(success), inline: true },

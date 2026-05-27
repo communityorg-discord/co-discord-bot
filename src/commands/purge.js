@@ -7,6 +7,7 @@ import { getUserByDiscordId } from '../db.js';
 import { randomBytes } from 'crypto';
 import { logAction } from '../utils/logger.js';
 import { PURGE_SCRIBE_LOG_CHANNEL_ID } from '../config.js';
+import { E } from '../lib/emoji.js';
 
 function generateHTML(messages, channel, guild, moderator, reason) {
   const rows = messages.map(m => {
@@ -123,7 +124,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const perm = await canUseCommand('purge', interaction);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
   const amount = interaction.options.getInteger('amount');
   const reason = interaction.options.getString('reason') || 'No reason provided';
@@ -142,10 +143,10 @@ export async function execute(interaction) {
   if (scope === 'full_server' || scope === 'global') {
     const scopePerm = await canUseCommand(`purge:${scope}`, interaction);
     if (!scopePerm.allowed) {
-      return interaction.editReply({ content: `❌ ${scopePerm.reason}` });
+      return interaction.editReply({ content: `${E.cross} ${scopePerm.reason}` });
     }
     if (confirmText !== 'CONFIRM') {
-      return interaction.editReply({ content: '❌ You must set the `confirm` option to `CONFIRM` for this scope.' });
+      return interaction.editReply({ content: `${E.cross} You must set the \`confirm\` option to \`CONFIRM\` for this scope.` });
     }
 
     const guilds = scope === 'global' ? [...interaction.client.guilds.cache.values()] : [interaction.guild];
@@ -179,7 +180,7 @@ export async function execute(interaction) {
     }
 
     await logAction(interaction.client, {
-      action: `🗑️ ${scope === 'global' ? 'Global' : 'Server'} Purge`,
+      action: `${scope === 'global' ? 'Global' : 'Server'} Purge`,
       moderator: { discordId: interaction.user.id, name: moderatorName },
       target: { discordId: 'MULTIPLE', name: scope === 'global' ? 'All Servers' : interaction.guild.name },
       reason,
@@ -195,7 +196,7 @@ export async function execute(interaction) {
     });
 
     return interaction.editReply({ embeds: [new EmbedBuilder()
-      .setTitle(`✅ ${scope === 'global' ? 'Global' : 'Server'} Purge Complete`)
+      .setTitle(`${scope === 'global' ? 'Global' : 'Server'} Purge Complete`)
       .setColor(0x22c55e)
       .setDescription(`Deleted **${totalDeleted}** messages across **${processedChannels}** channels.`)
       .setTimestamp()
@@ -212,7 +213,7 @@ export async function execute(interaction) {
     messages = messages.slice(0, amount);
 
     if (messages.length === 0) {
-      return interaction.editReply({ content: '❌ No messages found matching your filters.' });
+      return interaction.editReply({ content: `${E.cross} No messages found matching your filters.` });
     }
 
     const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
@@ -268,15 +269,15 @@ export async function execute(interaction) {
 
     // Summary in purged channel (auto-delete after 8s)
     const summaryEmbed = new EmbedBuilder()
-      .setTitle('🗑️ Channel Purged')
+      .setTitle('Channel Purged')
       .setColor(0xef4444)
       .setDescription(`**${deleted}** message${deleted !== 1 ? 's' : ''} deleted from <#${channel.id}>`)
       .addFields(
-        { name: '👤 Moderator', value: moderatorName, inline: true },
-        { name: '📋 Reason', value: reason, inline: true },
-        { name: '📄 Transcript', value: `[View Transcript](${transcriptUrl})`, inline: false },
-        ...(targetUser ? [{ name: '🎯 Filtered User', value: `<@${targetUser.id}>`, inline: true }] : []),
-        ...(tooOld > 0 ? [{ name: '⚠️ Skipped', value: `${tooOld} older than 14 days`, inline: false }] : [])
+        { name: 'Moderator', value: moderatorName, inline: true },
+        { name: 'Reason', value: reason, inline: true },
+        { name: 'Transcript', value: `[View Transcript](${transcriptUrl})`, inline: false },
+        ...(targetUser ? [{ name: 'Filtered User', value: `<@${targetUser.id}>`, inline: true }] : []),
+        ...(tooOld > 0 ? [{ name: 'Skipped', value: `${tooOld} older than 14 days`, inline: false }] : [])
       )
       .setFooter({ text: 'Community Organisation | Staff Assistant' })
       .setTimestamp();
@@ -293,7 +294,7 @@ export async function execute(interaction) {
 
     // Log to purge-scribe-logs + full-mod-logs
     await logAction(interaction.client, {
-      action: '🗑️ Channel Purged',
+      action: 'Channel Purged',
       moderator: { discordId: interaction.user.id, name: moderatorName },
       target: logTarget,
       reason,
@@ -312,12 +313,12 @@ export async function execute(interaction) {
     });
 
     await interaction.editReply({ embeds: [new EmbedBuilder()
-      .setTitle('✅ Purge Complete')
+      .setTitle('Purge Complete')
       .setColor(0x22c55e)
       .setDescription(`Deleted **${deleted}** message${deleted !== 1 ? 's' : ''} from <#${channel.id}>.`)
       .addFields(
-        { name: '📄 Transcript', value: `[View at portal.communityorg.co.uk](${transcriptUrl})`, inline: false },
-        ...(tooOld > 0 ? [{ name: '⚠️ Note', value: `${tooOld} message(s) skipped — older than 14 days.`, inline: false }] : [])
+        { name: 'Transcript', value: `[View at portal.communityorg.co.uk](${transcriptUrl})`, inline: false },
+        ...(tooOld > 0 ? [{ name: 'Note', value: `${tooOld} message(s) skipped — older than 14 days.`, inline: false }] : [])
       )
       .setFooter({ text: 'Community Organisation | Staff Assistant' })
       .setTimestamp()
@@ -325,6 +326,6 @@ export async function execute(interaction) {
 
   } catch (e) {
     console.error('[/purge]', e.message);
-    await interaction.editReply({ content: `❌ Purge failed: ${e.message}` });
+    await interaction.editReply({ content: `${E.cross} Purge failed: ${e.message}` });
   }
 }

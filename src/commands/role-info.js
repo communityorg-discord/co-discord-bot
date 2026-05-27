@@ -4,6 +4,7 @@
 // or auditing role membership at a glance.
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('role-info')
@@ -13,14 +14,14 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('role-info', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   await interaction.deferReply({ ephemeral: true });
 
   const role = interaction.options.getRole('role');
   const guild = interaction.guild;
   if (!role || !guild) {
-    return interaction.editReply({ content: '❌ Role context required — run in a server.' });
+    return interaction.editReply({ content: `${E.cross} Role context required — run in a server.` });
   }
 
   // Force a member fetch so role.members is fresh

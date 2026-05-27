@@ -3,6 +3,7 @@ import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBu
 import { logAction } from '../utils/logger.js';
 import { setLogChannel, getLogChannel, getAllLogConfig, getGlobalLogChannel, setGlobalLogChannel } from '../utils/botDb.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 // Private logs use a separate scope key so they don't interfere with /orglogs
 const PRIVATE_SCOPE = 'private';
@@ -128,22 +129,22 @@ function buildOverviewEmbed() {
   const catchallLines = [];
   for (const [key, cat] of Object.entries(CATCHALL_CATEGORIES)) {
     const channelId = getGlobalLogChannel(key, PRIVATE_SCOPE);
-    catchallLines.push(`${channelId ? '✅' : '❌'} ${cat.emoji} ${cat.label}${channelId ? `: <#${channelId}>` : ''}`);
+    catchallLines.push(`${channelId ? E.check : E.cross} ${cat.emoji} ${cat.label}${channelId ? `: <#${channelId}>` : ''}`);
   }
-  fields.push({ name: '📡 Catch-All Channels', value: catchallLines.join('\n'), inline: false });
+  fields.push({ name: 'Catch-All Channels', value: catchallLines.join('\n'), inline: false });
 
   // Per-type bindings
   for (const [catKey, cat] of Object.entries(CATEGORIES)) {
     const lines = [];
     for (const [typeKey, type] of Object.entries(cat.types)) {
       const channelId = config[`${catKey}:${typeKey}`];
-      lines.push(`${channelId ? '✅' : '❌'} ${type.label}${channelId ? `: <#${channelId}>` : ''}`);
+      lines.push(`${channelId ? E.check : E.cross} ${type.label}${channelId ? `: <#${channelId}>` : ''}`);
     }
     fields.push({ name: `${cat.emoji} ${cat.label}`, value: lines.join('\n'), inline: true });
   }
 
   return new EmbedBuilder()
-    .setTitle('🔒 Private Log Channels')
+    .setTitle('Private Log Channels')
     .setColor(0x8b5cf6)
     .setDescription('Private log channels — separate from organisation-wide logs.\nThese do not interfere with /orglogs bindings.\nSelect a category below to configure.')
     .addFields(fields)
@@ -223,14 +224,14 @@ export async function execute(interaction) {
 
   const perm = await canUseCommand('privatelogs', interaction);
   if (!perm.allowed) {
-    return interaction.editReply({ content: `❌ ${perm.reason}` });
+    return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
   }
 
   const embed = buildOverviewEmbed();
   const row = buildCategorySelect();
 
   await interaction.editReply({
-    content: '🔒 **Private Logs** — These channels are separate from /orglogs and do not interfere.\nSelect a category to configure:',
+    content: '**Private Logs** — These channels are separate from /orglogs and do not interfere.\nSelect a category to configure:',
     embeds: [embed],
     components: [row]
   });
@@ -244,7 +245,7 @@ export async function handleSelect(interaction) {
     const embed = buildOverviewEmbed();
     const row = buildCategorySelect();
     await interaction.update({
-      content: '🔒 **Private Logs** — These channels are separate from /orglogs and do not interfere.\nSelect a category to configure:',
+      content: '**Private Logs** — These channels are separate from /orglogs and do not interfere.\nSelect a category to configure:',
       embeds: [embed],
       components: [row]
     });
@@ -260,11 +261,11 @@ export async function handleSelect(interaction) {
       const catchallLines = [];
       for (const [key, cat] of Object.entries(CATCHALL_CATEGORIES)) {
         const channelId = getGlobalLogChannel(key, PRIVATE_SCOPE);
-        catchallLines.push(`${cat.emoji} ${cat.label}: ${channelId ? `✅ <#${channelId}>` : '❌ Not set'}`);
+        catchallLines.push(`${cat.emoji} ${cat.label}: ${channelId ? `${E.check} <#${channelId}>` : `${E.cross} Not set`}`);
       }
 
       const embed = new EmbedBuilder()
-        .setTitle('📡 Private Catch-All Channels')
+        .setTitle('Private Catch-All Channels')
         .setColor(0x8b5cf6)
         .setDescription('Private catch-all channels — separate from /orglogs catch-all bindings.\n\n' + catchallLines.join('\n'))
         .setFooter({ text: 'Community Organisation | Private Logs' })
@@ -274,7 +275,7 @@ export async function handleSelect(interaction) {
       const backRow = buildBackButton();
 
       await interaction.update({
-        content: '📡 **Catch-All Channels** — Select the log type to configure, or go back:',
+        content: '**Catch-All Channels** — Select the log type to configure, or go back:',
         embeds: [embed],
         components: [selectRow, backRow]
       });
@@ -290,11 +291,11 @@ export async function handleSelect(interaction) {
     const typeRows = [];
     for (const [typeKey, type] of Object.entries(cat.types)) {
       const channelId = config[`${categoryKey}:${typeKey}`];
-      typeRows.push(`**${type.label}:** ${channelId ? `✅ <#${channelId}>` : '❌ Not set'}`);
+      typeRows.push(`**${type.label}:** ${channelId ? `${E.check} <#${channelId}>` : `${E.cross} Not set`}`);
     }
 
     const catEmbed = new EmbedBuilder()
-      .setTitle(`🔒 ${cat.emoji} ${cat.label} — Private Bindings`)
+      .setTitle(`${cat.emoji} ${cat.label} — Private Bindings`)
       .setColor(0x8b5cf6)
       .setDescription('Private log bindings — separate from /orglogs.')
       .addFields({ name: '​', value: typeRows.join('\n'), inline: false })
@@ -305,7 +306,7 @@ export async function handleSelect(interaction) {
     const backRow = buildBackButton();
 
     await interaction.update({
-      content: `🏢 **${cat.emoji} ${cat.label}** — Select the log type to configure:`,
+      content: `**${cat.emoji} ${cat.label}** — Select the log type to configure:`,
       embeds: [catEmbed],
       components: [typeRow, backRow]
     });
@@ -354,7 +355,7 @@ export async function handleSelect(interaction) {
 
     const modal = new ModalBuilder()
       .setCustomId(`privatelogs_channel_${categoryKey}_${typeKey}`)
-      .setTitle(`🏢 ${type.label} — Set Channel`);
+      .setTitle(`${type.label} — Set Channel`);
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(
@@ -389,7 +390,7 @@ export async function handleModal(interaction) {
       targetChannel = await interaction.guild.channels.fetch(channelIdInput).catch(() => null);
       if (!targetChannel) {
         return interaction.reply({
-          content: `❌ Channel ID "${channelIdInput}" not found in this server.`,
+          content: `${E.cross} Channel ID "${channelIdInput}" not found in this server.`,
           flags: 64
         });
       }
@@ -403,15 +404,15 @@ export async function handleModal(interaction) {
 
     await interaction.reply({
       content: targetChannel
-        ? `✅ ${cat.emoji} **${cat.label}** set to ${targetChannel} — all logs of this type from every server will be sent here.`
-        : `✅ ${cat.emoji} **${cat.label}** has been cleared.`,
+        ? `${E.check} ${cat.emoji} **${cat.label}** set to ${targetChannel} — all logs of this type from every server will be sent here.`
+        : `${E.check} ${cat.emoji} **${cat.label}** has been cleared.`,
       embeds: [embed],
       components: [row],
       flags: 64
     });
 
     await logAction(interaction.client, {
-      action: '🔒 Private Catch-All Log Configured',
+      action: 'Private Catch-All Log Configured',
       target: null,
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       color: 0x8b5cf6,
@@ -437,7 +438,7 @@ export async function handleModal(interaction) {
     targetChannel = await interaction.guild.channels.fetch(channelIdInput).catch(() => null);
     if (!targetChannel) {
       return interaction.reply({
-        content: `❌ Channel ID "${channelIdInput}" not found in this server.`,
+        content: `${E.cross} Channel ID "${channelIdInput}" not found in this server.`,
         flags: 64
       });
     }
@@ -451,15 +452,15 @@ export async function handleModal(interaction) {
 
   await interaction.reply({
     content: targetChannel
-      ? `✅ ${cat.emoji} **${type.label}** set to ${targetChannel} — logs from all servers will be sent here.`
-      : `✅ ${cat.emoji} **${type.label}** has been cleared.`,
+      ? `${E.check} ${cat.emoji} **${type.label}** set to ${targetChannel} — logs from all servers will be sent here.`
+      : `${E.check} ${cat.emoji} **${type.label}** has been cleared.`,
     embeds: [embed],
     components: [row],
     flags: 64
   });
 
   await logAction(interaction.client, {
-    action: '🔒 Private Log Channel Configured',
+    action: 'Private Log Channel Configured',
     target: null,
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     color: 0x8b5cf6,

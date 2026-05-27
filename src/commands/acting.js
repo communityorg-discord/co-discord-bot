@@ -6,6 +6,7 @@ import { getActiveActingAssignment, endActingAssignment } from '../utils/botDb.j
 import { applyActingRoles, revertActingRoles } from '../services/leaveRoles.js';
 import { logAction } from '../utils/logger.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 // Build position choices (Discord allows max 25)
 const positionChoices = Object.keys(POSITIONS)
@@ -35,7 +36,7 @@ export async function execute(interaction) {
   const checkName = sub ? `acting:${sub}` : 'acting';
   const perm = await canUseCommand(checkName, interaction);
   if (!perm.allowed) {
-    return interaction.editReply({ content: `❌ ${perm.reason}` });
+    return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
   }
 
   if (sub === 'start') {
@@ -44,19 +45,19 @@ export async function execute(interaction) {
 
     const portalUser = getUserByDiscordId(targetUser.id);
     if (!portalUser) {
-      return interaction.editReply({ content: '❌ That user is not linked to the CO Staff Portal.' });
+      return interaction.editReply({ content: `${E.cross} That user is not linked to the CO Staff Portal.` });
     }
 
     const existing = getActiveActingAssignment(targetUser.id);
     if (existing) {
-      return interaction.editReply({ content: `❌ ${portalUser.display_name} already has an active acting assignment for **${existing.position}**. End it first with \`/acting end\`.` });
+      return interaction.editReply({ content: `${E.cross} ${portalUser.display_name} already has an active acting assignment for **${existing.position}**. End it first with \`/acting end\`.` });
     }
 
     await applyActingRoles(interaction.client, targetUser.id, position, null, null, interaction.user.username);
-    await interaction.editReply({ content: `✅ Acting assignment applied. **${portalUser.display_name}** now has **${position}** roles.` });
+    await interaction.editReply({ content: `${E.check} Acting assignment applied. **${portalUser.display_name}** now has **${position}** roles.` });
 
     await logAction(interaction.client, {
-      action: '📌 Acting Assignment (Manual)',
+      action: 'Acting Assignment (Manual)',
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       target: { discordId: targetUser.id, name: portalUser.display_name },
       reason: `Acting as ${position} — applied immediately`,
@@ -73,15 +74,15 @@ export async function execute(interaction) {
 
     const acting = getActiveActingAssignment(targetUser.id);
     if (!acting) {
-      return interaction.editReply({ content: '❌ No active acting assignment found for that user.' });
+      return interaction.editReply({ content: `${E.cross} No active acting assignment found for that user.` });
     }
 
     await revertActingRoles(interaction.client, targetUser.id, acting.leave_request_id || 0);
 
-    await interaction.editReply({ content: `✅ Acting assignment for **${acting.position}** ended. ${portalUser?.display_name || targetUser.username}'s original roles have been restored.` });
+    await interaction.editReply({ content: `${E.check} Acting assignment for **${acting.position}** ended. ${portalUser?.display_name || targetUser.username}'s original roles have been restored.` });
 
     await logAction(interaction.client, {
-      action: '🔄 Acting Assignment Ended (Manual)',
+      action: 'Acting Assignment Ended (Manual)',
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
       target: { discordId: targetUser.id, name: portalUser?.display_name || targetUser.username },
       reason: `Acting as ${acting.position} ended by superuser`,

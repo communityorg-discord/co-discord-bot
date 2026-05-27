@@ -7,6 +7,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { db as botDb } from '../utils/botDb.js';
 import { getUserByDiscordId } from '../db.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('whois')
@@ -16,7 +17,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('whois', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   await interaction.deferReply({ ephemeral: true });
 
@@ -49,25 +50,25 @@ export async function execute(interaction) {
   }
 
   const embed = new EmbedBuilder()
-    .setTitle(`🔎 whois — ${portalUser?.display_name || verified?.nickname || target.username}`)
+    .setTitle(`whois — ${portalUser?.display_name || verified?.nickname || target.username}`)
     .setColor(activeBan ? 0xef4444 : activeSusp ? 0xf59e0b : verified ? 0x22c55e : 0x6b7280)
     .setThumbnail(target.displayAvatarURL())
     .addFields(
       { name: 'Discord', value: `<@${targetId}> (\`${targetId}\`)`, inline: false },
       { name: 'Portal account', value: portalUser
         ? `${portalUser.display_name || portalUser.full_name || portalUser.username} (id=${portalUser.id})\nPosition: **${portalUser.position || '—'}**\nDept: ${portalUser.department || '—'}\nAuth: \`${portalUser.auth_level ?? '?'}\` · Status: \`${portalUser.account_status || '?'}\``
-        : '❌ Not linked to portal',
+        : `${E.cross} Not linked to portal`,
         inline: false },
       { name: 'Bot verification', value: verified
-        ? `✅ Verified as **${verified.position}** ${verified.nickname ? `(nick: ${verified.nickname})` : ''}\nVerified at: ${verified.verified_at || '?'}\nLast queue: ${lastQueue ? `#${lastQueue.id} (${lastQueue.status})` : '—'}`
-        : `❌ Not verified${lastQueue ? ` — last queue #${lastQueue.id} (${lastQueue.status})` : ''}`,
+        ? `${E.check} Verified as **${verified.position}** ${verified.nickname ? `(nick: ${verified.nickname})` : ''}\nVerified at: ${verified.verified_at || '?'}\nLast queue: ${lastQueue ? `#${lastQueue.id} (${lastQueue.status})` : '—'}`
+        : `${E.cross} Not verified${lastQueue ? ` — last queue #${lastQueue.id} (${lastQueue.status})` : ''}`,
         inline: false },
       { name: 'Status flags', value: [
-        activeSusp ? '🟡 Suspended' : null,
-        activeBan ? '🔴 Banned' : null,
-        activeInv ? '🔵 Under investigation' : null,
-        portalUser?.probation_end_date && !portalUser.probation_passed ? '🟣 On probation' : null,
-        !activeSusp && !activeBan && !activeInv ? '✅ Clear' : null,
+        activeSusp ? `${E.suspend} Suspended` : null,
+        activeBan ? `${E.ban} Banned` : null,
+        activeInv ? `${E.investigate} Under investigation` : null,
+        portalUser?.probation_end_date && !portalUser.probation_passed ? `${E.warning} On probation` : null,
+        !activeSusp && !activeBan && !activeInv ? `${E.check} Clear` : null,
       ].filter(Boolean).join(' · '), inline: false },
       { name: 'Infractions', value: `${infrCount} total · ${activeWarns} active warning${activeWarns === 1 ? '' : 's'}`, inline: false },
     );
@@ -81,7 +82,7 @@ export async function execute(interaction) {
     if (kReceived || kGiven) {
       embed.addFields({
         name: 'Kudos',
-        value: `🙏 **${kReceived}** received (all-time, ${kRecent} in last 30d) · 🤝 **${kGiven}** given`,
+        value: `${E.kudos} **${kReceived}** received (all-time, ${kRecent} in last 30d) · **${kGiven}** given`,
         inline: false,
       });
     }
@@ -89,10 +90,10 @@ export async function execute(interaction) {
 
   // Per-guild presence — compact format, capped to fit embed limits
   const presLines = presence.map(p => {
-    if (!p.member) return `❌ **${p.name}** — not a member`;
+    if (!p.member) return `${E.cross} **${p.name}** — not a member`;
     const nick = p.nickname ? ` (nick: \`${p.nickname}\`)` : '';
     const roleSummary = p.roles.length ? ` · ${p.roles.length} role${p.roles.length === 1 ? '' : 's'}` : '';
-    return `✅ **${p.name}**${nick}${roleSummary}`;
+    return `${E.check} **${p.name}**${nick}${roleSummary}`;
   });
   embed.addFields({
     name: `Guild presence (${presence.filter(p => p.member).length}/${presence.length})`,

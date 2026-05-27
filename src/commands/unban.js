@@ -5,6 +5,7 @@ import { logAction } from '../utils/logger.js';
 import { BAN_UNBAN_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import db, { addInfraction } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('unban')
@@ -14,7 +15,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const perm = await canUseCommand('unban', interaction);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
   const userId = interaction.options.getString('userid');
   const reason = interaction.options.getString('reason');
@@ -27,7 +28,7 @@ export async function execute(interaction) {
     const banEntry = await interaction.guild.bans.fetch(userId).catch(() => null);
     if (!banEntry) {
       await interaction.editReply({ embeds: [new EmbedBuilder()
-        .setTitle('❌ Not Banned')
+        .setTitle('Not Banned')
         .setColor(0xEF4444)
         .setDescription(`<@${userId}> is not currently banned from this server.`)
       ]});
@@ -41,7 +42,7 @@ export async function execute(interaction) {
     db.prepare('UPDATE global_bans SET active = 0 WHERE discord_id = ? AND active = 1').run(userId);
   } catch (e) {
     await interaction.editReply({ embeds: [new EmbedBuilder()
-      .setTitle('❌ Unban Failed')
+      .setTitle('Unban Failed')
       .setColor(0xEF4444)
       .setDescription(`Failed to unban <@${userId}>: ${e.message}`)
     ]});
@@ -63,7 +64,7 @@ export async function execute(interaction) {
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()
-    .setTitle('✅ User Unbanned')
+    .setTitle('User Unbanned')
     .setColor(0x22C55E)
     .setDescription(`<@${userId}> has been unbanned from this server.`)
     .addFields(

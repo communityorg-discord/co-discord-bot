@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { db } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 // Ensure polls table exists
 db.exec(`CREATE TABLE IF NOT EXISTS polls (
@@ -54,7 +55,7 @@ export function buildPollEmbed(poll, options, votes, ended = false) {
   });
 
   const embed = new EmbedBuilder()
-    .setTitle(`📊 ${poll.question}`)
+    .setTitle(`${poll.question}`)
     .setDescription(lines.join('\n\n'))
     .setColor(ended ? 0x808080 : 0x5865F2)
     .addFields(
@@ -102,7 +103,7 @@ export async function execute(interaction) {
 
   const perm = await canUseCommand('poll', interaction);
   if (!perm.allowed) {
-    return interaction.editReply({ content: `❌ ${perm.reason}` });
+    return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
   }
 
   const question = interaction.options.getString('question');
@@ -112,21 +113,21 @@ export async function execute(interaction) {
 
   const options = optionsStr.split(',').map(o => o.trim()).filter(Boolean);
   if (options.length < 2) {
-    return interaction.editReply({ content: '❌ You need at least 2 options.' });
+    return interaction.editReply({ content: `${E.cross} You need at least 2 options.` });
   }
   if (options.length > 10) {
-    return interaction.editReply({ content: '❌ Maximum 10 options allowed.' });
+    return interaction.editReply({ content: `${E.cross} Maximum 10 options allowed.` });
   }
 
   const durationMs = parseDuration(durationStr);
   if (durationMs === null) {
-    return interaction.editReply({ content: '❌ Invalid duration. Use formats like `30m`, `2h`, `1d`.' });
+    return interaction.editReply({ content: `${E.cross} Invalid duration. Use formats like \`30m\`, \`2h\`, \`1d\`.` });
   }
   if (durationMs < 60000) {
-    return interaction.editReply({ content: '❌ Minimum duration is 1 minute.' });
+    return interaction.editReply({ content: `${E.cross} Minimum duration is 1 minute.` });
   }
   if (durationMs > 7 * 24 * 60 * 60 * 1000) {
-    return interaction.editReply({ content: '❌ Maximum duration is 7 days.' });
+    return interaction.editReply({ content: `${E.cross} Maximum duration is 7 days.` });
   }
 
   const endsAt = new Date(Date.now() + durationMs).toISOString();
@@ -169,10 +170,10 @@ export async function handleVoteButton(interaction) {
 
   const poll = db.prepare('SELECT * FROM polls WHERE id = ?').get(pollId);
   if (!poll) {
-    return interaction.reply({ content: '❌ Poll not found.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Poll not found.`, ephemeral: true });
   }
   if (poll.ended) {
-    return interaction.reply({ content: '❌ This poll has already ended.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} This poll has already ended.`, ephemeral: true });
   }
 
   const options = JSON.parse(poll.options);

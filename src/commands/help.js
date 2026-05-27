@@ -1,9 +1,10 @@
 // COMMAND_PERMISSION_FALLBACK: everyone
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 const CATEGORIES = [
-  { name: 'Verification & Onboarding', emoji: '✅', commands: [
+  { name: 'Verification & Onboarding', emoji: '', commands: [
     { name: 'verify', desc: 'Submit a staff verification request' },
     { name: 'unverify', desc: 'Revoke a verified member\'s access (auth 5+)' },
     { name: 'onboard', desc: 'Full onboarding — credentials, roles, nickname, Drive (auth 5+)' },
@@ -13,7 +14,7 @@ const CATEGORIES = [
     { name: 'sync-roles', desc: 'Re-apply position roles for a user across every guild (auth 7+)' },
     { name: 'sync-all-roles', desc: 'Mass re-apply position roles for ALL verified members (superuser)' },
   ]},
-  { name: 'Moderation', emoji: '🛡️', commands: [
+  { name: 'Moderation', emoji: '', commands: [
     { name: 'warn', desc: 'Warn a user — auto-escalates: 3 warnings = kick, 5 = ban' },
     { name: 'kick', desc: 'Kick from server (auth 5+)' },
     { name: 'timeout', desc: 'Timeout/mute a user (auth 5+)' },
@@ -32,7 +33,7 @@ const CATEGORIES = [
     { name: 'cooldown', desc: 'Rate-limit commands (superuser)' },
     { name: 'eliminate', desc: 'Remove all traces of a user (superuser)' },
   ]},
-  { name: 'DMSPC & Cases', emoji: '📋', commands: [
+  { name: 'DMSPC & Cases', emoji: '', commands: [
     { name: 'suspend', desc: 'Suspend staff member (auth 5+)' },
     { name: 'unsuspend', desc: 'Lift suspension (auth 5+)' },
     { name: 'investigate', desc: 'Start investigation (auth 5+)' },
@@ -43,7 +44,7 @@ const CATEGORIES = [
     { name: 'nid', desc: 'Submit non-investigational disciplinary' },
     { name: 'acting', desc: 'Assign/end acting positions (superuser)' },
   ]},
-  { name: 'Staff Info', emoji: '👤', commands: [
+  { name: 'Staff Info', emoji: '', commands: [
     { name: 'user', desc: 'Full user profile — portal data, infractions, leave, BRAG' },
     { name: 'staff', desc: 'Search staff directory' },
     { name: 'leave', desc: 'Check leave balance and requests' },
@@ -60,12 +61,12 @@ const CATEGORIES = [
     { name: 'audit-log', desc: 'Recent Discord audit-log entries — kicks, bans, role changes (auth 5+)' },
     { name: 'stats', desc: 'Organisation-wide statistics' },
   ]},
-  { name: 'Security & AutoMod', emoji: '🔒', commands: [
+  { name: 'Security & AutoMod', emoji: '', commands: [
     { name: 'automod setup', desc: 'Post AutoMod control panels (superuser)' },
     { name: 'automod request-approval', desc: 'Request 20-min elevated access' },
     { name: 'lockdown', desc: 'Lock/unlock channel, server, or global (auth 5+)' },
   ]},
-  { name: 'Assignments', emoji: '📌', commands: [
+  { name: 'Assignments', emoji: '', commands: [
     { name: 'assign', desc: 'Create task assignment for staff' },
     { name: 'remind', desc: 'Set a timed reminder' },
     { name: 'reminders', desc: 'List and cancel your pending reminders' },
@@ -80,18 +81,18 @@ const CATEGORIES = [
     { name: 'my-kudos', desc: 'Personal kudos history — received + given counts + recent messages' },
     { name: 'todo', desc: 'Personal todo list — add / list / done / undo / remove / clear' },
   ]},
-  { name: 'Voice & Recording', emoji: '🎙️', commands: [
+  { name: 'Voice & Recording', emoji: '', commands: [
     { name: 'office', desc: 'Manage voice-channel access control (superuser)' },
     { name: 'record', desc: 'Start/stop a voice-channel recording session' },
     { name: 'who-is-here', desc: 'See who\'s currently in voice channels (this server or all)' },
     { name: 'quote', desc: 'Fetch a Discord message by link and reformat as a quote embed' },
   ]},
-  { name: 'Channels & Logs', emoji: '📡', commands: [
+  { name: 'Channels & Logs', emoji: '', commands: [
     { name: 'orglogs', desc: 'Configure organisation-wide log channels' },
     { name: 'privatelogs', desc: 'Configure private log channels (per-server)' },
     { name: 'counting', desc: 'Manage counting channels (auth 5+)' },
   ]},
-  { name: 'Tickets & Email', emoji: '📧', commands: [
+  { name: 'Tickets & Email', emoji: '', commands: [
     { name: 'create-ticket-panel', desc: 'Create ticket panel (auth 7+)' },
     { name: 'ticket-panel-send', desc: 'Send panel to channel (auth 7+)' },
     { name: 'delete-ticket-panel', desc: 'Delete ticket panel (auth 7+)' },
@@ -102,7 +103,7 @@ const CATEGORIES = [
     { name: 'setup-email', desc: 'Configure personal email' },
     { name: 'helpdesk', desc: 'Interact with the CO IT Help Desk' },
   ]},
-  { name: 'Config & Info', emoji: '⚙️', commands: [
+  { name: 'Config & Info', emoji: '', commands: [
     { name: 'logspanel', desc: 'Configure log channels (auth 5+)' },
     { name: 'bot', desc: 'Bot info — version, uptime, servers' },
     { name: 'ping', desc: 'Bot ↔ Discord gateway ↔ portal latency check' },
@@ -139,7 +140,7 @@ function requiredAuthLevel(desc) {
 export async function execute(interaction) {
   const perm = await canUseCommand('help', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   const filterMine = interaction.options.getBoolean('mine') || false;
   const search = (interaction.options.getString('search') || '').trim().toLowerCase();
@@ -168,7 +169,7 @@ export async function execute(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('📚 CO Bot — Command Reference')
+    .setTitle('CO Bot — Command Reference')
     .setDescription(
       search
         ? `**${totalCmds} match${totalCmds === 1 ? '' : 'es'}** for \`${search}\`\n\u200b`
@@ -178,7 +179,7 @@ export async function execute(interaction) {
     .setTimestamp();
 
   for (const cat of visible) {
-    embed.addFields({ name: `${cat.emoji} ${cat.name}`, value: cat.commands.map(c => `\`/${c.name}\` — ${c.desc}`).join('\n') + '\n\u200b', inline: false });
+    embed.addFields({ name: `${cat.name}`, value: cat.commands.map(c => `\`/${c.name}\` — ${c.desc}`).join('\n') + '\n\u200b', inline: false });
   }
 
   await interaction.reply({ embeds: [embed], ephemeral: true });

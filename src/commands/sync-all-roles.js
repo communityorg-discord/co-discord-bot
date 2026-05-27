@@ -10,6 +10,7 @@ import { canUseCommand } from '../utils/permissions.js';
 import { POSITIONS } from '../utils/positions.js';
 import { db as botDb } from '../utils/botDb.js';
 import { getEffectiveAllServerIds } from '../config.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('sync-all-roles')
@@ -21,7 +22,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('sync-all-roles', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   await interaction.deferReply({ ephemeral: true });
 
@@ -73,7 +74,7 @@ export async function execute(interaction) {
   }
 
   const embed = new EmbedBuilder()
-    .setTitle(dryRun ? '🔍 Mass role sync — dry run' : '🔄 Mass role sync — done')
+    .setTitle(dryRun ? 'Mass role sync — dry run' : 'Mass role sync — done')
     .setColor(dryRun ? 0xf59e0b : 0x22c55e)
     .setDescription(`Walked ${verified.length} verified member${verified.length === 1 ? '' : 's'} across ${serverIds.length} guild${serverIds.length === 1 ? '' : 's'}.`)
     .addFields(

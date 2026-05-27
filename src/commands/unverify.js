@@ -5,21 +5,22 @@ import { canUseCommand } from '../utils/permissions.js';
 import db from '../utils/botDb.js';
 import { VERIFY_UNVERIFY_LOG_CHANNEL_ID } from '../config.js';
 import { logAction } from '../utils/logger.js';
+import { E } from '../lib/emoji.js';
 
 // Build per-guild result lines for unverify
 function buildUnverifyGuildResultsField(results) {
   const lines = [];
   for (const r of results) {
     if (r.error && !r.success) {
-      lines.push(`❌ **${r.guild}** — ${r.error}`);
+      lines.push(`${E.cross} **${r.guild}** — ${r.error}`);
       continue;
     }
-    let line = r.success ? `✅ **${r.guild}**` : `❌ **${r.guild}**`;
+    let line = r.success ? `${E.check} **${r.guild}**` : `${E.cross} **${r.guild}**`;
     const parts = [];
     if (r.nicknameReset) parts.push('Nickname reset');
     else if (r.nicknameError) parts.push(`Nickname failed: ${r.nicknameError}`);
     if (r.rolesRemoved.length) parts.push(`-${r.rolesRemoved.length} role(s)`);
-    if (r.rolesRemoveFailed.length) parts.push(`⚠️ Could not remove: ${r.rolesRemoveFailed.join(', ')}`);
+    if (r.rolesRemoveFailed.length) parts.push(`${E.warning} Could not remove: ${r.rolesRemoveFailed.join(', ')}`);
     if (!parts.length) parts.push('No roles to remove');
     line += ` — ${parts.join(' | ')}`;
     lines.push(line);
@@ -41,7 +42,7 @@ export async function execute(interaction) {
 
   const perm = await canUseCommand('unverify', interaction);
   if (!perm.allowed) {
-    return interaction.editReply({ content: `❌ ${perm.reason}` });
+    return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
   }
 
   const target = interaction.options.getUser('user');
@@ -51,7 +52,7 @@ export async function execute(interaction) {
   try {
     verifyChannel = await getOrCreateVerificationChannel(interaction.client);
   } catch (e) {
-    return interaction.editReply({ content: '❌ Could not find the verification channel.' });
+    return interaction.editReply({ content: `${E.cross} Could not find the verification channel.` });
   }
 
   // Insert unverify request into queue
@@ -82,7 +83,7 @@ export async function execute(interaction) {
   const msg = await verifyChannel.send({ embeds: [embed], components: [row] });
   db.prepare("UPDATE verification_queue SET message_id = ? WHERE id = ?").run(msg.id, queueId);
 
-  await interaction.editReply({ content: `✅ Unverification request **#${queueId}** submitted for <@${target.id}>.` });
+  await interaction.editReply({ content: `${E.check} Unverification request **#${queueId}** submitted for <@${target.id}>.` });
 }
 
 export async function handleButton(interaction) {
@@ -92,7 +93,7 @@ export async function handleButton(interaction) {
     const queueId = customId.replace('unverify_approve_', '');
 
     if (!await isSuperuser(interaction.user.id)) {
-      return interaction.reply({ content: '❌ Only superusers can approve unverifications.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Only superusers can approve unverifications.`, ephemeral: true });
     }
 
     const modal = new ModalBuilder()
@@ -115,7 +116,7 @@ export async function handleButton(interaction) {
     const queueId = customId.replace('unverify_deny_', '');
 
     if (!await isSuperuser(interaction.user.id)) {
-      return interaction.reply({ content: '❌ Only superusers can deny this.', ephemeral: true });
+      return interaction.reply({ content: `${E.cross} Only superusers can deny this.`, ephemeral: true });
     }
 
     await interaction.deferUpdate();
@@ -157,7 +158,7 @@ export async function handleModal(interaction) {
 
   const updatedEmbed = new EmbedBuilder()
     .setColor(0xef4444)
-    .setTitle(`🔴 Unverification Request #${queueId} — Completed`)
+    .setTitle(`Unverification Request #${queueId} — Completed`)
     .addFields(
       { name: 'User', value: `<@${entry.discord_id}> (${entry.discord_id})`, inline: false },
       { name: 'Previous Position', value: entry.position || 'Unknown', inline: true },
@@ -170,14 +171,14 @@ export async function handleModal(interaction) {
 
   // Log to verify-unverify-logs + full-mod-logs
   await logAction(interaction.client, {
-    action: '🔴 Staff Unverified',
+    action: 'Staff Unverified',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: entry.discord_id, name: targetUser?.username || entry.discord_id },
     reason,
     color: 0xef4444,
     fields: [
       { name: 'Previous Position', value: entry.position || 'Unknown', inline: true },
-      { name: 'Servers Processed', value: `${successCount} ✅ | ${partialCount} ⚠️ | ${failedCount} ❌`, inline: false },
+      { name: 'Servers Processed', value: `${successCount} ${E.check} | ${partialCount} ${E.warning} | ${failedCount} ${E.cross}`, inline: false },
       { name: 'Per-Server Results', value: guildFieldLines.slice(0, 1024) || 'None', inline: false },
     ],
     specificChannelId: VERIFY_UNVERIFY_LOG_CHANNEL_ID,
@@ -189,7 +190,7 @@ export async function handleModal(interaction) {
     if (targetUser) {
       await targetUser.send({
         embeds: [new EmbedBuilder()
-          .setTitle('🔴 CO Verification Removed')
+          .setTitle('CO Verification Removed')
           .setColor(0xef4444)
           .setDescription(`Your CO staff verification has been removed by <@${interaction.user.id}>.`)
           .addFields(

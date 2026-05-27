@@ -5,6 +5,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { setGlobalLogChannel, getGlobalLogChannel, removeGlobalLogChannel } from '../utils/botDb.js';
 import { SUPERUSER_IDS } from '../config.js';
+import { E } from '../lib/emoji.js';
 
 // Broad, plain-English types -> the per-server catch-all category they bind.
 const TYPES = [
@@ -52,7 +53,7 @@ export async function execute(interaction) {
   const type = interaction.options.getString('type', true);
   if (sub === 'set') {
     for (const c of cats(type)) setGlobalLogChannel('global_' + c, interaction.channelId, gid);
-    return interaction.reply({ content: `✅ **${LABEL[type]}** logs will now post in this channel. Run the same command in other channels/servers to add more.`, flags: 64 });
+    return interaction.reply({ content: `${E.check} **${LABEL[type]}** logs will now post in this channel. Run the same command in other channels/servers to add more.`, flags: 64 });
   }
   // remove
   let removed = 0;

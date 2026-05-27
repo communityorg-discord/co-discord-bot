@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { saveTicketPanel, getTicketPanelByName } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('create-ticket-panel')
@@ -16,7 +17,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('create-ticket-panel', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
 
   const panelName = interaction.options.getString('name').trim();
@@ -27,12 +28,12 @@ export async function execute(interaction) {
   const transcriptsChannel = interaction.options.getChannel('transcripts_channel');
 
   if (category.type !== 4) {
-    return interaction.reply({ content: '❌ The category must be a text channel category.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} The category must be a text channel category.`, ephemeral: true });
   }
 
   const existing = getTicketPanelByName(panelName);
   if (existing) {
-    return interaction.reply({ content: `❌ A panel named **${panelName}** already exists. Choose a different name.`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} A panel named **${panelName}** already exists. Choose a different name.`, ephemeral: true });
   }
 
   saveTicketPanel({
@@ -46,7 +47,7 @@ export async function execute(interaction) {
   });
 
   const embed = new EmbedBuilder()
-    .setTitle('✅ Ticket Panel Created')
+    .setTitle('Ticket Panel Created')
     .setColor(0x22c55e)
     .addFields(
       { name: 'Panel Name', value: panelName, inline: true },

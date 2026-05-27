@@ -5,6 +5,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { db as botDb, getVoiceLeaderboard, flushActiveSessions } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 function getBragWeekKey(ts = Date.now()) {
   const d = new Date(ts);
@@ -36,7 +37,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('leaderboard', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   await interaction.deferReply({ ephemeral: true });
 
@@ -49,18 +50,18 @@ export async function execute(interaction) {
   if (type === 'voice') {
     try { flushActiveSessions(weekKey); } catch {}
     rows = getVoiceLeaderboard(weekKey).slice(0, 10);
-    title = '🎙️ Voice channel leaderboard';
+    title = 'Voice channel leaderboard';
   } else {
     rows = botDb.prepare(
       `SELECT discord_id, SUM(message_count) AS total
        FROM brag_message_counts WHERE week_key = ? GROUP BY discord_id
        ORDER BY total DESC LIMIT 10`
     ).all(weekKey);
-    title = '💬 Messages leaderboard';
+    title = 'Messages leaderboard';
   }
 
   if (!rows.length) {
-    return interaction.editReply({ content: `📭 No ${type} data yet for week ${weekKey}.` });
+    return interaction.editReply({ content: `${E.inbox} No ${type} data yet for week ${weekKey}.` });
   }
 
   const enriched = rows.map(r => {
@@ -69,7 +70,7 @@ export async function execute(interaction) {
   });
 
   const lines = enriched.map((r, i) => {
-    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `**${i + 1}.**`;
+    const medal = `**${i + 1}.**`;
     const value = type === 'voice'
       ? fmtTime(r.total_seconds)
       : `${r.total} msgs`;

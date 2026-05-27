@@ -4,6 +4,7 @@
 // check at the bottom is the most useful bit for non-mod staff.
 import { SlashCommandBuilder, EmbedBuilder, ChannelType, PermissionFlagsBits } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 const TYPE_LABEL = {
   [ChannelType.GuildText]: 'Text',
@@ -26,13 +27,13 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('channel-info', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   await interaction.deferReply({ ephemeral: true });
 
   const ch = interaction.options.getChannel('channel') || interaction.channel;
   const g = interaction.guild;
-  if (!ch || !g) return interaction.editReply({ content: '❌ Channel context required — run in a server.' });
+  if (!ch || !g) return interaction.editReply({ content: `${E.cross} Channel context required — run in a server.` });
 
   const everyoneRole = g.roles.everyone;
   const everyoneOverwrite = ch.permissionOverwrites?.cache?.get(everyoneRole.id);
@@ -57,7 +58,7 @@ export async function execute(interaction) {
       { name: 'Slowmode', value: slowmode, inline: true },
       { name: 'Created', value: `<t:${Math.floor(ch.createdTimestamp / 1000)}:R>`, inline: true },
       { name: 'Permission overwrites', value: String(overwriteCount), inline: true },
-      { name: '@everyone can see', value: everyoneCanRead ? '✅ Yes (public to all members)' : '🔒 No (restricted)', inline: true },
+      { name: '@everyone can see', value: everyoneCanRead ? `${E.check} Yes (public to all members)` : `${E.shield} No (restricted)`, inline: true },
     );
   if (archive) embed.addFields({ name: 'Threads', value: archive, inline: true });
   if (ch.topic) embed.addFields({ name: 'Topic', value: String(ch.topic).slice(0, 1024), inline: false });

@@ -7,6 +7,7 @@ import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.
 import { canUseCommand } from '../utils/permissions.js';
 import { POSITIONS } from '../utils/positions.js';
 import { db as botDb } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 const BASELINE_ROLES = ['Verified', 'CO | Staff', 'Suspended', 'Under Investigation'];
 
@@ -24,7 +25,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('server-health', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   await interaction.deferReply({ ephemeral: true });
 
@@ -34,7 +35,7 @@ export async function execute(interaction) {
     ? [...client.guilds.cache.values()]
     : (interaction.guild ? [interaction.guild] : []);
   if (!guilds.length) {
-    return interaction.editReply({ content: '❌ No guild context. Run in a server or pass scope:all.' });
+    return interaction.editReply({ content: `${E.cross} No guild context. Run in a server or pass scope:all.` });
   }
   guilds.sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0));
 
@@ -89,10 +90,10 @@ export async function execute(interaction) {
         ? 0xf59e0b
         : 0x6366f1;
     const baseline = r.baselineMissing.length
-      ? `⚠️ missing: ${r.baselineMissing.join(', ')}`
-      : `✅ all 4 present`;
+      ? `${E.warning} missing: ${r.baselineMissing.join(', ')}`
+      : `${E.check} all 4 present`;
     const missing = r.missingPosRoles.length === 0
-      ? '✅ all expected position roles present'
+      ? `${E.check} all expected position roles present`
       : r.missingPosRoles.length <= 8
         ? `missing: ${r.missingPosRoles.join(', ')}`
         : `${r.missingPosRoles.length} missing — first 8: ${r.missingPosRoles.slice(0, 8).join(', ')}`;

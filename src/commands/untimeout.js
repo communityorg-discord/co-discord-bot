@@ -5,6 +5,7 @@ import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import { addInfraction } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('untimeout')
@@ -14,13 +15,13 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const perm = await canUseCommand('untimeout', interaction);
-  if (!perm.allowed) return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+  if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
   const target = interaction.options.getUser('user');
   const reason = interaction.options.getString('reason') || 'Not specified';
 
   if (!interaction.inGuild()) {
-    return interaction.reply({ content: '❌ This command cannot be used in DMs.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} This command cannot be used in DMs.`, ephemeral: true });
   }
 
   const portalUser = getUserByDiscordId(target.id);
@@ -28,7 +29,7 @@ export async function execute(interaction) {
   const member = await interaction.guild.members.fetch(target.id).catch(() => null);
 
   if (!member) {
-    return interaction.reply({ content: `❌ Could not find user <@${target.id}> in this server.`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Could not find user <@${target.id}> in this server.`, ephemeral: true });
   }
 
   await interaction.deferReply();
@@ -39,14 +40,14 @@ export async function execute(interaction) {
 
   const inf = addInfraction(target.id, 'untimeout', reason, interaction.user.id, interaction.user.username);
   } catch (err) {
-    return interaction.editReply({ content: `❌ Failed to remove timeout: ${err.message}` });
+    return interaction.editReply({ content: `${E.cross} Failed to remove timeout: ${err.message}` });
   }
 
   // DM the user
   try {
     await target.send({
       embeds: [new EmbedBuilder()
-        .setTitle('✅ Timeout Removed')
+        .setTitle('Timeout Removed')
         .setColor(0x22C55E)
         .setDescription(`Your timeout in **Community Organisation** has been removed.`)
         .addFields(
@@ -61,7 +62,7 @@ export async function execute(interaction) {
 
   // Log
   await logAction(interaction.client, {
-    action: '✅ Timeout Removed',
+    action: 'Timeout Removed',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: target.id, name: targetName },
     reason,
@@ -77,7 +78,7 @@ export async function execute(interaction) {
 
   await interaction.editReply({
     embeds: [new EmbedBuilder()
-      .setTitle('✅ Timeout Removed')
+      .setTitle('Timeout Removed')
       .setColor(0x22C55E)
       .setDescription(`Timeout for **${targetName}** has been removed.`)
       .addFields(

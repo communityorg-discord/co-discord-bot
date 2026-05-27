@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ChannelType } from 'discord.js';
 import { db } from '../utils/botDb.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('counting')
@@ -38,7 +39,7 @@ export async function execute(interaction) {
   const checkName = sub ? `counting:${sub}` : 'counting';
   const perm = await canUseCommand(checkName, interaction);
   if (!perm.allowed) {
-    return interaction.editReply({ content: `❌ ${perm.reason}` });
+    return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
   }
 
   if (sub === 'setup') {
@@ -48,14 +49,14 @@ export async function execute(interaction) {
       .get(interaction.guildId, channel.id);
 
     if (existing) {
-      return interaction.editReply({ content: `❌ Counting is already enabled in <#${channel.id}>.` });
+      return interaction.editReply({ content: `${E.cross} Counting is already enabled in <#${channel.id}>.` });
     }
 
     db.prepare('INSERT INTO counting_channels (guild_id, channel_id) VALUES (?, ?)')
       .run(interaction.guildId, channel.id);
 
-    await channel.send('🔢 Counting has been enabled in this channel! Start from **1**. You cannot count twice in a row.');
-    return interaction.editReply({ content: `✅ Counting enabled in <#${channel.id}>.` });
+    await channel.send('Counting has been enabled in this channel! Start from **1**. You cannot count twice in a row.');
+    return interaction.editReply({ content: `${E.check} Counting enabled in <#${channel.id}>.` });
   }
 
   if (sub === 'reset') {
@@ -65,7 +66,7 @@ export async function execute(interaction) {
       .get(interaction.guildId, channel.id);
 
     if (!existing) {
-      return interaction.editReply({ content: `❌ <#${channel.id}> is not a counting channel.` });
+      return interaction.editReply({ content: `${E.cross} <#${channel.id}> is not a counting channel.` });
     }
 
     const newHighScore = Math.max(existing.high_score, existing.current_count);
@@ -77,8 +78,8 @@ export async function execute(interaction) {
       WHERE guild_id = ? AND channel_id = ?
     `).run(newHighScore, interaction.guildId, channel.id);
 
-    await channel.send(`🔄 The count has been reset by <@${interaction.user.id}>. Start from **1**!`);
-    return interaction.editReply({ content: `✅ Count reset in <#${channel.id}>.` });
+    await channel.send(`The count has been reset by <@${interaction.user.id}>. Start from **1**!`);
+    return interaction.editReply({ content: `${E.check} Count reset in <#${channel.id}>.` });
   }
 
   if (sub === 'leaderboard') {
@@ -95,7 +96,7 @@ export async function execute(interaction) {
     });
 
     const embed = new EmbedBuilder()
-      .setTitle('🔢 Counting Leaderboard')
+      .setTitle('Counting Leaderboard')
       .setColor(0x5865F2)
       .setDescription(lines.join('\n'))
       .setTimestamp();

@@ -3,6 +3,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { COOLDOWN_LOG_CHANNEL_ID, MOD_LOG_CHANNEL_ID } from '../config.js';
 import { logAction } from '../utils/logger.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('cooldown')
@@ -30,7 +31,7 @@ export async function execute(interaction) {
 
   const perm = await canUseCommand('cooldown', interaction);
   if (!perm.allowed) {
-    return interaction.editReply({ content: `❌ ${perm.reason}` });
+    return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
   }
 
   const seconds = interaction.options.getInteger('seconds');
@@ -40,12 +41,12 @@ export async function execute(interaction) {
   try {
     await targetChannel.setRateLimitPerUser(seconds);
   } catch (e) {
-    return interaction.editReply({ content: `❌ Failed to set cooldown: ${e.message}` });
+    return interaction.editReply({ content: `${E.cross} Failed to set cooldown: ${e.message}` });
   }
 
   const durationText = seconds === 0 ? 'Disabled (no slowmode)' : `${seconds} second${seconds !== 1 ? 's' : ''}`;
   const embed = new EmbedBuilder()
-    .setTitle('⏱️ Channel Cooldown Set')
+    .setTitle('Channel Cooldown Set')
     .setColor(seconds === 0 ? 0x22C55E : 0xF59E0B)
     .addFields(
       { name: 'Channel', value: `<#${targetChannel.id}>`, inline: true },
@@ -59,7 +60,7 @@ export async function execute(interaction) {
 
   // Log to cooldown-logs + full-mod-logs
   await logAction(interaction.client, {
-    action: '⏱️ Channel Cooldown Set',
+    action: 'Channel Cooldown Set',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
     target: { discordId: targetChannel.id, name: `#${targetChannel.name}` },
     reason: reason,

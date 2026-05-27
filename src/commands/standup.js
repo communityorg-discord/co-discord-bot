@@ -12,6 +12,7 @@ import {
   ActionRowBuilder,
 } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('standup')
@@ -20,10 +21,10 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const perm = await canUseCommand('standup', interaction);
   if (!perm.allowed) {
-    return interaction.reply({ content: `❌ ${perm.reason}`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
   if (!interaction.channel || !interaction.channel.isTextBased?.()) {
-    return interaction.reply({ content: '❌ Run in a text channel.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Run in a text channel.`, ephemeral: true });
   }
 
   const modal = new ModalBuilder()
@@ -66,7 +67,7 @@ export async function handleModalSubmit(interaction) {
 
   const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
   if (!channel) {
-    return interaction.reply({ content: '❌ Channel no longer accessible.', ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Channel no longer accessible.`, ephemeral: true });
   }
 
   const member = interaction.guild ? await interaction.guild.members.fetch(interaction.user.id).catch(() => null) : null;
@@ -76,26 +77,26 @@ export async function handleModalSubmit(interaction) {
     .setAuthor({ name: `${display} — standup`, iconURL: interaction.user.displayAvatarURL() })
     .setColor(0x6366f1)
     .addFields(
-      { name: '📌 Yesterday', value: yesterday.slice(0, 1024), inline: false },
-      { name: '🎯 Today',     value: today.slice(0, 1024),     inline: false },
+      { name: 'Yesterday', value: yesterday.slice(0, 1024), inline: false },
+      { name: 'Today',     value: today.slice(0, 1024),     inline: false },
     )
     .setTimestamp();
 
   if (blockers && !/^(none|no|n\/a|nothing)\b/i.test(blockers)) {
-    embed.addFields({ name: '🚧 Blockers', value: blockers.slice(0, 1024), inline: false });
+    embed.addFields({ name: 'Blockers', value: blockers.slice(0, 1024), inline: false });
     embed.setColor(0xf59e0b);
   } else if (blockers) {
-    embed.setFooter({ text: 'No blockers 🟢' });
+    embed.setFooter({ text: 'No blockers' });
   }
 
   try {
     const sent = await channel.send({ embeds: [embed] });
     await interaction.reply({
-      content: `✅ Standup posted — [jump](${sent.url})`,
+      content: `${E.check} Standup posted — [jump](${sent.url})`,
       ephemeral: true,
     });
   } catch (e) {
-    await interaction.reply({ content: `❌ Send failed: ${e.message}`, ephemeral: true });
+    await interaction.reply({ content: `${E.cross} Send failed: ${e.message}`, ephemeral: true });
   }
   return true;
 }
