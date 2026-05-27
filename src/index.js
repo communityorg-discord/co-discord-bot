@@ -2567,7 +2567,7 @@ client.on('guildMemberAdd', async (member) => {
   // Member-join log
   try {
     const embed = new EmbedBuilder().setTitle('Member Joined').setColor(0x22c55e)
-      .setDescription(`${E.member} **Member Joined**`)
+      .setDescription(`${E.join} **Member Joined**`)
       .addFields(
         { name: 'Member', value: `${E.member} ${member.user.username} (<@${member.user.id}>)`, inline: true },
         { name: 'Server', value: member.guild?.name || '—', inline: true },
@@ -2583,7 +2583,7 @@ client.on('guildMemberRemove', async (member) => {
   // Member-leave log
   try {
     const embed = new EmbedBuilder().setTitle('Member Left').setColor(0xef4444)
-      .setDescription(`${E.member} **Member Left**`)
+      .setDescription(`${E.leave} **Member Left**`)
       .addFields(
         { name: 'Member', value: `${E.member} ${member.user?.username || 'Unknown'} (<@${member.user?.id || member.id}>)`, inline: true },
         { name: 'Server', value: member.guild?.name || '—', inline: true },
