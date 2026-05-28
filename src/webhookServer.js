@@ -134,7 +134,30 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
     }
     return true;
   }
-  
+
+  // POST /usgrp-log — relay endpoint for aspire-bot's USGRP log watcher.
+  // aspire-bot is NOT a member of the CO | Private Server, so it can't post
+  // there directly; it POSTs the prebuilt embed here and co-discord-bot (which
+  // IS in that guild) forwards it to the target channel. Auth: same x-bot-secret
+  // as every other inbound webhook. NOT an Atlas action — intentionally not
+  // written to atlas_bot_actions; this is plain log fan-out.
+  // Body: { channel_id, embed }  (embed = discord.js EmbedBuilder JSON / APIEmbed)
+  webhookApp.post('/usgrp-log', async (req, res) => {
+    if (!verifyBotSecret(req, res)) return;
+    const { channel_id, embed } = req.body || {};
+    if (!channel_id || !embed || typeof embed !== 'object') {
+      return res.status(400).json({ error: 'channel_id and embed required' });
+    }
+    const ch = await client.channels.fetch(String(channel_id)).catch(() => null);
+    if (!ch || !ch.isTextBased?.()) return res.status(404).json({ error: 'channel not found' });
+    try {
+      const sent = await ch.send({ embeds: [embed] });
+      return res.json({ ok: true, message_id: sent.id });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   // GET /api/health — lightweight readiness probe (no auth) for status page
   webhookApp.get('/api/health', (_req, res) => {
     const ready = !!(client && client.isReady && client.isReady());
