@@ -68,6 +68,14 @@ export function setupAdminPrefix(client) {
             try { result = await cmd.run({ args, rest, message, client, authorId: message.author.id, authorName: message.author.username }); }
             catch (e) { ok = false; result = e.message || 'Command failed.'; }
 
+            // Commands can return { raw: <message payload> } to render their
+            // own embeds + components verbatim (e.g. .help's category button
+            // menu). The standard title/note/fields path is bypassed.
+            if (ok && result && typeof result === 'object' && result.raw) {
+                await running.edit({ content: '', embeds: result.raw.embeds || [], components: result.raw.components || [], allowedMentions: NO_PING }).catch(() => {});
+                return;
+            }
+
             const embed = new EmbedBuilder().setTimestamp();
             if (!ok) {
                 embed.setColor(0xEF4444).setAuthor({ name: 'Community Organisation' }).setTitle(`Couldn't run .${name}`)

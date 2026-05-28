@@ -1954,6 +1954,13 @@ client.on('interactionCreate', async interaction => {
   }
 
   if (interaction.isButton()) {
+    // Admin .help category menu — lazy-import the handler (its registry
+    // import pulls in the DB, only ready after startup). Gated to
+    // superusers inside the handler.
+    if (interaction.customId?.startsWith('cohelp:')) {
+      const { handleButton: adminHelpButton } = await import('./admin/helpUi.js');
+      return adminHelpButton(interaction);
+    }
     // Verify/Unverify button handlers
     if (interaction.customId.startsWith('verify_auth_select_')) return verifySelect(interaction);
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);

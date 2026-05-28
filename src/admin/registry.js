@@ -16,6 +16,7 @@ import {
     getEffectiveAllServerIds, getEffectiveStaffHqId, APPEALS_SERVER_ID,
     SUSPENDED_ROLE_ID, UNDER_INVESTIGATION_ROLE_ID,
 } from '../config.js';
+import { buildHome, buildCategory } from './helpUi.js';
 
 export function resolveId(token) { return String(token || '').replace(/[^0-9]/g, ''); }
 
@@ -432,25 +433,12 @@ export const COMMANDS = {
         } },
 
     // ── Help ──────────────────────────────────────────────────────
-    help: { group: 'Help', usage: '.help [group]', desc: 'List every Community Organisation admin command.',
+    // Renders the paginated help UI (helpUi.js): `.help` → category-button
+    // landing page; `.help <group>` → jump straight to that group's page.
+    // Returns { raw } so the prefix renderer attaches the buttons verbatim.
+    help: { group: 'Help', usage: '.help [group]', desc: 'Browse admin commands by category (button menu).',
         async run({ args }) {
-            const filter = String(args[0] || '').toLowerCase();
-            const groups = {};
-            for (const [name, c] of Object.entries(COMMANDS)) { if (name === 'help') continue; (groups[c.group] = groups[c.group] || []).push(c); }
-            const ORDER = ['Moderation', 'Staff', 'Comms', 'Roles', 'Channels', 'Server', 'Lookup'];
-            const ordered = [...ORDER.filter((g) => groups[g]), ...Object.keys(groups).filter((g) => !ORDER.includes(g))];
-            const want = ordered.filter((g) => !filter || g.toLowerCase().includes(filter));
-            if (!want.length) throw new Error(`No command group matching "${args[0]}". Run \`.help\` on its own.`);
-            const fields = want.map((g) => ({
-                name: `${g} (${groups[g].length})`,
-                value: groups[g].map((c) => `\`[CO] ${c.usage}\`\n${c.desc}`).join('\n').slice(0, 1024),
-                inline: false,
-            }));
-            const total = Object.values(groups).reduce((n, a) => n + a.length, 0);
-            return { title: 'Community Organisation — Admin Commands', icon: E.seal,
-                note: filter
-                    ? `Showing **${want.join(', ')}**. Run \`.help\` on its own for all commands.`
-                    : `All **${total}** CO admin commands — tagged **[CO]**. Prefix every one with \`.\` — e.g. \`.gban @user reason\`. Filter with \`.help <group>\`.`,
-                fields };
+            const filter = String(args[0] || '').trim();
+            return { raw: filter ? buildCategory(filter) : buildHome() };
         } },
 };
