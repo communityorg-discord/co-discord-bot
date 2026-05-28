@@ -2005,7 +2005,7 @@ client.on('interactionCreate', async interaction => {
         const { default: fetch } = await import('node-fetch');
         const response = await fetch('http://localhost:3016/api/disciplinary/non-investigational', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Bot-Secret': process.env.BOT_SECRET || 'co-bot-internal' },
+          headers: { 'Content-Type': 'application/json', 'X-Bot-Secret': process.env.BOT_WEBHOOK_SECRET },
           body: JSON.stringify({
             user_id: Number(userId),
             action_type: actionType,

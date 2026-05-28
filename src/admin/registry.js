@@ -346,7 +346,7 @@ export const COMMANDS = {
             const sup = getUserByDiscordId(authorId);
             const PORTAL = process.env.PORTAL_HTTP || 'http://localhost:3016';
             const r = await fetch(`${PORTAL}/api/disciplinary/non-investigational`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Bot-Secret': process.env.BOT_SECRET || 'co-bot-internal' },
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Bot-Secret': process.env.BOT_WEBHOOK_SECRET },
                 body: JSON.stringify({ user_id: Number(target.id), action_type: 'verbal_warning', violation_description: reason, _bot_supervisor_id: sup?.id }),
             }).catch((e) => { throw new Error('Could not reach the staff portal: ' + (e.message || 'unknown')); });
             const j = await r.json().catch(() => ({}));
