@@ -146,6 +146,15 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
     return true;
   }
 
+  // Express middleware form of verifyBotSecret. Mount this BEFORE multer on
+  // multipart endpoints so the secret is checked before the (up to 25MB) body
+  // is buffered into memory — otherwise an unauthenticated caller can force the
+  // server to buffer a large upload, a pre-auth DoS.
+  function requireBotSecret(req, res, next) {
+    if (!verifyBotSecret(req, res)) return; // verifyBotSecret already sent 401
+    next();
+  }
+
   // POST /usgrp-log — relay endpoint for aspire-bot's USGRP log watcher.
   // aspire-bot is NOT a member of the CO | Private Server, so it can't post
   // there directly; it POSTs the prebuilt embed here and co-discord-bot (which
@@ -1856,7 +1865,7 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
   
   // POST /webhook/dm-with-attachment — DM a user with a file attached
   // Multipart form: { discord_id, body, file, title? }. Header: x-bot-secret.
-  webhookApp.post('/webhook/dm-with-attachment', uploadDmAttachment.single('file'), async (req, res) => {
+  webhookApp.post('/webhook/dm-with-attachment', requireBotSecret, uploadDmAttachment.single('file'), async (req, res) => {
     if (!verifyBotSecret(req, res)) return;
     const discord_id = req.body?.discord_id;
     const body = req.body?.body;

@@ -35,10 +35,11 @@ export async function execute(interaction) {
   await interaction.deferReply();
 
   // Remove timeout
+  let inf;
   try {
     await member.timeout(null, reason);
 
-  const inf = addInfraction(target.id, 'untimeout', reason, interaction.user.id, interaction.user.username);
+    inf = addInfraction(target.id, 'untimeout', reason, interaction.user.id, interaction.user.username);
   } catch (err) {
     return interaction.editReply({ content: `${E.cross} Failed to remove timeout: ${err.message}` });
   }

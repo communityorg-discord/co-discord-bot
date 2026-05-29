@@ -1,4 +1,4 @@
-// COMMAND_PERMISSION_FALLBACK: auth_5
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5
 // Compose-and-post a rich embed via a 4-field modal. Saves staff
 // from having to write embed JSON or use /scribe/etc for plain
 // announcements. Posts to the chosen channel as the bot, with an

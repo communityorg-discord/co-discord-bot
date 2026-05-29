@@ -220,6 +220,13 @@ export class AutoMod {
 
   async checkMemberLeave(member) {
     if (!member.guild) return;
+    // Honour the AutoMod enabled flag — a guild with AutoMod off must never
+    // trigger a network-wide ban from this heuristic.
+    const config = this.getConfig(member.guild.id);
+    if (!config.enabled) return;
+    // Never ban a superuser, and respect any immunity grant.
+    if (SUPERUSER_IDS.includes(member.id)) return;
+    if (this.isImmune(member.guild.id, member.id, 'user', 'mass_dm')) return;
     // Track join/leave for mass DM detection
     const recent = db.prepare("SELECT COUNT(*) as c FROM join_rate_log WHERE guild_id = ? AND discord_id = ? AND joined_at > datetime('now', '-1 hour')").get(member.guild.id, member.id);
     if (recent.c >= 3) {

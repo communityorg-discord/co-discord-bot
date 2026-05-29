@@ -14,7 +14,7 @@ import {
 import { getUserByDiscordId } from '../db.js';
 import {
     getEffectiveAllServerIds, getEffectiveStaffHqId, APPEALS_SERVER_ID,
-    SUSPENDED_ROLE_ID, UNDER_INVESTIGATION_ROLE_ID,
+    SUSPENDED_ROLE_ID, UNDER_INVESTIGATION_ROLE_ID, SUPERUSER_IDS,
 } from '../config.js';
 import { buildHome, buildCategory } from './helpUi.js';
 
@@ -39,6 +39,7 @@ export const COMMANDS = {
         async run({ args, rest, message, client, authorId, authorName }) {
             const id = resolveId(args[0]); const reason = rest.replace(args[0], '').trim();
             if (!id || !reason) throw new Error('Usage: `.gban <@user> <reason>`');
+            if (SUPERUSER_IDS.includes(String(id))) throw new Error('You cannot globally ban a Superuser.');
             if (getActiveGlobalBan(id)) throw new Error('That user already has an active global ban.');
             let banned = 0;
             for (const sid of getEffectiveAllServerIds(client)) {

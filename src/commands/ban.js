@@ -105,8 +105,8 @@ export async function execute(interaction) {
     // Save to DB
     const unbanAt = isTempBan ? new Date(Date.now() + durationMs).toISOString() : null;
     db.prepare(
-      "INSERT INTO banned_users (discord_id, username, banned_at, reason, banned_by, unban_at) VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?, ?)"
-    ).run(targetUserId, targetUserId, reason, interaction.user.id, unbanAt);
+      "INSERT INTO banned_users (discord_id, banned_at, reason, banned_by, unban_at, active) VALUES (?, CURRENT_TIMESTAMP, ?, ?, ?, 1)"
+    ).run(targetUserId, reason, interaction.user.id, unbanAt);
 
     const inf = addInfraction(targetUserId, isTempBan ? 'temp_ban' : 'global_ban', reason, interaction.user.id, interaction.user.username, isTempBan ? new Date(Date.now() + durationMs).toISOString() : null, 1);
 

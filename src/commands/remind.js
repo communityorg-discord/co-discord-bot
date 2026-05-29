@@ -1,5 +1,5 @@
 // COMMAND_PERMISSION_FALLBACK: everyone
-// COMMAND_PERMISSION_FALLBACK: auth_level >= 4;option=target=other-user
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 4;subcommand=other
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { db } from '../utils/botDb.js';
 import { canUseCommand } from '../utils/permissions.js';

@@ -1998,7 +1998,13 @@ client.on('interactionCreate', async interaction => {
 
     // NID button handlers
     if (interaction.customId.startsWith('nid_confirm_')) {
-      const [, , userId, actionType] = interaction.customId.split('_');
+      // customId = nid_confirm_<userId>_<actionType>; actionType itself contains
+      // underscores (e.g. first_written_warning), so split off the prefix + userId
+      // and rejoin the remainder as the full action type.
+      const rest = interaction.customId.slice('nid_confirm_'.length);
+      const sep = rest.indexOf('_');
+      const userId = sep === -1 ? rest : rest.slice(0, sep);
+      const actionType = sep === -1 ? '' : rest.slice(sep + 1);
       const supervisor = getUserByDiscordId(interaction.user.id);
 
       try {

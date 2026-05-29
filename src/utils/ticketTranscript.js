@@ -1,5 +1,26 @@
 import { randomBytes } from 'crypto';
 
+// HTML-escape any user/attachment-derived text before interpolating into the
+// transcript. The transcript is served same-origin on the staff portal, so an
+// attacker-controlled filename, embed body, display name, channel name, etc.
+// would otherwise be a stored-XSS sink.
+function esc(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Escape a URL for use inside an attribute and neutralise dangerous schemes
+// (javascript:, data:, vbscript:) so an attacker-supplied href/src can't run script.
+function escUrl(value) {
+  const raw = String(value ?? '').trim();
+  if (/^(?:javascript|data|vbscript):/i.test(raw)) return '#';
+  return esc(raw);
+}
+
 export function generateTranscriptHTML(messages, channel, guild, ticketMeta) {
   const rows = messages.map(m => {
     const time = new Date(m.createdTimestamp).toLocaleString('en-GB', { timeZone: 'UTC' });
@@ -30,29 +51,29 @@ export function generateTranscriptHTML(messages, channel, guild, ticketMeta) {
     } else if (m.embeds && m.embeds.length > 0) {
       const firstEmbed = m.embeds[0];
       const desc = firstEmbed.description || firstEmbed.title || '[embed]';
-      content = `<em style="color:#666">[Embed] ${desc.slice(0, 120)}</em>`;
+      content = `<em style="color:#666">[Embed] ${esc(desc.slice(0, 120))}</em>`;
     } else if (m.attachments && m.attachments.size > 0) {
       const attachmentNames = [...m.attachments.values()].map(a => a.name || a.filename).join(', ');
-      content = `<em style="color:#666">[Attachment(s)] ${attachmentNames}</em>`;
+      content = `<em style="color:#666">[Attachment(s)] ${esc(attachmentNames)}</em>`;
     } else {
       content = '<em style="color:#666">No text content</em>';
     }
 
     const attachments = [...m.attachments.values()].map(a =>
       a.contentType?.startsWith('image/')
-        ? `<img src="${a.url}" style="max-width:300px;max-height:200px;border-radius:4px;margin-top:4px;display:block" />`
-        : `<a href="${a.url}" style="color:#7289da">${a.name}</a>`
+        ? `<img src="${escUrl(a.url)}" style="max-width:300px;max-height:200px;border-radius:4px;margin-top:4px;display:block" />`
+        : `<a href="${escUrl(a.url)}" style="color:#7289da">${esc(a.name)}</a>`
     ).join('');
     const embeds = m.embeds.length > 0
       ? `<div style="border-left:3px solid #7289da;padding:4px 8px;margin-top:4px;color:#aaa;font-size:12px">[${m.embeds.length} embed(s)]</div>`
       : '';
 
     return `<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid #2a2a2a">
- <img src="${avatar}" style="width:36px;height:36px;border-radius:50%;flex-shrink:0" onerror="this.style.display='none'" />
+ <img src="${escUrl(avatar)}" style="width:36px;height:36px;border-radius:50%;flex-shrink:0" onerror="this.style.display='none'" />
  <div style="flex:1;min-width:0">
  <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
- <span style="font-weight:700;color:#fff">${authorName}</span>
- <span style="font-size:11px;color:#666">${time} UTC</span>
+ <span style="font-weight:700;color:#fff">${esc(authorName)}</span>
+ <span style="font-size:11px;color:#666">${esc(time)} UTC</span>
  ${m.author.bot ? '<span style="font-size:10px;background:#5865f2;color:#fff;padding:1px 5px;border-radius:3px">BOT</span>' : ''}
  </div>
  <div style="color:#dcddde;margin-top:2px;word-break:break-word">${content}</div>
@@ -66,7 +87,7 @@ export function generateTranscriptHTML(messages, channel, guild, ticketMeta) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ticket Transcript — #${channel.name}</title>
+<title>Ticket Transcript — #${esc(channel.name)}</title>
 <style>
  * { box-sizing:border-box; margin:0; padding:0; }
  body { background:#1a1a1a; color:#dcddde; font-family:'Segoe UI',sans-serif; font-size:14px; padding:20px; }
@@ -88,7 +109,7 @@ export function generateTranscriptHTML(messages, channel, guild, ticketMeta) {
  ${['Panel','Ticket #','Opened By','Claimed By','Server','Closed By','Status'].map(field => {
    const key = field.toLowerCase().replace(/ /g,'_');
    const val = ticketMeta[key] || ticketMeta[field.toLowerCase()] || '—';
-   return `<div class="meta-item"><div class="label">${field}</div><div class="value">${val}</div></div>`;
+   return `<div class="meta-item"><div class="label">${esc(field)}</div><div class="value">${esc(val)}</div></div>`;
  }).join('')}
  </div>
 </div>

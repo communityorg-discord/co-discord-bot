@@ -1,4 +1,4 @@
-// COMMAND_PERMISSION_FALLBACK: auth_5
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5
 // Surface recent Discord audit-log entries via the bot. Staff without
 // admin perms can't see Server Settings → Audit Log directly; this lets
 // them ask "who kicked who" / "what role changes happened today" without

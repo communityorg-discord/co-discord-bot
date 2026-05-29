@@ -176,7 +176,7 @@ async function removeRolesIndividually(member, roles, reasonTag) {
 // restore exactly what was taken away (including ad-hoc committee /
 // project roles that aren't in the POSITIONS map).
 export async function suspendAcrossGuilds(client, discordId) {
-  const { storeRoles } = await import('./botDb.js');
+  const { storeRoles, getStoredRoles } = await import('./botDb.js');
 
   for (const [guildId, guild] of client.guilds.cache) {
     try {
@@ -187,10 +187,17 @@ export async function suspendAcrossGuilds(client, discordId) {
       // and managed (bot-owned / integration) roles.
       const currentRoles = member.roles.cache.filter(r => r.id !== guild.id && !r.managed);
       const snapshotIds = currentRoles.map(r => r.id);
-      try {
-        storeRoles(discordId, guildId, snapshotIds, member.nickname, 'suspension');
-      } catch (e) {
-        console.warn('[Suspend] Snapshot error in', guild.name, e.message);
+      // Only capture the snapshot if one isn't already stored. A second
+      // /suspend on an already-suspended member would otherwise overwrite the
+      // real role set (the member now only holds Suspended), so unsuspend would
+      // restore nothing.
+      const existingSnapshot = getStoredRoles(discordId, guildId, 'suspension');
+      if (!existingSnapshot) {
+        try {
+          storeRoles(discordId, guildId, snapshotIds, member.nickname, 'suspension');
+        } catch (e) {
+          console.warn('[Suspend] Snapshot error in', guild.name, e.message);
+        }
       }
 
       // Remove one-at-a-time so one permission-denied role doesn't block

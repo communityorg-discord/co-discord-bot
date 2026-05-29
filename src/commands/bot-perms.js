@@ -1,4 +1,4 @@
-// COMMAND_PERMISSION_FALLBACK: auth_5
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5
 // Diagnose missing bot permissions per-channel in the current guild.
 // When staff report "the bot didn't post in #X", run this — it lists
 // every channel where the bot is missing a critical perm (View, Send,

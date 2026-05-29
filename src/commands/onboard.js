@@ -143,7 +143,7 @@ export async function handleModal(interaction) {
     roleCount = results.filter(r => r.success).length;
 
     // Save to verified_members
-    db.prepare(`INSERT OR REPLACE INTO verified_members (discord_id, portal_id, position, auth_level, verified_at)
+    db.prepare(`INSERT OR REPLACE INTO verified_members (discord_id, portal_user_id, position, auth_level, verified_at)
       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`)
       .run(targetDiscordId, portalUser?.id || null, matchedPosition, portalUser?.auth_level || 1);
 

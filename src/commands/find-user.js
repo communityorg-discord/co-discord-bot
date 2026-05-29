@@ -1,4 +1,4 @@
-// COMMAND_PERMISSION_FALLBACK: auth_5
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 5
 // Cross-guild fuzzy user search — find a Discord user by partial username,
 // display name, or nickname across every CO guild the bot is in. Returns
 // a unique-by-discord-id list with which guilds they're in and (if available)
