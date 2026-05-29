@@ -152,6 +152,11 @@ export async function canUseCommand(commandName, interaction) {
   if (!discordId) return { allowed: false, reason: 'No user context.' };
   if (isSuperuser(discordId)) return { allowed: true, reason: 'Superuser bypass' };
 
+  // Guild context for guild-scoped grants. A grant created with a specific
+  // guild_id only applies in that guild; legacy/global grants (guild_id = '')
+  // apply everywhere. DM/no-guild contexts only match global rows.
+  const guildId = interaction?.guildId ? String(interaction.guildId) : null;
+
   const candidates = [commandName];
   if (commandName.includes(':')) candidates.push(commandName.split(':')[0]);
 
@@ -165,12 +170,12 @@ export async function canUseCommand(commandName, interaction) {
   // AND no fallback) is skipped, falling through to the base.
   const denied = { allowed: false, reason: `You don't have permission to use /${commandName.replace(':', ' ')}.` };
   for (const key of candidates) {
-    const hasRows = commandHasAnyRows(key);
+    const hasRows = commandHasAnyRows(key, guildId);
     const hasFallback = FALLBACK_MAP.has(key);
-    if (!hasRows && !hasFallback) continue;   // no rule for this key — try the base
+    if (!hasRows && !hasFallback) continue;   // no rule for this key (in this guild) — try the base / fallback
     if (hasRows) {
       const roleIds = memberRoleIds(interaction);
-      const ok = commandPermitsUser(key, discordId, roleIds);
+      const ok = commandPermitsUser(key, discordId, roleIds, guildId);
       return ok ? { allowed: true, reason: `Granted via Bot Permissions (${key})` } : denied;
     }
     // No rows of its own — honour THIS key's fallback and stop (don't inherit base).

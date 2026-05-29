@@ -1733,17 +1733,33 @@ export function setCommandPermissions(commandName, { user_ids = [], role_ids = [
   tx();
 }
 
-export function commandHasAnyRows(commandName) {
-  const r = db.prepare('SELECT 1 FROM command_permissions WHERE command_name = ? LIMIT 1').get(commandName);
+// Guild-scope semantics for command_permissions rows:
+//   guild_id = '' (the default the portal writes today) → GLOBAL grant,
+//              applies in every guild (back-compat with all existing rows).
+//   guild_id = '<id>'                                    → grant applies
+//              ONLY when the command is run in that guild.
+// So a grant made in one guild no longer silently authorises the command
+// everywhere unless it was explicitly created as a global ('') row.
+// Pass guildId from the interaction; a missing guildId (DM context) only
+// ever matches global rows.
+export function commandHasAnyRows(commandName, guildId = null) {
+  const r = db.prepare(
+    "SELECT 1 FROM command_permissions WHERE command_name = ? AND (guild_id = '' OR guild_id = ?) LIMIT 1"
+  ).get(commandName, guildId == null ? '' : String(guildId));
   return !!r;
 }
 
-export function commandPermitsUser(commandName, discordId, roleIds = []) {
-  const userHit = db.prepare("SELECT 1 FROM command_permissions WHERE command_name = ? AND kind = 'user' AND id = ? LIMIT 1").get(commandName, String(discordId));
+export function commandPermitsUser(commandName, discordId, roleIds = [], guildId = null) {
+  const gid = guildId == null ? '' : String(guildId);
+  const userHit = db.prepare(
+    "SELECT 1 FROM command_permissions WHERE command_name = ? AND kind = 'user' AND id = ? AND (guild_id = '' OR guild_id = ?) LIMIT 1"
+  ).get(commandName, String(discordId), gid);
   if (userHit) return true;
   if (!roleIds.length) return false;
   const placeholders = roleIds.map(() => '?').join(',');
-  const roleHit = db.prepare(`SELECT 1 FROM command_permissions WHERE command_name = ? AND kind = 'role' AND id IN (${placeholders}) LIMIT 1`).get(commandName, ...roleIds.map(String));
+  const roleHit = db.prepare(
+    `SELECT 1 FROM command_permissions WHERE command_name = ? AND kind = 'role' AND id IN (${placeholders}) AND (guild_id = '' OR guild_id = ?) LIMIT 1`
+  ).get(commandName, ...roleIds.map(String), gid);
   return !!roleHit;
 }
 

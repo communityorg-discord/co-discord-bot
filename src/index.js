@@ -270,12 +270,24 @@ client.once('clientReady', async () => {
   // guild set when env vars aren't configured.
   const { getEffectiveAllServerIds } = await import('./config.js');
 
+  // setTimeout uses a signed 32-bit delay; values above ~2^31-1 ms
+  // (~24.8 days) silently overflow and fire (almost) immediately. For a
+  // suspension that long, arming a timer here would auto-lift it on boot.
+  // Only arm an in-process timer when the remaining time is in range; the
+  // 60s expiry sweep below lifts anything beyond that window (and re-arms
+  // a short timer on a later boot once the remaining time fits).
+  const MAX_TIMEOUT_MS = 2_147_483_647; // 2^31 - 1
+
   // Suspensions
   const activeSuspensions = db.prepare("SELECT * FROM suspensions WHERE expires_at IS NOT NULL AND active = 1").all();
   for (const sus of activeSuspensions) {
     const expiresAt = new Date(sus.expires_at).getTime();
     if (expiresAt > Date.now()) {
       const remaining = expiresAt - Date.now();
+      if (remaining > MAX_TIMEOUT_MS) {
+        console.log('[C-05] Suspension lift for', sus.discord_id, 'is', Math.round(remaining / 86400000), 'days out — left to the 60s expiry sweep');
+        continue;
+      }
       console.log('[C-05] Scheduling suspension lift for', sus.discord_id, 'in', Math.round(remaining / 1000 / 60), 'mins');
       setTimeout(async () => {
         try {
@@ -3171,22 +3183,13 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
       const left = oldState.channelId && !newState.channelId;
       const moved = oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId;
 
-      if (joined || moved) {
-        voiceJoin(userId, getBragWeekKey());
-        dailyActiveUsers.add(userId);
-        // Record voice session start
-        voiceSessions.set(userId, {
-          channel_id: newState.channelId,
-          channel_name: newState.channel?.name || '',
-          joined_at: Date.now(),
-        });
-        // Meeting channel tracking
-        const MEETING_CHANNELS = ['Office Room 1', 'Office Room 2', 'Theatre', 'Conference Room 1'];
-        const chName = newState.channel?.name || '';
-        if (MEETING_CHANNELS.some(mc => chName.includes(mc))) {
-          meetingAttendance.set(userId, { channel_name: chName, joined_at: Date.now() });
-        }
-      }
+      // IMPORTANT: handle the LEAVE side (flush the prior session) BEFORE the
+      // JOIN side. On a channel MOVE both fire — if the join ran first it would
+      // overwrite voiceSessions[userId] with a fresh joined_at, so the leave
+      // side would then read ~0ms and the pre-move voice time would be silently
+      // dropped from the portal voice-log. Flushing first preserves the
+      // accumulated session across the move. (The DB-side voiceLeave/voiceJoin
+      // accumulate total_seconds correctly regardless of order.)
       if (left || moved) {
         voiceLeave(userId, getBragWeekKey());
         // Log voice session to portal
@@ -3207,7 +3210,9 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
           }
           voiceSessions.delete(userId);
         }
-        // Meeting attendance — check if qualified (10+ min)
+        // Meeting attendance — check if qualified (10+ min). On a move, close
+        // the prior meeting session here; the join side below re-opens one if
+        // the destination is also a meeting channel.
         const meeting = meetingAttendance.get(userId);
         if (meeting) {
           const meetDuration = Math.round((Date.now() - meeting.joined_at) / 60000);
@@ -3219,6 +3224,22 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
             }).catch(e => console.error('[Meeting] Sync failed:', e.message));
           }
           meetingAttendance.delete(userId);
+        }
+      }
+      if (joined || moved) {
+        voiceJoin(userId, getBragWeekKey());
+        dailyActiveUsers.add(userId);
+        // Record voice session start
+        voiceSessions.set(userId, {
+          channel_id: newState.channelId,
+          channel_name: newState.channel?.name || '',
+          joined_at: Date.now(),
+        });
+        // Meeting channel tracking
+        const MEETING_CHANNELS = ['Office Room 1', 'Office Room 2', 'Theatre', 'Conference Room 1'];
+        const chName = newState.channel?.name || '';
+        if (MEETING_CHANNELS.some(mc => chName.includes(mc))) {
+          meetingAttendance.set(userId, { channel_name: chName, joined_at: Date.now() });
         }
       }
     }

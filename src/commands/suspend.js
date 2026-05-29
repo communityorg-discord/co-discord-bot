@@ -99,8 +99,17 @@ export async function execute(interaction) {
     logType: 'moderation.suspend_unsuspend',
   });
 
-  // Auto-lift if timed
-  if (duration) {
+  // Auto-lift if timed.
+  //
+  // setTimeout uses a signed 32-bit delay; any value above ~2^31-1 ms
+  // (~24.8 days) silently overflows and fires (almost) immediately, which
+  // would auto-lift a long suspension the instant it's set. Only arm an
+  // in-process timer when the delay fits in range. For longer suspensions
+  // we rely entirely on the 60s expiry sweep in src/index.js (which lifts
+  // any active suspension whose expires_at has passed) — and the boot
+  // re-scheduler re-arms a short timer once the remaining time is in range.
+  const MAX_TIMEOUT_MS = 2_147_483_647; // 2^31 - 1
+  if (duration && duration <= MAX_TIMEOUT_MS) {
     setTimeout(async () => {
       const { unsuspendAcrossGuilds } = await import('../utils/roleManager.js');
       const { liftSuspension, default: botDb } = await import('../utils/botDb.js');
@@ -131,6 +140,7 @@ export async function execute(interaction) {
       });
     }, duration);
   }
+  // duration > MAX_TIMEOUT_MS → no timer; the 60s expiry sweep handles the lift.
 
   // Reply embed
   await interaction.editReply({

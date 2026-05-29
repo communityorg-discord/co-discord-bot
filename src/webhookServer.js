@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import multer from 'multer';
 import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, EmbedBuilder, Partials } from 'discord.js';
 import { config } from 'dotenv';
-import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID } from './config.js';
+import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID, networkForGuild } from './config.js';
 import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent, logAtlasBotAction } from './utils/botDb.js';
 import { sendToWatchedUsers, logEvent } from './utils/logger.js';
 import { getUserByDiscordId } from './db.js';
@@ -162,6 +162,22 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
   // as every other inbound webhook. NOT an Atlas action — intentionally not
   // written to atlas_bot_actions; this is plain log fan-out.
   // Body: { channel_id, embed }  (embed = discord.js EmbedBuilder JSON / APIEmbed)
+  //
+  // Allowlist: this relay must only ever post to log channels in a guild that
+  // belongs to a known CO/USGRP network — otherwise anyone holding the shared
+  // bot secret could turn it into an arbitrary-channel post / DM primitive.
+  //   - If USGRP_LOG_RELAY_CHANNEL_IDS is set (comma-separated channel IDs),
+  //     only those exact channels are permitted (tightest control).
+  //   - Otherwise the target channel must (a) be a guild text channel and
+  //     (b) belong to a guild that is either registered in the network
+  //     registry (networkForGuild) OR listed in USGRP_LOG_RELAY_GUILD_IDS
+  //     (defaults to the two documented relay-target guilds: CO | Private
+  //     Server + USGRP | Network & DevOps Server — see aspire-bot's
+  //     scripts/setup-usgrp-log-channels.mjs). DM "channels" have no guildId
+  //     and are always rejected.
+  const USGRP_LOG_RELAY_GUILD_IDS = (process.env.USGRP_LOG_RELAY_GUILD_IDS
+    || '1485423682980675729,1472830470562775195')
+    .split(',').map(s => s.trim()).filter(Boolean);
   webhookApp.post('/usgrp-log', async (req, res) => {
     if (!verifyBotSecret(req, res)) return;
     const { channel_id, embed } = req.body || {};
@@ -170,6 +186,22 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
     }
     const ch = await client.channels.fetch(String(channel_id)).catch(() => null);
     if (!ch || !ch.isTextBased?.()) return res.status(404).json({ error: 'channel not found' });
+
+    const explicitAllowlist = (process.env.USGRP_LOG_RELAY_CHANNEL_IDS || '')
+      .split(',').map(s => s.trim()).filter(Boolean);
+    if (explicitAllowlist.length > 0) {
+      if (!explicitAllowlist.includes(String(channel_id))) {
+        return res.status(403).json({ error: 'channel not in usgrp-log relay allowlist' });
+      }
+    } else {
+      // No explicit channel list — restrict to channels in an allowed guild.
+      const guildId = ch.guildId || ch.guild?.id || null;
+      const allowed = !!guildId && (!!networkForGuild(guildId) || USGRP_LOG_RELAY_GUILD_IDS.includes(String(guildId)));
+      if (!allowed) {
+        return res.status(403).json({ error: 'channel is not in an allowed relay guild' });
+      }
+    }
+
     try {
       const sent = await ch.send({ embeds: [embed] });
       return res.json({ ok: true, message_id: sent.id });
