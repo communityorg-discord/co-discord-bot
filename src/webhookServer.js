@@ -2,6 +2,7 @@
 // file manageable. Every endpoint the staff portal + Atlas call lives here.
 // index.js builds the client + commands and calls startWebhookServer().
 import express from 'express';
+import crypto from 'crypto';
 import multer from 'multer';
 import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, EmbedBuilder, Partials } from 'discord.js';
 import { config } from 'dotenv';
@@ -128,7 +129,17 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
   
   function verifyBotSecret(req, res) {
     const secret = req.headers['x-bot-secret'];
-    if (!secret || !process.env.BOT_WEBHOOK_SECRET || secret !== process.env.BOT_WEBHOOK_SECRET) {
+    const expected = process.env.BOT_WEBHOOK_SECRET || '';
+    // Constant-time compare so the shared secret can't be recovered byte-by-byte
+    // from response timing. (The server also binds to 127.0.0.1, so this
+    // endpoint isn't reachable off-box in the first place.)
+    let ok = false;
+    if (secret && expected) {
+      const a = Buffer.from(String(secret));
+      const b = Buffer.from(expected);
+      ok = a.length === b.length && crypto.timingSafeEqual(a, b);
+    }
+    if (!ok) {
       res.status(401).json({ error: 'Unauthorised' });
       return false;
     }
@@ -3092,5 +3103,9 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
   // Self-destruct watcher needs the express app for the /api/bot/panic route
   setupSelfDestruct(client, webhookApp);
   
-  webhookApp.listen(3017, () => console.log('[CO Bot] Webhook server listening on port 3017'));
+  // Bind to loopback ONLY. Every legitimate caller (staff portal, Atlas,
+  // aspire-bot) is co-located on this host and reaches us via localhost:3017.
+  // Binding 0.0.0.0 exposed all webhook actions — post-to-any-channel,
+  // DM-anyone — to anyone who could reach the box's IP with the shared secret.
+  webhookApp.listen(3017, '127.0.0.1', () => console.log('[CO Bot] Webhook server listening on 127.0.0.1:3017'));
 }

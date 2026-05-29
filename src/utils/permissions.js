@@ -155,24 +155,29 @@ export async function canUseCommand(commandName, interaction) {
   const candidates = [commandName];
   if (commandName.includes(':')) candidates.push(commandName.split(':')[0]);
 
+  // Resolve most-specific-first, evaluating BOTH the rows and the fallback for
+  // a candidate before moving to the less-specific base key. A subcommand's
+  // OWN rule (its rows, or — if it has none — its fallback) is authoritative:
+  // we must NEVER let a permissive base-key grant satisfy a stricter sub. E.g.
+  // a base `dm` grant must not authorise `dm:everyone` when the latter's own
+  // fallback is superuser_only; an `infractions` grant must not authorise
+  // `infractions:delete`. Only a candidate with NO rule of its own (no rows
+  // AND no fallback) is skipped, falling through to the base.
+  const denied = { allowed: false, reason: `You don't have permission to use /${commandName.replace(':', ' ')}.` };
   for (const key of candidates) {
-    if (commandHasAnyRows(key)) {
+    const hasRows = commandHasAnyRows(key);
+    const hasFallback = FALLBACK_MAP.has(key);
+    if (!hasRows && !hasFallback) continue;   // no rule for this key — try the base
+    if (hasRows) {
       const roleIds = memberRoleIds(interaction);
       const ok = commandPermitsUser(key, discordId, roleIds);
-      return ok
-        ? { allowed: true, reason: `Granted via Bot Permissions (${key})` }
-        : { allowed: false, reason: `You don't have permission to use /${commandName.replace(':', ' ')}.` };
+      return ok ? { allowed: true, reason: `Granted via Bot Permissions (${key})` } : denied;
     }
+    // No rows of its own — honour THIS key's fallback and stop (don't inherit base).
+    const ok = applyFallback(key, interaction, discordId);
+    return ok ? { allowed: true, reason: `Granted via fallback (${key})` } : denied;
   }
-  for (const key of candidates) {
-    if (FALLBACK_MAP.has(key)) {
-      const ok = applyFallback(key, interaction, discordId);
-      return ok
-        ? { allowed: true, reason: `Granted via fallback (${key})` }
-        : { allowed: false, reason: `You don't have permission to use /${commandName.replace(':', ' ')}.` };
-    }
-  }
-  return { allowed: false, reason: `You don't have permission to use /${commandName.replace(':', ' ')}.` };
+  return denied;
 }
 
 // Legacy shim — old call sites used canRunCommand(discordId, level, guild).
