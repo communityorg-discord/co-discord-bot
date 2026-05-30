@@ -355,8 +355,24 @@ client.once('clientReady', async () => {
       if (expiredSuspensions.length > 0 || expiredBans.length > 0) {
         console.log('[C-05 safety net] Processed', expiredSuspensions.length, 'suspensions and', expiredBans.length, 'bans');
       }
+      // Also sweep temp_bans (serverban.js) — catches any whose remaining time
+      // exceeded MAX_TIMEOUT_MS at boot (armTempBanTimer skips those) and also
+      // re-arms timers for bans that have now come within the safe setTimeout
+      // window. Past-due rows are fired immediately by armTempBanTimer.
+      const { getPendingTempBans: getPending } = await import('./utils/botDb.js');
+      const pendingTempBans = getPending();
+      if (pendingTempBans.length > 0) {
+        const { armTempBanTimer: reArm } = await import('./commands/serverban.js');
+        for (const row of pendingTempBans) {
+          reArm(client, row);
+        }
+      }
     } catch (e) { console.error('[C-05 safety net error]', e.message); }
   }, 60000);
+
+  // Startup sweep for serverban temp_bans — re-arms in-process timers for all
+  // pending temp bans and immediately fires any whose unban_at is already past.
+  await serverban.init(client);
 
   await setupEmailNotificationChannels(client);
 

@@ -201,10 +201,11 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
 /**
  * Arms a single in-process timer for a persisted temp ban row.
  * Called both at command-issue time and from the startup sweep (init).
- * The 60-second safety-net sweep in index.js catches anything that slips
- * through (e.g. the remaining time exceeds MAX_TIMEOUT_MS on boot).
+ * Also called from the 60-second safety-net sweep in index.js so that
+ * bans which exceeded MAX_TIMEOUT_MS at boot get re-armed once they fall
+ * within the safe setTimeout window, and past-due rows fire immediately.
  */
-function armTempBanTimer(client, row) {
+export function armTempBanTimer(client, row) {
   const unbanAtMs = new Date(row.unban_at).getTime();
   const remaining = unbanAtMs - Date.now();
 
