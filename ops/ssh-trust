@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Break-glass pass-through for Dion + Evan's known IPs. Deliberately trivial so a
+# bug in the gate/verifier can never lock them out from their current networks.
+SHL="${SHELL:-/bin/bash}"
+if [ -n "${SSH_ORIGINAL_COMMAND:-}" ]; then exec "$SHL" -c "$SSH_ORIGINAL_COMMAND"; else exec "$SHL" -l; fi

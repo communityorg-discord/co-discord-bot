@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# SSH ForceCommand gate (runs as the logging-in user). Known key + known IP pass
+# straight through; an unrecognised key OR a brand-new IP must enter a one-time
+# code (emailed + DM'd, generated/checked root-side) within 45s or the session ends.
+set -u
+SHL="${SHELL:-/bin/bash}"
+IP=$(printf '%s' "${SSH_CONNECTION:-}" | awk '{print $1}'); [ -z "$IP" ] && IP="unknown"
+if [ -t 0 ] && [ -z "${SSH_ORIGINAL_COMMAND:-}" ]; then INTER=1; else INTER=0; fi
+
+run_shell(){
+  if [ -n "${SSH_ORIGINAL_COMMAND:-}" ]; then exec "$SHL" -c "$SSH_ORIGINAL_COMMAND"; else exec "$SHL" -l; fi
+}
+
+DEC=$(sudo -n /usr/local/sbin/ssh-verify gate "$IP" "$INTER" 2>/dev/null)
+case "$DEC" in
+  PASS) run_shell ;;
+  CHALLENGE\ *)
+    TOKEN="${DEC#CHALLENGE }"
+    trap 'echo; echo "Cancelled — access denied."; exit 1' INT TERM
+    echo
+    echo "================ Server access check ================"
+    echo " New-device login from $IP."
+    echo " A 6-digit code was just emailed + DM'd to Dion & Evan."
+    echo " Enter it within 45 seconds to allow this session."
+    echo "====================================================="
+    for try in 1 2 3; do
+      if ! read -r -t 45 -p "Code: " CODE; then echo; echo "⛔ No code entered — access denied."; exit 1; fi
+      R=$(sudo -n /usr/local/sbin/ssh-verify check "$TOKEN" "$CODE" 2>/dev/null)
+      case "$R" in
+        PASS) echo "✅ Verified — welcome."; run_shell ;;
+        FAIL) echo "❌ Wrong code, try again." ;;
+        EXPIRED) echo "⛔ Code expired — access denied."; exit 1 ;;
+        *) echo "⛔ Access denied."; exit 1 ;;
+      esac
+    done
+    echo "⛔ Too many attempts — access denied."; exit 1
+    ;;
+  *) echo "⛔ Access denied (could not verify this login)."; exit 1 ;;
+esac

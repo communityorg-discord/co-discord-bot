@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Root-only SSH login verifier. Invoked by /usr/local/sbin/ssh-gate (running as
+# the logging-in user) via sudo. The one-time code is generated, sent, and
+# checked entirely root-side, so the same-uid session can never read or forge it.
+# Also accepts a WEEKLY BACKUP CODE (emailed to personal addresses) as a fallback.
+set -u
+STATE=/run/ssh-gate; mkdir -p "$STATE"; chmod 700 "$STATE"
+KNOWN_FPRS="SHA256:SdVztrB1y0lLj2QqSM/Og7YchvSbcKPwImGVBqeNqPE SHA256:xzsRhpDSUvlNx9rKo1Wn4P2F6KYi/BNH/wSW3KkTOoU"
+KNOWN_IPS_FILE=/etc/ssh-gate/known-ips
+BACKUP_FILE=/etc/ssh-gate/backup-code
+WINDOW=45; MAXTRIES=3
+LOGINUSER="${SUDO_USER:-vpcommunityorganisation}"
+DISCORD_IDS="723199054514749450 415922272956710912"
+EMAILS_CSV="dionm@communityorg.co.uk, evans@communityorg.co.uk"; EMAILS="dionm@communityorg.co.uk evans@communityorg.co.uk"
+PERSONAL_CSV="dmckew14@outlook.com, strongevan73@gmail.com"; PERSONAL="dmckew14@outlook.com strongevan73@gmail.com"
+SECRETS=/home/vpcommunityorganisation/.config/co/secrets.env
+COBOT_ENV=/home/vpcommunityorganisation/clawd/services/co-discord-bot/.env
+B32="0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+U=""; P=""
+
+unquote(){ local v="$1"; v="${v%\"}"; v="${v#\"}"; v="${v%\'}"; v="${v#\'}"; printf '%s' "$v"; }
+get_creds(){ U=$(unquote "$(grep -E '^BREVO_SMTP_USERNAME=' "$SECRETS" 2>/dev/null|head -1|cut -d= -f2-)"); P=$(unquote "$(grep -E '^BREVO_SMTP_PASSWORD=' "$SECRETS" 2>/dev/null|head -1|cut -d= -f2-)"); }
+fpr_for_ip(){ grep -a "Accepted publickey for ${LOGINUSER} from ${1} " /var/log/auth.log 2>/dev/null | tail -1 | grep -oE 'SHA256:[A-Za-z0-9+/]+' | tail -1; }
+ip_known(){ [ -f "$KNOWN_IPS_FILE" ] && grep -qxF "$1" "$KNOWN_IPS_FILE"; }
+fpr_known(){ case " $KNOWN_FPRS " in *" $1 "*) return 0;; esac; return 1; }
+norm(){ printf '%s' "$1" | tr -d ' -' | tr 'a-z' 'A-Z'; }
+remember_ip(){ mkdir -p "$(dirname "$KNOWN_IPS_FILE")"; grep -qxF "$1" "$KNOWN_IPS_FILE" 2>/dev/null || echo "$1" >> "$KNOWN_IPS_FILE"; }
+
+dm_all(){ local csec; csec=$(unquote "$(grep -E '^BOT_WEBHOOK_SECRET=' "$COBOT_ENV" 2>/dev/null|head -1|cut -d= -f2-)"); [ -z "$csec" ] && return 0
+  local d; for d in $DISCORD_IDS; do curl -sS --max-time 4 -X POST http://127.0.0.1:3017/api/send-dm -H 'Content-Type: application/json' -H "x-bot-secret: $csec" --data-binary "$(python3 -c 'import json,sys;print(json.dumps({"discord_id":sys.argv[1],"message":sys.argv[2]}))' "$d" "$1")" >/dev/null 2>&1; done; }
+mailto(){ get_creds; [ -z "$U" ] && return 0; local eml; eml=$(mktemp)
+  { printf 'From: USGRP Server <noreply@communityorg.co.uk>\nTo: %s\nSubject: %s\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\n\n' "$1" "$3"; printf '%b\n' "$4"; } > "$eml"
+  local r="" e; for e in $2; do r="$r --mail-rcpt $e"; done
+  curl -sS --max-time 7 --ssl-reqd --url smtp://smtp-relay.brevo.com:587 --user "$U:$P" --mail-from noreply@communityorg.co.uk $r --upload-file "$eml" >/dev/null 2>&1; rm -f "$eml"; }
+
+send_code(){ python3 /usr/local/sbin/ssh-notify.py code "$1" "$3" "$2" >/dev/null 2>&1; }
+alert_backup(){ python3 /usr/local/sbin/ssh-notify.py alert "$1" >/dev/null 2>&1; }
+gen8(){ local out="" n; for n in $(od -An -tu1 -N8 /dev/urandom); do out="$out${B32:$((n % 32)):1}"; done; printf '%s' "$out"; }
+do_gen_backup(){ local raw fmt week; raw=$(gen8); fmt="${raw:0:4}-${raw:4:4}"; week=$(date +%G-W%V)
+  mkdir -p "$(dirname "$BACKUP_FILE")"; printf 'CODE=%s\nWEEK=%s\nCREATED=%s\n' "$fmt" "$week" "$(date +%s)" > "$BACKUP_FILE"; chmod 600 "$BACKUP_FILE"
+  python3 /usr/local/sbin/ssh-notify.py backup "$fmt" "$week" >/dev/null 2>&1; printf '%s %s' "$fmt" "$week"; }
+
+case "${1:-}" in
+  gate)
+    ip="${2:-unknown}"; inter="${3:-0}"; fpr=$(fpr_for_ip "$ip")
+    if fpr_known "$fpr" && ip_known "$ip"; then echo PASS; exit 0; fi
+    if [ "$inter" != "1" ]; then echo DENY; exit 0; fi
+    token=$(head -c12 /dev/urandom | od -An -tx1 | tr -d ' \n')
+    code=$(printf '%06d' $(( $(od -An -tu4 -N4 /dev/urandom) % 1000000 )))
+    who="unrecognised key"; fpr_known "$fpr" && who="known key, new IP"
+    printf 'CODE=%s\nIP=%s\nCREATED=%s\nATTEMPTS=0\n' "$code" "$ip" "$(date +%s)" > "$STATE/$token"; chmod 600 "$STATE/$token"
+    send_code "$code" "$ip" "$who"; echo "CHALLENGE $token" ;;
+  check)
+    token="${2:-}"; entered="${3:-}"; f="$STATE/$token"
+    [ -f "$f" ] || { echo DENY; exit 0; }
+    . "$f"; now=$(date +%s)
+    if [ $((now - CREATED)) -gt $WINDOW ]; then rm -f "$f"; echo EXPIRED; exit 0; fi
+    if [ "$entered" = "$CODE" ]; then rm -f "$f"; remember_ip "$IP"; echo PASS; exit 0; fi
+    if [ -f "$BACKUP_FILE" ]; then bcode=$(grep '^CODE=' "$BACKUP_FILE"|cut -d= -f2)
+      if [ -n "$bcode" ] && [ "$(norm "$entered")" = "$(norm "$bcode")" ]; then rm -f "$f"; remember_ip "$IP"; alert_backup "$IP"; do_gen_backup >/dev/null 2>&1; echo PASS; exit 0; fi; fi
+    ATTEMPTS=$((ATTEMPTS+1))
+    if [ "$ATTEMPTS" -ge "$MAXTRIES" ]; then rm -f "$f"; echo DENY; exit 0; fi
+    sed -i "s/^ATTEMPTS=.*/ATTEMPTS=$ATTEMPTS/" "$f"; echo FAIL ;;
+  gen-backup)
+    echo "OK $(do_gen_backup)" ;;
+  *) echo DENY ;;
+esac
