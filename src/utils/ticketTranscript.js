@@ -145,6 +145,8 @@ export async function closeTicketWithTranscript(ticket, ticketChannel, panel, cl
         const html = generateTranscriptHTML(sortedMessages, ticketChannel, guild, ticketMeta);
         transcriptUrl = `https://portal.communityorg.co.uk/transcripts/${transcriptId}`;
 
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), 10000);
         await fetch('http://localhost:3016/api/transcripts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET },
@@ -154,8 +156,9 @@ export async function closeTicketWithTranscript(ticket, ticketChannel, panel, cl
             title: `Ticket — ${panel.name} — ${ticketChannel.name} — ${new Date().toLocaleDateString('en-GB')}`,
             html,
             metadata: { ...ticketMeta, channelId: ticketChannel.id, guildId: guild.id }
-          })
-        }).catch(e => console.error('[ticket close] transcript save error:', e.message));
+          }),
+          signal: ac.signal,
+        }).finally(() => clearTimeout(timer)).catch(e => console.error('[ticket close] transcript save error:', e.message));
 
         // Send to transcripts channel
         const transcriptChannel = guild.channels.cache.get(panel.transcripts_channel_id) || await guild.channels.fetch(panel.transcripts_channel_id).catch(() => null);
