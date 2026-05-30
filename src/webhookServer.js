@@ -1974,7 +1974,7 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
       }
       const expiresAt = durationMs ? new Date(Date.now() + durationMs).toISOString() : null;
       const durationDisplay = formatDuration(durationMs);
-      const expiresDisplay = expiresAt ? new Date(expiresAt).toUTCString() : 'Never';
+      const expiresDisplay = expiresAt ? `<t:${Math.floor(new Date(expiresAt).getTime() / 1000)}:F>` : 'Never';
   
       const inf = addInfraction(discordId, 'suspension', reason, moderatorId || 'PORTAL', moderatorName || 'Portal');
       addSuspension(discordId, reason, moderatorId || 'PORTAL', expiresAt, inf.lastInsertRowid);

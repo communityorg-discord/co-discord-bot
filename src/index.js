@@ -977,6 +977,7 @@ client.once('clientReady', async () => {
   async function processWeeklyAwards() {
     try {
       const prevWeekKey = getBragWeekKey(Date.now() - 7 * 86400000);
+      const prevWeekLabel = new Date(prevWeekKey).toLocaleDateString('en-US', { dateStyle: 'long' });
       const res = await fetch(`http://localhost:3016/api/activity/awards/calculate?weekKey=${prevWeekKey}`, {
         headers: { 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET }
       });
@@ -1030,8 +1031,8 @@ client.once('clientReady', async () => {
         const ch = await client.channels.fetch(AWARDS_CHANNEL);
         await ch.send({ embeds: [new EmbedBuilder()
           .setColor(0xC9A84C)
-          .setTitle(`CO Weekly Awards — Week of ${prevWeekKey}`)
-          .setDescription(`${E.kudos} **CO Weekly Awards — Week of ${prevWeekKey}**`)
+          .setTitle(`CO Weekly Awards — week of ${prevWeekLabel}`)
+          .setDescription(`${E.kudos} **CO Weekly Awards — week of ${prevWeekLabel}**`)
           .addFields(fields.slice(0, 25))
           .setFooter({ text: 'Points added to monthly shop balances. Shop opens on the 30th.' })
           .setTimestamp()
@@ -1087,6 +1088,7 @@ client.once('clientReady', async () => {
   async function sendGradeDMs() {
     try {
       const prevWeekKey = getBragWeekKey(Date.now() - 7 * 86400000);
+      const prevWeekLabel = new Date(prevWeekKey).toLocaleDateString('en-US', { dateStyle: 'long' });
       const res = await fetch(`http://localhost:3016/api/activity/grades/week-bot/${prevWeekKey}`, {
         headers: { 'x-bot-secret': process.env.BOT_WEBHOOK_SECRET }
       });
@@ -1126,7 +1128,7 @@ client.once('clientReady', async () => {
           }
 
           const embed = new EmbedBuilder()
-            .setTitle(`Your Weekly Grade — ${prevWeekKey}`)
+            .setTitle(`Your Weekly Grade — week of ${prevWeekLabel}`)
             .setDescription(`${emoji} ${GRADE_MESSAGES[grade] || ''}`)
             .setColor(GRADE_COLOURS[grade] || 0x2C2C2C)
             .addFields(fields)

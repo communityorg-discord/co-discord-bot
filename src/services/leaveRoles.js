@@ -7,6 +7,14 @@ import { E } from '../lib/emoji.js';
 
 const ON_LEAVE_ROLE_NAME = 'On Leave';
 
+// Format a date-only value (YYYY-MM-DD) as a friendly US string, e.g. "June 25, 2026".
+function fmtLeaveDate(d) {
+  if (!d) return 'Unknown';
+  const parsed = new Date(d);
+  if (isNaN(parsed.getTime())) return String(d);
+  return parsed.toLocaleDateString('en-US', { dateStyle: 'long' });
+}
+
 const MANAGER_POSITIONS = [
   'Director', 'Manager', 'Supervisor', 'Secretary-General', 'Deputy Secretary-General',
   'Chef de Cabinet', 'Director-General', 'Chief Operations Officer',
@@ -67,7 +75,7 @@ export async function applyLeaveRole(client, leave, portalDb) {
     color: 0xF59E0B,
     fields: [
       { name: 'Leave Type', value: leave.leave_type || 'Unknown', inline: true },
-      { name: 'Period', value: `${leave.start_date} to ${leave.end_date}`, inline: true },
+      { name: 'Period', value: `${fmtLeaveDate(leave.start_date)} to ${fmtLeaveDate(leave.end_date)}`, inline: true },
     ],
     logType: 'moderation.suspend_unsuspend'
   });
@@ -78,7 +86,7 @@ export async function applyLeaveRole(client, leave, portalDb) {
     await user.send({ embeds: [{
       title: 'Leave Started',
       color: 0xF59E0B,
-      description: `${E.break} Your **${leave.leave_type}** has started. Your Discord roles have been updated to **On Leave** across all servers.\n\nYour roles will be automatically restored when your leave ends on **${leave.end_date}**.`,
+      description: `${E.break} Your **${leave.leave_type}** has started. Your Discord roles have been updated to **On Leave** across all servers.\n\nYour roles will be automatically restored when your leave ends on **${fmtLeaveDate(leave.end_date)}**.`,
       footer: { text: 'Community Organisation | Leave Management' },
       timestamp: new Date().toISOString()
     }]});
@@ -418,9 +426,9 @@ export async function sendActingNominationRequests(client) {
         await leaveUser.send({ embeds: [{
           color: 0x5865F2,
           title: 'Acting Nomination Required',
-          description: `${E.logs} Your **${leave.leave_type}** begins tomorrow (**${leave.start_date}**).\n\nAs you hold a management position (**${leave.position}**), please nominate someone to act in your position while you are away.\n\nReply to this message with the **@mention** or **Discord user ID** of the person you wish to nominate.\n\nType **"none"** if no acting is required.`,
+          description: `${E.logs} Your **${leave.leave_type}** begins tomorrow (**${fmtLeaveDate(leave.start_date)}**).\n\nAs you hold a management position (**${leave.position}**), please nominate someone to act in your position while you are away.\n\nReply to this message with the **@mention** or **Discord user ID** of the person you wish to nominate.\n\nType **"none"** if no acting is required.`,
           fields: [
-            { name: 'Leave Period', value: `${leave.start_date} to ${leave.end_date}`, inline: true },
+            { name: 'Leave Period', value: `${fmtLeaveDate(leave.start_date)} to ${fmtLeaveDate(leave.end_date)}`, inline: true },
             { name: 'Your Position', value: leave.position, inline: true },
           ],
           footer: { text: 'You have 12 hours to respond. | Community Organisation' }
@@ -479,7 +487,7 @@ export async function sendActingNominationRequests(client) {
           await msg.reply({ embeds: [{
             color: 0x22C55E,
             title: 'Acting Nomination Confirmed',
-            description: `${E.check} <@${mentionedId}> (**${actingPortal.display_name}**) will act in your position (**${leave.position}**) from ${leave.start_date} to ${leave.end_date}.\n\nThey will receive your position roles at midnight tonight and will be notified.`,
+            description: `${E.check} <@${mentionedId}> (**${actingPortal.display_name}**) will act in your position (**${leave.position}**) from ${fmtLeaveDate(leave.start_date)} to ${fmtLeaveDate(leave.end_date)}.\n\nThey will receive your position roles at midnight tonight and will be notified.`,
           }]});
 
           // DM the acting person
@@ -490,7 +498,7 @@ export async function sendActingNominationRequests(client) {
               title: 'Acting Position Assigned',
               description: `${E.acting} You have been nominated to act in the position of **${leave.position}** while **${leave.display_name || leave.full_name}** is on leave.`,
               fields: [
-                { name: 'Period', value: `${leave.start_date} to ${leave.end_date}`, inline: true },
+                { name: 'Period', value: `${fmtLeaveDate(leave.start_date)} to ${fmtLeaveDate(leave.end_date)}`, inline: true },
                 { name: 'Acting Position', value: leave.position, inline: true },
               ],
               footer: { text: 'Your Discord roles will be updated at midnight tonight. | Community Organisation' }

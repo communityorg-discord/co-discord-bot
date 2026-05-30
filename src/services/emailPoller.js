@@ -71,9 +71,8 @@ function buildEmailNotifEmbed(inbox, email, replies = []) {
       { name: 'To', value: to.slice(0, 100) || inbox.imap.user, inline: true },
       { name: 'Date', value: date, inline: false },
       { name: 'Inbox', value: `${inbox.emoji} ${inbox.name}`, inline: true },
-      { name: 'UID', value: String(email.uid), inline: true },
     )
-    .setFooter({ text: `CO Inbox System | UID: ${email.uid} | View full email at mail.communityorg.co.uk` })
+    .setFooter({ text: `CO Inbox System | View full email at mail.communityorg.co.uk` })
     .setTimestamp();
 
   if (replies.length > 0) {
@@ -289,7 +288,7 @@ export async function pollPersonalInboxes(client) {
               ...(bodyPreview ? [{ name: 'Message', value: bodyPreview.slice(0, 1024), inline: false }] : []),
               { name: 'Status', value: 'No replies yet', inline: false },
             )
-            .setFooter({ text: `Personal Inbox | UID: ${email.uid} | View full email at mail.communityorg.co.uk` })
+            .setFooter({ text: `Personal Inbox | View full email at mail.communityorg.co.uk` })
             .setTimestamp();
 
           const buttons = new ActionRowBuilder().addComponents(
@@ -315,9 +314,9 @@ export async function pollPersonalInboxes(client) {
         if (e.message?.toLowerCase().includes('auth') || e.message?.toLowerCase().includes('login') || e.message?.toLowerCase().includes('password')) {
           try {
             const user = await client.users.fetch(setup.discord_id).catch(() => null);
-            if (user) await user.send(`${E.warning} **Email monitoring error** — Could not connect to \`${setup.co_email}\`: \`${e.message}\`
+            if (user) await user.send(`${E.warning} **Email monitoring error** — We couldn't sign in to your email mailbox — your saved password may be out of date.
 
-Please run \`/setup-email configure\` to update your password.`).catch(() => {});
+Please run \`/setup-email configure\` to update it.`).catch(() => {});
           } catch { /* ignore */ }
         }
       }
