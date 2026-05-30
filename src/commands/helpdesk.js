@@ -93,6 +93,13 @@ export async function execute(interaction) {
     if (!t) {
       return interaction.reply({ ephemeral: true, content: `${E.cross} No Help Desk ticket with ref \`${ref}\`.` });
     }
+    // Gate: caller must be the submitter, the assignee, or auth ≥ 5 staff.
+    const isOwner = Number(t.user_id) === Number(portalUser.id);
+    const isAssignee = t.assigned_to && Number(t.assigned_to) === Number(portalUser.id);
+    const isStaff = Number(portalUser.auth_level || 0) >= 5;
+    if (!isOwner && !isAssignee && !isStaff) {
+      return interaction.reply({ ephemeral: true, content: `${E.cross} You do not have access to ticket \`${ref}\`.` });
+    }
     const embed = new EmbedBuilder()
       .setTitle(`${STATUS_EMOJI[t.status] || '•'} ${ref} — ${title(t.status)}`)
       .setDescription(t.title || '(no title)')
