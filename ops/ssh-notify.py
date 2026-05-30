@@ -11,6 +11,12 @@ from datetime import datetime, timezone
 
 SECRETS = "/home/vpcommunityorganisation/.config/co/secrets.env"
 COBOT_ENV = "/home/vpcommunityorganisation/clawd/services/co-discord-bot/.env"
+# CO custom emojis (render in embed descriptions + field VALUES only — not titles/footers/field-names)
+E_SHIELD = "<:shield:1509040383542431846>"
+E_WARN   = "<:warning:1509040360368640151>"
+E_ID     = "<:id:1509040427020451840>"
+E_SERVER = "<:server:1509040431839576174>"
+E_VERIFY = "<:verify:1509040424654864455>"
 DISCORD_IDS = ["723199054514749450", "415922272956710912"]
 CO_EMAILS = ["dionm@communityorg.co.uk", "evans@communityorg.co.uk"]
 PERSONAL_EMAILS = ["dmckew14@outlook.com", "strongevan73@gmail.com"]
@@ -83,13 +89,13 @@ if cmd == "code":
     code, who, ip = sys.argv[2], sys.argv[3], sys.argv[4]
     dm_embed({
         "title": "🔐 Server access code",
-        "description": "A **new-device SSH login** is waiting on `co-prod-01`.\nType this code in the terminal within **45 seconds** to allow it — ignore it to block.",
+        "description": f"{E_SHIELD} A **new-device SSH login** is waiting on `co-prod-01`.\nType this code in the terminal within **45 seconds** to allow it — ignore it to block.",
         "color": 0xF2A100,
         "fields": [
             {"name": "🔢 Code", "value": f"```{code}```", "inline": False},
-            {"name": "👤 Login", "value": who, "inline": True},
+            {"name": "👤 Login", "value": f"{E_ID} {who}", "inline": True},
             {"name": "🌐 From", "value": f"`{ip}`", "inline": True},
-            {"name": "🖥️ Host", "value": "`co-prod-01`", "inline": True},
+            {"name": "🖥️ Host", "value": f"{E_SERVER} `co-prod-01`", "inline": True},
         ],
         "footer": {"text": "CO · Server Access · expires in 45s"}, "timestamp": now,
     })
@@ -109,7 +115,7 @@ elif cmd == "alert":
     ip = sys.argv[2]
     dm_embed({
         "title": "🚨 Backup code used",
-        "description": f"Your **weekly backup code** was just used to log in from `{ip}` on `co-prod-01`.\nThat code is now **dead** — a fresh one has been emailed to your personal inbox.\nIf that **wasn't you or Evan**, treat the server as compromised and rotate access now.",
+        "description": f"{E_WARN} Your **weekly backup code** was just used to log in from `{ip}` on `co-prod-01`.\nThat code is now **dead** — a fresh one has been emailed to your personal inbox.\nIf that **wasn't you or Evan**, treat the server as compromised and rotate access now.",
         "color": 0xED4245,
         "footer": {"text": "CO · Server Access Monitor"}, "timestamp": now,
     })

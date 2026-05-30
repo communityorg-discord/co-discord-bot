@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Called by pam_exec on every SSH session open. Logs to /var/log/ssh-logins.log
+# AND fires a rich Discord DM (embed) to Dion + Evan via the local CO bot —
+# identifying WHO logged in by their SSH key fingerprint, flagging unknown keys
+# and first-time IPs, and enriching with reverse-DNS + geo. Best-effort; the
+# whole network block is backgrounded so a failure can never block an ssh login.
+# PAM env vars used: PAM_USER, PAM_RHOST, PAM_TYPE, PAM_SERVICE.
+
+[ "$PAM_TYPE" = "open_session" ] || exit 0
+[ "$PAM_SERVICE" = "sshd" ]      || exit 0
+
+TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+USER_LOGIN="${PAM_USER:-unknown}"
+SRC_IP="${PAM_RHOST:-unknown}"
+LOGFILE=/var/log/ssh-logins.log
+
+# Has this source IP ever logged in before? (check BEFORE we append this one)
+PRIOR_COUNT=$(grep -c "src_ip=${SRC_IP}\b" "$LOGFILE" 2>/dev/null || echo 0)
+
+# 1. Append to the log file (always)
+echo "${TS}  user=${USER_LOGIN}  src_ip=${SRC_IP}" >> "$LOGFILE"
+
+# 2. Rich Discord DM — fully backgrounded, never blocks login.
+{
+  BOT_ENV=/home/vpcommunityorganisation/clawd/services/co-discord-bot/.env
+  [ -r "$BOT_ENV" ] || exit 0
+  SECRET=$(grep -E '^BOT_WEBHOOK_SECRET=' "$BOT_ENV" | head -1 | cut -d= -f2-)
+  [ -n "$SECRET" ] || exit 0
+
+  # ── Identify the person by the SSH key fingerprint sshd recorded ──
+  FPR=$(grep "Accepted publickey for ${USER_LOGIN} from ${SRC_IP} " /var/log/auth.log 2>/dev/null \
+        | tail -1 | grep -oE 'SHA256:[A-Za-z0-9+/]+' | tail -1)
+  case "$FPR" in
+    SHA256:SdVztrB1y0lLj2QqSM/Og7YchvSbcKPwImGVBqeNqPE)
+      PERSON="Dion"; ROLE="Deputy Secretary-General · primary admin"; KEYC="dmcke@Dion-Laptop"; COLOR=5152255; ALERT="" ;;
+    SHA256:xzsRhpDSUvlNx9rKo1Wn4P2F6KYi/BNH/wSW3KkTOoU)
+      PERSON="Evan"; ROLE="S&C Head · IT Admin (Drive/Bot)"; KEYC="evans@communityorg.co.uk"; COLOR=10711031; ALERT="" ;;
+    *)
+      PERSON="Unknown key"; ROLE="not Dion or Evan — investigate"; KEYC="${FPR:-unknown key}"; COLOR=15548997; ALERT="⚠️ **Unrecognised SSH key** — this was not Dion or Evan." ;;
+  esac
+
+  # New vs known IP
+  if [ "${PRIOR_COUNT:-0}" -eq 0 ]; then NEWIP="🆕 first login ever from this IP"; [ -z "$ALERT" ] && COLOR=16165633; else NEWIP="✅ known IP (${PRIOR_COUNT} prior)"; fi
+
+  # Reverse DNS (local, fast) + best-effort geo (short timeout, never blocks)
+  RDNS=$(timeout 2 getent hosts "$SRC_IP" 2>/dev/null | awk '{print $2}' | head -1)
+  [ -z "$RDNS" ] && RDNS=$(timeout 2 dig +short -x "$SRC_IP" 2>/dev/null | head -1 | sed 's/\.$//')
+  GEO=$(timeout 2 curl -sS "https://ipinfo.io/${SRC_IP}/json" 2>/dev/null)
+
+  FPR_SHORT="${FPR#SHA256:}"; FPR_SHORT="${FPR_SHORT:0:16}…"
+
+  # ── Build the embed JSON safely with python (handles escaping + geo parse) ──
+  EMBED=$(PERSON="$PERSON" ROLE="$ROLE" KEYC="$KEYC" FPRS="$FPR_SHORT" IP="$SRC_IP" RDNS="$RDNS" \
+          GEO="$GEO" NEWIP="$NEWIP" ALERT="$ALERT" COLOR="$COLOR" TS="$TS" UL="$USER_LOGIN" \
+          python3 - <<'PY'
+import os, json
+g = {}
+try: g = json.loads(os.environ.get("GEO") or "{}")
+except Exception: g = {}
+loc = ", ".join(x for x in [g.get("city"), g.get("region"), g.get("country")] if x) or None
+org = g.get("org")
+ip = os.environ["IP"]; rdns = os.environ.get("RDNS") or ""
+person = os.environ["PERSON"]; alert = os.environ.get("ALERT") or ""
+from_lines = [f"`{ip}`" + (f"  ·  {rdns}" if rdns else ""), os.environ["NEWIP"]]
+E_SHIELD="<:shield:1509040383542431846>"; E_WARN="<:warning:1509040360368640151>"
+E_ID="<:id:1509040427020451840>"; E_SERVER="<:server:1509040431839576174>"
+fields = [
+    {"name": "👤 Who",  "value": f"{E_ID} **{person}**\n{os.environ['ROLE']}", "inline": True},
+    {"name": "🔑 Key",  "value": f"`{os.environ['KEYC']}`\n`{os.environ['FPRS']}`", "inline": True},
+    {"name": "🖥️ Host", "value": f"{E_SERVER} `co-prod-01`  ·  unix `"+os.environ['UL']+"`", "inline": True},
+    {"name": "🌐 Source", "value": "\n".join(from_lines), "inline": False},
+]
+if loc: fields.append({"name": "📍 Location", "value": loc + (f"\n_{org}_" if org else ""), "inline": True})
+lead = E_WARN if alert else E_SHIELD
+desc = (alert + "\n\n" if alert else "") + f"{lead} **{person}** just opened an SSH session on **co-prod-01**."
+embed = {
+    "title": ("🚨 SSH login — " if alert else "🔓 SSH login — ") + person,
+    "description": desc,
+    "color": int(os.environ["COLOR"]),
+    "fields": fields,
+    "footer": {"text": "CO · Server Access Monitor"},
+    "timestamp": os.environ["TS"],
+}
+print(json.dumps(embed))
+PY
+)
+  [ -n "$EMBED" ] || exit 0
+
+  for DISCORD_ID in 723199054514749450 415922272956710912; do
+    printf '{"discord_id":"%s","embed":%s}' "$DISCORD_ID" "$EMBED" | \
+      timeout 4 curl -sS -X POST "http://127.0.0.1:3017/api/send-dm" \
+        -H "Content-Type: application/json" -H "x-bot-secret: ${SECRET}" \
+        --data-binary @- >/dev/null 2>&1 || true
+  done
+} </dev/null >/dev/null 2>&1 &
+disown
+
+exit 0
