@@ -239,12 +239,16 @@ export async function getOrCreateVerificationChannel(client) {
 // Check if a Discord user exists in the portal and return their data
 export async function getPortalUser(discordId) {
   const secret = process.env.BOT_WEBHOOK_SECRET;
-  const res = await fetch(`http://localhost:3016/api/staff/by-discord/${discordId}`, {
-    headers: { 'x-bot-secret': secret }
-  });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data?.user || data || null;
+  try {
+    const res = await fetch(`http://localhost:3016/api/staff/by-discord/${discordId}`, {
+      headers: { 'x-bot-secret': secret }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.user || data || null;
+  } catch {
+    return null;
+  }
 }
 
 // Check if caller is a superuser — portal auth 99+ OR in the trusted

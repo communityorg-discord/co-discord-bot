@@ -9,17 +9,27 @@ import { logAction } from '../utils/logger.js';
 import { PURGE_SCRIBE_LOG_CHANNEL_ID } from '../config.js';
 import { E } from '../lib/emoji.js';
 
+function escapeHtml(str) {
+  return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function generateHTML(messages, channel, guild, moderator, reason) {
+  const safeChannelName = escapeHtml(channel.name);
+  const safeGuildName = escapeHtml(guild.name);
+  const safeModerator = escapeHtml(moderator);
+  const safeReason = escapeHtml(reason || 'No reason provided');
+
   const rows = messages.map(m => {
     const time = new Date(m.createdTimestamp).toLocaleString('en-GB', { timeZone: 'UTC' });
     const avatar = m.author.displayAvatarURL({ size: 64, extension: 'png' });
     const content = m.content
-      ? m.content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      ? escapeHtml(m.content)
       : '<em style="color:#666">No text content</em>';
+    const safeUsername = escapeHtml(m.author.username);
     const attachments = [...m.attachments.values()].map(a =>
       a.contentType?.startsWith('image/')
         ? `<img src="${a.url}" style="max-width:300px;max-height:200px;border-radius:4px;margin-top:4px;display:block" />`
-        : `<a href="${a.url}" style="color:#7289da">${a.name}</a>`
+        : `<a href="${a.url}" style="color:#7289da">${escapeHtml(a.name)}</a>`
     ).join('');
     const embeds = m.embeds.length > 0
       ? `<div style="border-left:3px solid #7289da;padding:4px 8px;margin-top:4px;color:#aaa;font-size:12px">[${m.embeds.length} embed(s)]</div>`
@@ -29,7 +39,7 @@ function generateHTML(messages, channel, guild, moderator, reason) {
  <img src="${avatar}" style="width:36px;height:36px;border-radius:50%;flex-shrink:0" onerror="this.style.display='none'" />
  <div style="flex:1;min-width:0">
  <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
- <span style="font-weight:700;color:#fff">${m.author.username}</span>
+ <span style="font-weight:700;color:#fff">${safeUsername}</span>
  <span style="font-size:11px;color:#666">${time} UTC</span>
  ${m.author.bot ? '<span style="font-size:10px;background:#5865f2;color:#fff;padding:1px 5px;border-radius:3px">BOT</span>' : ''}
  </div>
@@ -45,7 +55,7 @@ function generateHTML(messages, channel, guild, moderator, reason) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Purge Log — #${channel.name}</title>
+<title>Purge Log — #${safeChannelName}</title>
 <style>
  * { box-sizing:border-box; margin:0; padding:0; }
  body { background:#1a1a1a; color:#dcddde; font-family:'Segoe UI',sans-serif; font-size:14px; padding:20px; }
@@ -62,13 +72,13 @@ function generateHTML(messages, channel, guild, moderator, reason) {
 </head>
 <body>
 <div class="header">
- <h1>🗑️ Purge Log — #${channel.name}</h1>
+ <h1>🗑️ Purge Log — #${safeChannelName}</h1>
  <div class="meta">
- <div class="meta-item"><div class="label">Server</div><div class="value">${guild.name}</div></div>
- <div class="meta-item"><div class="label">Channel</div><div class="value">#${channel.name}</div></div>
- <div class="meta-item"><div class="label">Moderator</div><div class="value">${moderator}</div></div>
+ <div class="meta-item"><div class="label">Server</div><div class="value">${safeGuildName}</div></div>
+ <div class="meta-item"><div class="label">Channel</div><div class="value">#${safeChannelName}</div></div>
+ <div class="meta-item"><div class="label">Moderator</div><div class="value">${safeModerator}</div></div>
  <div class="meta-item"><div class="label">Messages Deleted</div><div class="value">${messages.length}</div></div>
- <div class="meta-item"><div class="label">Reason</div><div class="value">${reason || 'No reason provided'}</div></div>
+ <div class="meta-item"><div class="label">Reason</div><div class="value">${safeReason}</div></div>
  <div class="meta-item"><div class="label">Date</div><div class="value">${new Date().toLocaleString('en-GB', { timeZone: 'UTC' })} UTC</div></div>
  </div>
  <a href="https://portal.communityorg.co.uk" class="portal-badge">CO Staff Portal</a>

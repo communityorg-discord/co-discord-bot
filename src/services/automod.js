@@ -227,10 +227,15 @@ export class AutoMod {
     // Never ban a superuser, and respect any immunity grant.
     if (SUPERUSER_IDS.includes(member.id)) return;
     if (this.isImmune(member.guild.id, member.id, 'user', 'mass_dm')) return;
-    // Track join/leave for mass DM detection
-    const recent = db.prepare("SELECT COUNT(*) as c FROM join_rate_log WHERE guild_id = ? AND discord_id = ? AND joined_at > datetime('now', '-1 hour')").get(member.guild.id, member.id);
+    // Track join/leave for mass DM detection.
+    // A real mass-DM bot joins many DISTINCT guilds in rapid succession; a
+    // legitimate member with connectivity problems may rejoin the same guild
+    // several times.  Count distinct guilds (across all guilds this bot can
+    // see) rather than raw row-count for the leaving guild so a single-server
+    // rejoin loop cannot trigger a network-wide ban.
+    const recent = db.prepare("SELECT COUNT(DISTINCT guild_id) as c FROM join_rate_log WHERE discord_id = ? AND joined_at > datetime('now', '-1 hour')").get(member.id);
     if (recent.c >= 3) {
-      this.logIncident(member.guild.id, 'mass_dm_suspected', member.id, member.user?.tag, 'high', 'global_ban', 'Joined and left multiple times — suspected mass DM bot');
+      this.logIncident(member.guild.id, 'mass_dm_suspected', member.id, member.user?.tag, 'high', 'global_ban', `Joined and left ${recent.c} distinct guilds in 1 hour — suspected mass DM bot`);
       for (const g of this.client.guilds.cache.values()) {
         await g.bans.create(member.id, { reason: '[AutoMod] Suspected mass DM bot' }).catch(() => {});
       }

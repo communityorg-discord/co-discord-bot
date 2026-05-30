@@ -28,6 +28,9 @@ const MODULE_SETTINGS = {
   verify_timeout: ['verify_warning_hours', 'verify_terminate_hours'],
 };
 
+const VALID_MODULES = new Set(MODULES.map(m => m.key));
+const VALID_SETTINGS = new Set(Object.values(MODULE_SETTINGS).flat());
+
 function savePanel(guildId, channelId, panelType, messageId) {
   db.prepare('INSERT OR REPLACE INTO automod_panels (guild_id, channel_id, panel_type, message_id) VALUES (?, ?, ?, ?)').run(guildId, channelId, panelType, messageId);
 }
@@ -272,6 +275,7 @@ export async function handleInteraction(interaction) {
     const parts = id.replace('automod_toggle_', '').split('_');
     const guildId = parts.pop();
     const module = parts.join('_');
+    if (!VALID_MODULES.has(module)) return interaction.reply({ content: `${E.cross} Invalid module.`, ephemeral: true });
     const config = automod.getConfig(guildId);
     const col = `${module}_enabled`;
     const newVal = config[col] ? 0 : 1;
@@ -357,6 +361,7 @@ export async function handleInteraction(interaction) {
     const guildId = parts.pop();
     const module = parts.pop();
     const setting = parts.join('_');
+    if (!VALID_SETTINGS.has(setting)) return interaction.reply({ content: `${E.cross} Invalid setting.`, ephemeral: true });
     const value = interaction.fields.getTextInputValue('value');
     db.prepare(`UPDATE automod_config SET ${setting} = ?, updated_at = datetime('now') WHERE guild_id = ?`).run(value, guildId);
     await interaction.reply({ content: `${E.check} **${setting}** set to \`${value}\`.`, ephemeral: true });
@@ -370,6 +375,7 @@ export async function handleInteraction(interaction) {
     const parts = rest.split('_');
     const guildId = parts.pop();
     const module = parts.join('_');
+    if (!VALID_MODULES.has(module)) return interaction.reply({ content: `${E.cross} Invalid module.`, ephemeral: true });
     const config = automod.getConfig(guildId);
     const col = `${module}_enabled`;
     db.prepare(`UPDATE automod_config SET ${col} = ?, updated_at = datetime('now') WHERE guild_id = ?`).run(config[col] ? 0 : 1, guildId);

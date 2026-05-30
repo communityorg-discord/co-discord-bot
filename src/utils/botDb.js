@@ -746,6 +746,47 @@ try {
 // Migration: add log_scope column to log_config
 try { db.exec("ALTER TABLE log_config ADD COLUMN log_scope TEXT DEFAULT 'server'"); } catch (e) { /* already exists */ }
 
+// Persistent temp-ban store — survives process restarts.
+// guild_id + user_id uniquely identify the pending unban.
+// cleared = 1 means the unban has fired (or was cancelled); rows are kept for audit.
+db.exec(`CREATE TABLE IF NOT EXISTS temp_bans (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  unban_at TEXT NOT NULL,
+  duration_str TEXT,
+  reason TEXT,
+  banned_by TEXT,
+  cleared INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  UNIQUE(guild_id, user_id)
+)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_temp_bans_pending ON temp_bans(cleared, unban_at)`);
+
+export function insertTempBan({ guildId, userId, unbanAt, durationStr, reason, bannedBy }) {
+  // INSERT OR REPLACE so a second /serverban for the same user in the same guild
+  // just refreshes the deadline rather than creating a duplicate row.
+  return db.prepare(`
+    INSERT INTO temp_bans (guild_id, user_id, unban_at, duration_str, reason, banned_by, cleared)
+    VALUES (?, ?, ?, ?, ?, ?, 0)
+    ON CONFLICT(guild_id, user_id) DO UPDATE SET
+      unban_at = excluded.unban_at,
+      duration_str = excluded.duration_str,
+      reason = excluded.reason,
+      banned_by = excluded.banned_by,
+      cleared = 0,
+      created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  `).run(guildId, userId, unbanAt, durationStr || null, reason || null, bannedBy || null);
+}
+
+export function clearTempBan(guildId, userId) {
+  return db.prepare(`UPDATE temp_bans SET cleared = 1 WHERE guild_id = ? AND user_id = ? AND cleared = 0`).run(guildId, userId);
+}
+
+export function getPendingTempBans() {
+  return db.prepare(`SELECT * FROM temp_bans WHERE cleared = 0 ORDER BY unban_at ASC`).all();
+}
+
 export default db;
 
 export function addDmExemption(discordId, displayName, exemptedBy) {
@@ -928,15 +969,17 @@ export function addInfraction(discordId, type, reason, moderatorId, moderatorNam
   `).run(discordId, type, reason, moderatorId, moderatorName, expiresAt, appealable);
 }
 
+const INFRACTION_ALLOWED_COLS = new Set([
+  'type', 'reason', 'moderator_id', 'moderator_name', 'expires_at', 'active',
+  'appealable', 'appeal_denied_until', 'deleted', 'deleted_by', 'deleted_at',
+  'appealed', 'appeal_reason', 'appeal_by', 'appeal_at',
+]);
+
 export function updateInfraction(id, fields) {
-  const sets = Object.keys(fields)
-    .filter(k => fields[k] !== undefined)
-    .map(k => `${k} = ?`)
-    .join(', ');
-  if (!sets) return;
-  const values = Object.keys(fields)
-    .filter(k => fields[k] !== undefined)
-    .map(k => fields[k]);
+  const allowed = Object.keys(fields).filter(k => INFRACTION_ALLOWED_COLS.has(k) && fields[k] !== undefined);
+  if (allowed.length === 0) return;
+  const sets = allowed.map(k => `${k} = ?`).join(', ');
+  const values = allowed.map(k => fields[k]);
   return db.prepare(`UPDATE infractions SET ${sets} WHERE id = ?`).run(...values, id);
 }
 
@@ -1116,19 +1159,61 @@ export function getRepliesForEmail(inboxId, uid) {
 
 // ── Personal Email Setup ─────────────────────────────────────────────────────
 
+// AES-256-GCM helpers — key must be 32-byte hex in EMAIL_ENCRYPTION_KEY env var.
+// If the key is absent the functions fall back to plaintext (existing rows remain
+// readable) but log a warning so ops can notice and set the key.
+const _emailKeyHex = process.env.EMAIL_ENCRYPTION_KEY || '';
+const _emailKey = _emailKeyHex.length === 64 ? Buffer.from(_emailKeyHex, 'hex') : null;
+if (!_emailKey) {
+  console.warn('[botDb] WARNING: EMAIL_ENCRYPTION_KEY not set or wrong length — IMAP passwords stored in plaintext. Set a 32-byte hex key (openssl rand -hex 32) to enable encryption.');
+}
+
+function _encryptPassword(plaintext) {
+  if (!_emailKey) return plaintext;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', _emailKey, iv);
+  const enc = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  // Format: hex(iv):hex(tag):hex(ciphertext)
+  return `${iv.toString('hex')}:${tag.toString('hex')}:${enc.toString('hex')}`;
+}
+
+function _decryptPassword(stored) {
+  if (!_emailKey) return stored;
+  // If stored value doesn't match the encrypted format, return as-is (plaintext legacy row)
+  const parts = stored.split(':');
+  if (parts.length !== 3) return stored;
+  try {
+    const iv = Buffer.from(parts[0], 'hex');
+    const tag = Buffer.from(parts[1], 'hex');
+    const enc = Buffer.from(parts[2], 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', _emailKey, iv);
+    decipher.setAuthTag(tag);
+    return decipher.update(enc) + decipher.final('utf8');
+  } catch {
+    // Corrupted or legacy plaintext — return as-is
+    return stored;
+  }
+}
+
 export function savePersonalEmailSetup(discordId, coEmail, password) {
+  const stored = _encryptPassword(password);
   db.prepare(`INSERT INTO personal_email_setup (discord_id, co_email, imap_password)
     VALUES (?, ?, ?)
     ON CONFLICT(discord_id) DO UPDATE SET co_email = excluded.co_email, imap_password = excluded.imap_password, updated_at = CURRENT_TIMESTAMP`
-  ).run(discordId, coEmail, password);
+  ).run(discordId, coEmail, stored);
 }
 
 export function getPersonalEmailSetup(discordId) {
-  return db.prepare('SELECT * FROM personal_email_setup WHERE discord_id = ? AND enabled = 1').get(discordId);
+  const row = db.prepare('SELECT * FROM personal_email_setup WHERE discord_id = ? AND enabled = 1').get(discordId);
+  if (row) row.imap_password = _decryptPassword(row.imap_password);
+  return row;
 }
 
 export function getAllPersonalEmailSetups() {
-  return db.prepare('SELECT * FROM personal_email_setup WHERE enabled = 1').all();
+  const rows = db.prepare('SELECT * FROM personal_email_setup WHERE enabled = 1').all();
+  for (const r of rows) r.imap_password = _decryptPassword(r.imap_password);
+  return rows;
 }
 
 export function isPersonalEmailSeen(discordId, uid) {
@@ -1171,14 +1256,20 @@ export function getAssignmentByMessageId(messageId) {
   return db.prepare('SELECT * FROM assignments WHERE message_id = ?').get(messageId);
 }
 
+const ASSIGNMENT_ALLOWED_COLS = new Set([
+  'title', 'description', 'assigned_to', 'assigned_by', 'team', 'due_date',
+  'status', 'message_id', 'channel_id', 'portal_assignment_id',
+  'delegate_of', 'delegated_by', 'extension_count',
+  'completion_notes', 'confirmed_by', 'completed_at', 'confirmed_at',
+  'overdue_notified', 'case_raised',
+  'team_members', 'team_acknowledgements', 'team_confirmations',
+]);
+
 export function updateAssignment(id, fields) {
-  const sets = [];
-  const vals = [];
-  for (const [k, v] of Object.entries(fields)) {
-    sets.push(`${k} = ?`);
-    vals.push(v);
-  }
-  if (sets.length === 0) return;
+  const allowed = Object.keys(fields).filter(k => ASSIGNMENT_ALLOWED_COLS.has(k));
+  if (allowed.length === 0) return;
+  const sets = allowed.map(k => `${k} = ?`);
+  const vals = allowed.map(k => fields[k]);
   vals.push(id);
   db.prepare(`UPDATE assignments SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
 }
@@ -1299,8 +1390,19 @@ db.exec(`CREATE TABLE IF NOT EXISTS office_request_feed (
 
 // office_requests had a NOT NULL on channel_id from the older schema — drop & recreate so
 // waiting-room requests (which don't tie to a single office until approval) can insert NULL.
-db.exec(`DROP TABLE IF EXISTS office_requests`);
-db.exec(`CREATE TABLE office_requests (
+// Only drop if the old schema actually has the NOT NULL constraint; avoids wiping live data
+// on every restart (mirrors the global_log_config migration pattern at lines 457-474).
+try {
+  const orMeta = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='office_requests'").get();
+  if (!orMeta) {
+    // Table doesn't exist yet — fall through to CREATE below
+  } else if (orMeta.sql && /channel_id\s+TEXT\s+NOT\s+NULL/i.test(orMeta.sql)) {
+    // Old schema with NOT NULL — safe to drop and recreate
+    db.exec(`DROP TABLE IF EXISTS office_requests`);
+  }
+  // else: table exists with correct nullable schema — leave it alone
+} catch (e) { /* migration check failed — leave table untouched */ }
+db.exec(`CREATE TABLE IF NOT EXISTS office_requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   guild_id TEXT NOT NULL,
   channel_id TEXT,

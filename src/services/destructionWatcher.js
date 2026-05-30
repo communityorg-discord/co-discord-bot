@@ -14,7 +14,7 @@
 // All alerts DM Dion + Evan and post to SECURITY_ALERTS_CHANNEL_ID if set.
 // Designed to be noisy but not crashing — every handler is wrapped.
 
-import { Events, AuditLogEvent } from 'discord.js';
+import { Events, AuditLogEvent, EmbedBuilder } from 'discord.js';
 import { E } from '../lib/emoji.js';
 
 const ALERT_USER_IDS = ['723199054514749450', '415922272956710912'];
@@ -24,19 +24,23 @@ const SUPPRESS_ACTORS = new Set([
 ]);
 
 async function alert(client, body) {
+  const embed = new EmbedBuilder()
+    .setColor(0xEF4444)
+    .setDescription(body.slice(0, 4096))
+    .setFooter({ text: 'Community Organisation | Security Alert' })
+    .setTimestamp();
   for (const uid of ALERT_USER_IDS) {
     try {
       const u = await client.users.fetch(uid).catch(() => null);
       if (!u) continue;
-      const dm = await u.createDM().catch(() => null);
-      if (dm) await dm.send(body.slice(0, 1900)).catch(() => {});
+      await u.send({ embeds: [embed] }).catch(() => {});
     } catch {}
   }
   const channelId = process.env.SECURITY_ALERTS_CHANNEL_ID;
   if (channelId) {
     try {
       const ch = await client.channels.fetch(channelId).catch(() => null);
-      if (ch) await ch.send(body.slice(0, 1900)).catch(() => {});
+      if (ch) await ch.send({ embeds: [embed] }).catch(() => {});
     } catch {}
   }
 }

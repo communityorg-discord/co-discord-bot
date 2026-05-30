@@ -1,7 +1,7 @@
 // COMMAND_PERMISSION_FALLBACK: auth_level >= 5
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
-import { addInfraction } from '../utils/botDb.js';
+import { addInfraction, insertTempBan, clearTempBan, getPendingTempBans } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
@@ -152,6 +152,7 @@ export async function execute(interaction) {
     logType: 'moderation.ban',
   });
 
+  const unbanAt = isTempBan ? new Date(Date.now() + durationMs).toISOString() : null;
   const unbanTs = isTempBan ? Math.floor((Date.now() + durationMs) / 1000) : null;
 
   await interaction.editReply({
@@ -173,26 +174,94 @@ export async function execute(interaction) {
     ]
   });
 
-  // Schedule auto-unban for temp bans
+  // Persist + schedule auto-unban for temp bans
   if (isTempBan) {
-    setTimeout(async () => {
-      try {
-        await interaction.guild.members.unban(targetId, `Temporary ban (${durationStr}) expired.`);
-        await logAction(interaction.client, {
-          action: 'Temp Ban Expired — Auto Unbanned',
-          moderator: { discordId: 'SYSTEM', name: 'Auto (Duration Expired)' },
-          target: { discordId: targetId, name: targetName },
-          reason: `Temp ban (${durationStr}) expired. Originally banned by <@${interaction.user.id}>`,
-          color: 0x22C55E,
-          fields: [
-            { name: 'Duration', value: formatDuration(durationMs), inline: true },
-            { name: 'Server', value: interaction.guild.name, inline: true },
-          ],
-          specificChannelId: MOD_LOG_CHANNEL_ID,
-          guildId: interaction.guildId,
-          logType: 'moderation.ban',
-        });
-      } catch {}
-    }, durationMs);
+    insertTempBan({
+      guildId: interaction.guildId,
+      userId: targetId,
+      unbanAt,
+      durationStr,
+      reason,
+      bannedBy: interaction.user.id,
+    });
+    armTempBanTimer(interaction.client, {
+      guild_id: interaction.guildId,
+      user_id: targetId,
+      unban_at: unbanAt,
+      duration_str: durationStr,
+      reason,
+      banned_by: interaction.user.id,
+    });
+  }
+}
+
+// Maximum safe setTimeout delay (signed 32-bit ms).
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
+/**
+ * Arms a single in-process timer for a persisted temp ban row.
+ * Called both at command-issue time and from the startup sweep (init).
+ * The 60-second safety-net sweep in index.js catches anything that slips
+ * through (e.g. the remaining time exceeds MAX_TIMEOUT_MS on boot).
+ */
+function armTempBanTimer(client, row) {
+  const unbanAtMs = new Date(row.unban_at).getTime();
+  const remaining = unbanAtMs - Date.now();
+
+  if (remaining <= 0) {
+    // Already past-due — fire immediately (async, don't await here).
+    fireUnban(client, row).catch(() => {});
+    return;
+  }
+
+  if (remaining > MAX_TIMEOUT_MS) {
+    // Too far out for setTimeout; the 60s sweep in index.js will catch it.
+    console.log('[serverban] Temp ban for', row.user_id, 'in guild', row.guild_id, 'is too far out — left to 60s sweep');
+    return;
+  }
+
+  setTimeout(() => fireUnban(client, row).catch(() => {}), remaining);
+}
+
+async function fireUnban(client, row) {
+  try {
+    const guild = await client.guilds.fetch(row.guild_id).catch(() => null);
+    if (guild) {
+      await guild.members.unban(row.user_id, `Temporary ban (${row.duration_str || 'expired'}) expired.`).catch(() => {});
+    }
+    clearTempBan(row.guild_id, row.user_id);
+    await logAction(client, {
+      action: 'Temp Ban Expired — Auto Unbanned',
+      moderator: { discordId: 'SYSTEM', name: 'Auto (Duration Expired)' },
+      target: { discordId: row.user_id, name: row.user_id },
+      reason: `Temp ban (${row.duration_str || 'expired'}) expired.${row.banned_by ? ` Originally banned by <@${row.banned_by}>` : ''}`,
+      color: 0x22C55E,
+      fields: [
+        { name: 'Duration', value: row.duration_str || 'unknown', inline: true },
+        { name: 'Guild ID', value: row.guild_id, inline: true },
+      ],
+      specificChannelId: MOD_LOG_CHANNEL_ID,
+      guildId: row.guild_id,
+      logType: 'moderation.ban',
+    });
+  } catch (e) {
+    console.error('[serverban] fireUnban error for', row.user_id, ':', e.message);
+  }
+}
+
+/**
+ * Startup sweep — call once from index.js clientReady (after the C-05 block):
+ *   const { init: initServerban } = await import('./commands/serverban.js');
+ *   await initServerban(client);
+ *
+ * Re-arms in-process timers for all pending temp bans and immediately fires
+ * any whose unban_at is already past.
+ */
+export async function init(client) {
+  const pending = getPendingTempBans();
+  if (pending.length === 0) return;
+  console.log('[serverban] Startup sweep: re-arming', pending.length, 'pending temp ban(s)');
+  for (const row of pending) {
+    armTempBanTimer(client, row);
   }
 }

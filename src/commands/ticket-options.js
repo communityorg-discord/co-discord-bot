@@ -106,6 +106,7 @@ export async function handleTicketOptionsButton(interaction) {
 
   // rename uses showModal() which auto-acknowledges — do NOT defer
   if (action === 'rename') {
+    if (!auth.allowed && !isClaimer) return interaction.reply({ content: `${E.cross} ${auth.reason}`, flags: 64 });
     const modal = new ModalBuilder()
       .setCustomId(`ticketopts_renamemodal_${channelId}`)
       .setTitle('Rename Ticket Channel')
@@ -175,6 +176,14 @@ export async function handleTicketOptionsModal(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
   const channelId = interaction.customId.replace('ticketopts_renamemodal_', '');
+
+  const ticket = getTicketChannelByChannelId(channelId);
+  if (!ticket) return interaction.editReply({ content: `${E.cross} Ticket not found in database.` });
+
+  const isClaimer = ticket.claimed_by === interaction.user.id;
+  const auth = await canRunCommand(interaction.user.id, 5);
+  if (!auth.allowed && !isClaimer) return interaction.editReply({ content: `${E.cross} ${auth.reason}` });
+
   const newName = interaction.fields.getTextInputValue('new_name').trim().replace(/\s+/g, '-').toLowerCase().slice(0, 100);
 
   const guild = interaction.guild;

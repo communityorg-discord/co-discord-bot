@@ -224,6 +224,11 @@ export async function execute(interaction) {
 
 // Handle select menu interactions
 export async function handleSelect(interaction) {
+  const perm = await canUseCommand('logspanel', interaction);
+  if (!perm.allowed) {
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, flags: 64 });
+  }
+
   const customId = interaction.customId;
 
   // Back button — return to main view
@@ -360,6 +365,11 @@ export async function handleSelect(interaction) {
 
 // Handle modal submit
 export async function handleModal(interaction) {
+  const perm = await canUseCommand('logspanel', interaction);
+  if (!perm.allowed) {
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, flags: 64 });
+  }
+
   const customId = interaction.customId;
   if (!customId) return;
 

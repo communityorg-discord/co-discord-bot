@@ -210,6 +210,7 @@ function buildGuildResultsField(results, type) {
 
 // Button interaction handler
 export async function handleSelect(interaction) {
+  const customId = interaction.customId;
   try {
     if (customId.startsWith('verify_auth_select_')) {
       const queueId = customId.replace('verify_auth_select_', '');

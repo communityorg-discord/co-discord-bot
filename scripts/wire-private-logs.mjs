@@ -59,11 +59,12 @@ const api = async (method, path, body) => {
 
 // ── fetch live channels ──
 const channels = (await api('GET', `/guilds/${GUILD}/channels`)).json;
+if (!Array.isArray(channels)) { console.error('Failed to fetch channels:', channels); process.exit(1); }
 const byName = {}; const catId = {};
 for (const c of channels) { if (c.type === 0) byName[c.name] = c.id; if (c.type === 4) catId[c.name] = c.id; }
 
 // ── 1. wire private-scope routing ──
-const db = new Database('bot-data.db');
+const db = new Database(new URL('../bot-data.db', import.meta.url).pathname);
 db.pragma('busy_timeout = 8000');
 const upsertType = db.prepare(`INSERT INTO log_config (guild_id, category, type, channel_id, log_scope, updated_at)
   VALUES ('private', ?, ?, ?, 'server', CURRENT_TIMESTAMP)

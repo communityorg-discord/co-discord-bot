@@ -2397,6 +2397,7 @@ client.on('interactionCreate', async interaction => {
       try { return inbox.handleInboxInteraction(interaction); }
       catch(e) { console.error('[inbox error]', e.message, 'customId:', interaction.customId); throw e; }
     }
+    if (interaction.customId?.startsWith('investigate_')) return investigate.handleSelect(interaction);
   }
 
   // Verify/Unverify modal handlers

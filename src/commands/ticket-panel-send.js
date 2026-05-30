@@ -336,9 +336,15 @@ export async function handleTicketChannelButton(interaction) {
     });
   } else {
     // Close
+    // Auth-7+ can close any ticket. The claimer (auth-5+) can close their own ticket.
+    // A separate lower-threshold check prevents revoked-access claimers from closing.
     const auth = await canRunCommand(interaction.user.id, 7);
     const isClaimer = ticket.claimed_by === interaction.user.id;
     if (!auth.allowed && !isClaimer) return interaction.editReply({ content: `${E.cross} ${auth.reason}` });
+    if (!auth.allowed && isClaimer) {
+      const claimerAuth = await canRunCommand(interaction.user.id, 5);
+      if (!claimerAuth.allowed) return interaction.editReply({ content: `${E.cross} You no longer have the required access level to close this ticket. ${claimerAuth.reason}` });
+    }
 
     const panel = getTicketPanelById(ticket.panel_id);
     const ticketChannel = guild.channels.cache.get(channelId);

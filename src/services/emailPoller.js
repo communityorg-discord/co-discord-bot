@@ -1,10 +1,11 @@
+import { randomBytes } from 'crypto';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { fetchEmailConfig, fetchInboxEmails } from './emailService.js';
 import { getInboxChannelId, markEmailSeen, isEmailSeen, getSeenEmail, getRepliesForEmail } from '../utils/botDb.js';
 import { E } from '../lib/emoji.js';
 
 function generateReplyCode() {
-  return Math.random().toString(36).slice(2, 8).toUpperCase();
+  return randomBytes(4).toString('hex').toUpperCase().slice(0, 6);
 }
 
 // Dedupe noisy poller errors. The poller runs every 60s; if the upstream

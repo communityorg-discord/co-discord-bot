@@ -3,6 +3,7 @@ import { createWriteStream, mkdirSync, existsSync, unlinkSync, writeFileSync, st
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { spawn } from 'child_process';
+import { randomInt } from 'crypto';
 import { db } from '../utils/botDb.js';
 import OpusScript from 'opusscript';
 import googleTTS from 'google-tts-api';
@@ -476,7 +477,7 @@ export async function startRecording(channel, startedBy) {
   const recordingDir = join(RECORDINGS_DIR, recordingKey);
   mkdirSync(recordingDir, { recursive: true });
 
-  const accessCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const accessCode = randomInt(100000, 1000000).toString();
 
   const connection = joinVoiceChannel({
     channelId: channel.id,

@@ -436,7 +436,16 @@ export async function sendActingNominationRequests(client) {
 
         collector.on('collect', async (msg) => {
           if (msg.content.toLowerCase().trim() === 'none') {
-            portalDb.prepare('UPDATE leave_requests SET acting_notified = 1 WHERE id = ?').run(leave.id);
+            let cbDb;
+            try {
+              const Database = (await import('better-sqlite3')).default;
+              cbDb = new Database(process.env.PORTAL_DB_PATH, { readonly: false });
+              cbDb.prepare('UPDATE leave_requests SET acting_notified = 1 WHERE id = ?').run(leave.id);
+            } catch (e) {
+              console.error('[Acting collector] DB error on none:', e.message);
+            } finally {
+              try { cbDb?.close(); } catch {}
+            }
             await msg.reply('Understood — no acting will be assigned. Your roles will be updated at midnight.');
             return;
           }
@@ -454,9 +463,18 @@ export async function sendActingNominationRequests(client) {
             return;
           }
 
-          portalDb.prepare(
-            'UPDATE leave_requests SET acting_discord_id = ?, acting_notified = 1, acting_confirmed = 1 WHERE id = ?'
-          ).run(mentionedId, leave.id);
+          let cbDb;
+          try {
+            const Database = (await import('better-sqlite3')).default;
+            cbDb = new Database(process.env.PORTAL_DB_PATH, { readonly: false });
+            cbDb.prepare(
+              'UPDATE leave_requests SET acting_discord_id = ?, acting_notified = 1, acting_confirmed = 1 WHERE id = ?'
+            ).run(mentionedId, leave.id);
+          } catch (e) {
+            console.error('[Acting collector] DB error on nomination:', e.message);
+          } finally {
+            try { cbDb?.close(); } catch {}
+          }
 
           await msg.reply({ embeds: [{
             color: 0x22C55E,
@@ -484,7 +502,16 @@ export async function sendActingNominationRequests(client) {
 
         collector.on('end', async (collected) => {
           if (collected.size === 0) {
-            portalDb.prepare('UPDATE leave_requests SET acting_notified = 1 WHERE id = ?').run(leave.id);
+            let cbDb;
+            try {
+              const Database = (await import('better-sqlite3')).default;
+              cbDb = new Database(process.env.PORTAL_DB_PATH, { readonly: false });
+              cbDb.prepare('UPDATE leave_requests SET acting_notified = 1 WHERE id = ?').run(leave.id);
+            } catch (e) {
+              console.error('[Acting collector] DB error on timeout:', e.message);
+            } finally {
+              try { cbDb?.close(); } catch {}
+            }
             await leaveUser.send('No acting nomination received. Your roles will be updated at midnight without an acting assignment.').catch(() => {});
           }
         });

@@ -62,7 +62,6 @@ export async function testImapConnection(config) {
       host: config.host,
       port: config.port,
       tls: config.secure,
-      tlsOptions: { rejectUnauthorized: false },
       connTimeout: 8000,
       authTimeout: 8000,
     });
@@ -192,7 +191,6 @@ function createImapConnection(inbox) {
     host: inbox.imap.host,
     port: inbox.imap.port,
     tls: inbox.imap.secure,
-    tlsOptions: { rejectUnauthorized: false },
     connTimeout: 30000,
     authTimeout: 30000,
   });

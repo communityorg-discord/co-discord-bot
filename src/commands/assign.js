@@ -690,6 +690,10 @@ export async function handleButton(interaction) {
     const assignment = getAssignment(assignmentId);
     if (!assignment) return interaction.reply({ content: `${E.cross} Assignment not found.`, ephemeral: true });
 
+    if (interaction.user.id !== assignment.assigned_by && !SUPERUSER_IDS.includes(interaction.user.id)) {
+      return interaction.reply({ content: 'Only the assigner can confirm/reject this.', ephemeral: true });
+    }
+
     updateAssignment(assignmentId, {
       status: 'complete',
       confirmed_at: new Date().toISOString(),
@@ -730,6 +734,13 @@ export async function handleButton(interaction) {
   // ── Assigner rejects completion ──
   if (customId.startsWith('assign_reject_')) {
     const assignmentId = parseInt(customId.split('_')[2]);
+    const assignment = getAssignment(assignmentId);
+    if (!assignment) return interaction.reply({ content: `${E.cross} Assignment not found.`, ephemeral: true });
+
+    if (interaction.user.id !== assignment.assigned_by && !SUPERUSER_IDS.includes(interaction.user.id)) {
+      return interaction.reply({ content: 'Only the assigner can confirm/reject this.', ephemeral: true });
+    }
+
     await interaction.showModal(new ModalBuilder()
       .setCustomId(`assign_reject_modal_${assignmentId}`)
       .setTitle('Rejection Feedback')
@@ -757,6 +768,10 @@ export async function handleModal(interaction) {
     const assignmentId = parseInt(customId.split('_')[3]);
     const assignment = getAssignment(assignmentId);
     if (!assignment) return interaction.reply({ content: `${E.cross} Assignment not found.`, ephemeral: true });
+
+    if (interaction.user.id !== assignment.assigned_to && !SUPERUSER_IDS.includes(interaction.user.id)) {
+      return interaction.reply({ content: 'Only the assignee can submit a completion.', ephemeral: true });
+    }
 
     const completionNotes = interaction.fields.getTextInputValue('completion_notes') || '';
 
@@ -814,6 +829,10 @@ export async function handleModal(interaction) {
     const assignment = getAssignment(assignmentId);
     if (!assignment) return interaction.reply({ content: `${E.cross} Assignment not found.`, ephemeral: true });
 
+    if (interaction.user.id !== assignment.assigned_by && !SUPERUSER_IDS.includes(interaction.user.id)) {
+      return interaction.reply({ content: 'Only the assigner can reject this.', ephemeral: true });
+    }
+
     const rejectReason = interaction.fields.getTextInputValue('reject_reason');
 
     updateAssignment(assignmentId, {
@@ -863,6 +882,15 @@ export async function handleModal(interaction) {
     const assignmentId = parseInt(customId.split('_')[3]);
     const assignment = getAssignment(assignmentId);
     if (!assignment) return interaction.reply({ content: `${E.cross} Assignment not found.`, ephemeral: true });
+
+    if (interaction.user.id !== assignment.assigned_to && !SUPERUSER_IDS.includes(interaction.user.id)) {
+      return interaction.reply({ content: `${E.cross} Only the assigned person can delegate this task.`, ephemeral: true });
+    }
+
+    const delegatorPortal = getPortalUser(interaction.user.id);
+    if (!SUPERUSER_IDS.includes(interaction.user.id) && (!delegatorPortal || !canDelegate(delegatorPortal))) {
+      return interaction.reply({ content: `${E.cross} Only the assigned person can delegate, and only if they hold a line manager or supervisor role.`, ephemeral: true });
+    }
 
     const delegateToId = interaction.fields.getTextInputValue('delegate_to').trim().replace(/[<@!>]/g, '');
     const delegateReason = interaction.fields.getTextInputValue('delegate_reason');

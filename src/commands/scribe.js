@@ -7,11 +7,29 @@ import { logAction } from '../utils/logger.js';
 import { PURGE_SCRIBE_LOG_CHANNEL_ID } from '../config.js';
 import { E } from '../lib/emoji.js';
 
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+const ALLOWED_ATTACHMENT_HOSTS = ['cdn.discordapp.com', 'media.discordapp.net'];
+
+function safeAttachmentUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (ALLOWED_ATTACHMENT_HOSTS.includes(parsed.hostname)) return esc(url);
+  } catch (_) { /* fall through */ }
+  return null;
+}
+
 function generateHTML(messages, channel, guild, requestedBy, limit) {
   const rows = messages.map(m => {
     const time = new Date(m.createdTimestamp).toLocaleString('en-GB', { timeZone: 'UTC' });
     const avatar = m.author.displayAvatarURL({ size: 64, extension: 'png' });
-    const authorName = m.author.displayName || m.author.username;
+    const authorName = esc(m.author.displayName || m.author.username);
 
     // Resolve Discord mentions (<@id>, <#id>, <@&id>) to actual names
     let resolvedContent = m.content || '';
@@ -43,18 +61,20 @@ function generateHTML(messages, channel, guild, requestedBy, limit) {
     } else if (m.embeds && m.embeds.length > 0) {
       const firstEmbed = m.embeds[0];
       const desc = firstEmbed.description || firstEmbed.title || '[embed]';
-      content = `<em style="color:#666">[Embed] ${desc.slice(0, 120)}</em>`;
+      content = `<em style="color:#666">[Embed] ${esc(desc.slice(0, 120))}</em>`;
     } else if (m.attachments && m.attachments.size > 0) {
-      const attachmentNames = [...m.attachments.values()].map(a => a.name || a.filename).join(', ');
+      const attachmentNames = [...m.attachments.values()].map(a => esc(a.name || a.filename)).join(', ');
       content = `<em style="color:#666">[Attachment(s)] ${attachmentNames}</em>`;
     } else {
       content = '<em style="color:#666">No text content</em>';
     }
-    const attachments = [...m.attachments.values()].map(a =>
-      a.contentType?.startsWith('image/')
-        ? `<img src="${a.url}" style="max-width:300px;max-height:200px;border-radius:4px;margin-top:4px;display:block" />`
-        : `<a href="${a.url}" style="color:#7289da">${a.name}</a>`
-    ).join('');
+    const attachments = [...m.attachments.values()].map(a => {
+      const safeUrl = safeAttachmentUrl(a.url);
+      if (!safeUrl) return '';
+      return a.contentType?.startsWith('image/')
+        ? `<img src="${safeUrl}" style="max-width:300px;max-height:200px;border-radius:4px;margin-top:4px;display:block" />`
+        : `<a href="${safeUrl}" style="color:#7289da">${esc(a.name)}</a>`;
+    }).join('');
     const embeds = m.embeds.length > 0
       ? `<div style="border-left:3px solid #7289da;padding:4px 8px;margin-top:4px;color:#aaa;font-size:12px">[${m.embeds.length} embed(s)]</div>`
       : '';
@@ -79,7 +99,7 @@ function generateHTML(messages, channel, guild, requestedBy, limit) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Channel Transcript — #${channel.name}</title>
+<title>Channel Transcript — #${esc(channel.name)}</title>
 <style>
  * { box-sizing:border-box; margin:0; padding:0; }
  body { background:#1a1a1a; color:#dcddde; font-family:'Segoe UI',sans-serif; font-size:14px; padding:20px; }
@@ -97,11 +117,11 @@ function generateHTML(messages, channel, guild, requestedBy, limit) {
 </head>
 <body>
 <div class="header">
- <h1>📜 Channel Transcript — #${channel.name}</h1>
+ <h1>📜 Channel Transcript — #${esc(channel.name)}</h1>
  <div class="meta">
- <div class="meta-item"><div class="label">Server</div><div class="value">${guild.name}</div></div>
- <div class="meta-item"><div class="label">Channel</div><div class="value">#${channel.name}</div></div>
- <div class="meta-item"><div class="label">Requested By</div><div class="value">${requestedBy}</div></div>
+ <div class="meta-item"><div class="label">Server</div><div class="value">${esc(guild.name)}</div></div>
+ <div class="meta-item"><div class="label">Channel</div><div class="value">#${esc(channel.name)}</div></div>
+ <div class="meta-item"><div class="label">Requested By</div><div class="value">${esc(requestedBy)}</div></div>
  <div class="meta-item"><div class="label">Messages Captured</div><div class="value">${messages.length}</div></div>
  <div class="meta-item"><div class="label">Limit</div><div class="value">${limit}</div></div>
  <div class="meta-item"><div class="label">Generated</div><div class="value">${new Date().toLocaleString('en-GB', { timeZone: 'UTC' })} UTC</div></div>

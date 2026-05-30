@@ -1,5 +1,6 @@
 // COMMAND_PERMISSION_FALLBACK: auth_level >= 5
 // COMMAND_PERMISSION_FALLBACK: superuser_only;option=mass
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 7;option=team
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { logAction } from '../utils/logger.js';
@@ -90,6 +91,15 @@ export async function execute(interaction) {
     if (!massPerm.allowed) {
       interaction._commandFailed = 'Mass DM requires superuser access.';
       return interaction.reply({ content: `${E.cross} ${massPerm.reason}`, ephemeral: true });
+    }
+  }
+
+  // Team DM has its own permission gate (auth_level >= 7 by default)
+  if (team) {
+    const teamPerm = await canUseCommand('dm:team', interaction);
+    if (!teamPerm.allowed) {
+      interaction._commandFailed = 'Team DM requires elevated access.';
+      return interaction.reply({ content: `${E.cross} ${teamPerm.reason}`, ephemeral: true });
     }
   }
 

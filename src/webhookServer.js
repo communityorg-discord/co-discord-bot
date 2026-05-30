@@ -1898,7 +1898,6 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
   // POST /webhook/dm-with-attachment — DM a user with a file attached
   // Multipart form: { discord_id, body, file, title? }. Header: x-bot-secret.
   webhookApp.post('/webhook/dm-with-attachment', requireBotSecret, uploadDmAttachment.single('file'), async (req, res) => {
-    if (!verifyBotSecret(req, res)) return;
     const discord_id = req.body?.discord_id;
     const body = req.body?.body;
     const title = req.body?.title;
@@ -1964,10 +1963,14 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
         return 'Less than a minute';
       }
   
+      const MAX_SUSPENSION_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
       let durationMs = null;
       if (duration) {
         const { default: ms } = await import('ms');
-        durationMs = ms(duration);
+        const parsed = ms(duration);
+        if (parsed && typeof parsed === 'number') {
+          durationMs = Math.min(parsed, MAX_SUSPENSION_MS);
+        }
       }
       const expiresAt = durationMs ? new Date(Date.now() + durationMs).toISOString() : null;
       const durationDisplay = formatDuration(durationMs);
@@ -2011,35 +2014,8 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
         ]
       });
   
-      // Auto-lift if timed
-      if (durationMs) {
-        setTimeout(async () => {
-          const { unsuspendAcrossGuilds } = await import('./utils/roleManager.js');
-          const { liftSuspension } = await import('./utils/botDb.js');
-          const botDbMod = await import('./utils/botDb.js');
-          await unsuspendAcrossGuilds(client, discordId, botDbMod.default);
-          liftSuspension(discordId);
-          try {
-            const { EmbedBuilder } = await import('discord.js');
-            const user = await client.users.fetch(discordId).catch(() => null);
-            if (user) await user.send({ embeds: [new EmbedBuilder()
-              .setTitle('Suspension Lifted')
-              .setColor(0x22C55E)
-              .setDescription(`${E.check} Your suspension from **Community Organisation** has ended and your roles have been restored.`)
-              .setFooter({ text: 'Community Organisation | Staff Assistant' })
-              .setTimestamp()
-            ]});
-          } catch {}
-          await logAction(client, {
-            action: 'Suspension Lifted (Auto)',
-            moderator: { discordId: 'SYSTEM', name: 'Automated' },
-            target: { discordId, name: targetName || discordId },
-            reason: 'Suspension duration expired',
-            color: 0x22C55E
-          });
-        }, durationMs);
-      }
-  
+      // Auto-lift is handled by the suspension-expiry cron (see bottom of startWebhookServer).
+
       // (Response already sent at the top of the handler — see 'async: true' ack)
     } catch (e) {
       console.error('[BOT WEBHOOK /suspend async]', e.message, e.stack);
@@ -3045,6 +3021,10 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
       return res.status(400).json({ ok: false, error: `unknown permission flag(s): ${unknown.join(', ')}` });
     }
   
+    if (add.some(f => f === 'Administrator')) {
+      return res.status(403).json({ ok: false, error: 'Granting Administrator is not permitted via this endpoint' });
+    }
+
     const targetGuildIds = await resolveTargetGuilds(all_servers, guild_id);
     const results = [];
   
@@ -3143,7 +3123,54 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
   
   // Self-destruct watcher needs the express app for the /api/bot/panic route
   setupSelfDestruct(client, webhookApp);
-  
+
+  // ── Suspension-expiry cron — poll every 60 s for rows that have passed
+  //    their expires_at, then lift them just as the old per-user setTimeout did.
+  //    This survives bot restarts; the old in-process timer did not.
+  setInterval(async () => {
+    try {
+      const { db: bDb, liftSuspension } = await import('./utils/botDb.js');
+      const { unsuspendAcrossGuilds } = await import('./utils/roleManager.js');
+      const { logAction } = await import('./utils/logger.js');
+      const { EmbedBuilder } = await import('discord.js');
+
+      const expired = bDb.prepare(
+        "SELECT discord_id FROM suspensions WHERE active = 1 AND expires_at IS NOT NULL AND expires_at <= datetime('now')"
+      ).all();
+
+      for (const row of expired) {
+        const discordId = row.discord_id;
+        try {
+          // Mark lifted first so a second cron tick can't re-process
+          liftSuspension(discordId);
+          await unsuspendAcrossGuilds(client, discordId, bDb);
+          try {
+            const user = await client.users.fetch(discordId).catch(() => null);
+            if (user) await user.send({ embeds: [new EmbedBuilder()
+              .setTitle('Suspension Lifted')
+              .setColor(0x22C55E)
+              .setDescription(`${E.check} Your suspension from **Community Organisation** has ended and your roles have been restored.`)
+              .setFooter({ text: 'Community Organisation | Staff Assistant' })
+              .setTimestamp()
+            ]});
+          } catch {}
+          await logAction(client, {
+            action: 'Suspension Lifted (Auto)',
+            moderator: { discordId: 'SYSTEM', name: 'Automated' },
+            target: { discordId, name: discordId },
+            reason: 'Suspension duration expired',
+            color: 0x22C55E
+          });
+        } catch (e) {
+          console.error(`[Suspension Cron] Failed to lift ${discordId}:`, e.message);
+        }
+      }
+    } catch (e) {
+      console.error('[Suspension Cron] Poll error:', e.message);
+    }
+  }, 60000);
+  console.log('[Suspension Cron] Started — checking every 60s for expired suspensions');
+
   // Bind to loopback ONLY. Every legitimate caller (staff portal, Atlas,
   // aspire-bot) is co-located on this host and reaches us via localhost:3017.
   // Binding 0.0.0.0 exposed all webhook actions — post-to-any-channel,

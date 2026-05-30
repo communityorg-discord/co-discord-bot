@@ -203,6 +203,7 @@ export async function pollM365Logs() {
   try {
     const auditPosted = await checkAuditLogs();
     if (auditPosted > 0) console.log(`[M365 Logs] Posted ${auditPosted} audit log entries`);
+    lastPollTime = new Date().toISOString();
   } catch (e) {
     console.error('[M365 Logs] Audit poll error:', e.message);
   }
@@ -210,12 +211,10 @@ export async function pollM365Logs() {
   try {
     const emailPosted = await checkEmailActivity();
     if (emailPosted > 0) console.log(`[M365 Logs] Posted ${emailPosted} email activity entries`);
+    lastEmailPollTime = new Date().toISOString();
   } catch (e) {
     console.error('[M365 Logs] Email poll error:', e.message);
   }
-
-  lastPollTime = new Date().toISOString();
-  lastEmailPollTime = new Date().toISOString();
 }
 
 export function startM365LogPolling(client) {

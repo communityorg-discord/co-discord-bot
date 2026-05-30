@@ -34,9 +34,11 @@ export async function execute(interaction) {
   const scorched = interaction.options.getBoolean('scorched');
   const doScorch = scorched === null ? true : scorched;
   const who = interaction.user.tag;
+  // Wrap reason in a code block so any markdown/mentions are rendered inert
+  const safeReason = `\`\`\`\n${reason.replaceAll('`', "'")}\n\`\`\``;
 
   await interaction.reply({
-    content: `${E.warning} **Bot stopping in 5-10 sec.**\nTriggered by: ${who}\nReason: ${reason}\nScorched earth (leave all guilds): **${doScorch}**\nDion + Evan have been DM'd reset instructions.\n\nTo restart:\n${RESET_INSTRUCTIONS}`,
+    content: `${E.warning} **Bot stopping in 5-10 sec.**\nTriggered by: ${who}\nReason: ${safeReason}\nScorched earth (leave all guilds): **${doScorch}**\nDion + Evan have been DM'd reset instructions.\n\nTo restart:\n${RESET_INSTRUCTIONS}`,
     flags: MessageFlags.Ephemeral,
   });
 
@@ -47,7 +49,7 @@ export async function execute(interaction) {
       const u = await interaction.client.users.fetch(uid).catch(() => null);
       if (!u) continue;
       const dm = await u.createDM().catch(() => null);
-      if (dm) await dm.send(`${E.warning} **BOT PANIC via /panic-bot**\nBy: ${who}\nReason: ${reason}\nScorched earth: **${doScorch}**\nTime: ${new Date().toUTCString()}\n\nReset instructions:\n${RESET_INSTRUCTIONS}`).catch(() => {});
+      if (dm) await dm.send(`${E.warning} **BOT PANIC via /panic-bot**\nBy: ${who}\nReason: ${safeReason}\nScorched earth: **${doScorch}**\nTime: ${new Date().toUTCString()}\n\nReset instructions:\n${RESET_INSTRUCTIONS}`).catch(() => {});
     } catch {}
   }
 

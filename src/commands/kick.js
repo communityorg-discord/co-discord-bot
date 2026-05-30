@@ -44,11 +44,12 @@ export async function execute(interaction) {
 
   await interaction.deferReply();
 
-  const inf = addInfraction(targetId, 'kick', reason, interaction.user.id, interaction.user.username);
+  const kicked = await member.kick(reason).catch(() => null);
+  if (!kicked) {
+    return interaction.editReply({ content: `${E.cross} Failed to kick <@${targetId}>. They may have already left or I lack permission.` });
+  }
 
-  await member.kick(reason).catch(err => {
-    return interaction.editReply({ content: `${E.cross} Failed to kick <@${targetId}>: ${err.message}` });
-  });
+  const inf = addInfraction(targetId, 'kick', reason, interaction.user.id, interaction.user.username);
 
   try {
     await target.send({

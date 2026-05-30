@@ -220,7 +220,7 @@ export const data = new SlashCommandBuilder()
   .setDescription('Configure private log channels (separate from /orglogs)');
 
 export async function execute(interaction) {
-  await interaction.deferReply();
+  await interaction.deferReply({ ephemeral: true });
 
   const perm = await canUseCommand('privatelogs', interaction);
   if (!perm.allowed) {
@@ -238,6 +238,11 @@ export async function execute(interaction) {
 }
 
 export async function handleSelect(interaction) {
+  const perm = await canUseCommand('privatelogs', interaction);
+  if (!perm.allowed) {
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, flags: 64 });
+  }
+
   const customId = interaction.customId;
 
   // Back button — return to main view
@@ -374,6 +379,11 @@ export async function handleSelect(interaction) {
 
 export async function handleModal(interaction) {
   if (!interaction.customId.startsWith('privatelogs_channel_')) return;
+
+  const perm = await canUseCommand('privatelogs', interaction);
+  if (!perm.allowed) {
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, flags: 64 });
+  }
 
   const rest = interaction.customId.replace('privatelogs_channel_', '');
 

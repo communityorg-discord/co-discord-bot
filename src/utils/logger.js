@@ -56,9 +56,9 @@ export async function sendToWatchedUsers(client, embed) {
         console.error(`[Logger] sendToWatchedUsers: user ${userId} not found`);
         continue;
       }
-      const dm = await user.createDM().catch(e => null);
+      const dm = await user.createDM().catch(() => null);
       if (!dm) {
-        console.error(`[Logger] sendToWatchedUsers: failed to create DM with ${userId}: ${e.message}`);
+        console.error(`[Logger] sendToWatchedUsers: failed to create DM with ${userId}`);
         continue;
       }
       await dm.send({ embeds: [embed] }).catch(e => {

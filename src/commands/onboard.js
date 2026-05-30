@@ -51,6 +51,11 @@ export async function execute(interaction) {
 export async function handleModal(interaction) {
   if (!interaction.customId.startsWith('onboard_nickname_')) return;
 
+  const perm = await canUseCommand('onboard', interaction);
+  if (!perm.allowed) {
+    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
+  }
+
   await interaction.deferReply({ ephemeral: true });
 
   const parts = interaction.customId.replace('onboard_nickname_', '').split('_');
