@@ -8,6 +8,7 @@ import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG
 import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent, logAtlasBotAction, logMessageEvent } from './utils/botDb.js';
 import { sendToWatchedUsers, logEvent } from './utils/logger.js';
 import { getUserByDiscordId } from './db.js';
+import { canUseCommand } from './utils/permissions.js';
 import * as brag from './commands/brag.js';
 import * as leave from './commands/leave.js';
 import * as staff from './commands/staff.js';
@@ -311,6 +312,10 @@ client.once('clientReady', async () => {
     const unbanAt = new Date(ban.unban_at).getTime();
     if (unbanAt > Date.now()) {
       const remaining = unbanAt - Date.now();
+      if (remaining > MAX_TIMEOUT_MS) {
+        console.log('[C-05] Ban lift for', ban.discord_id, 'is too far out — left to 60s sweep');
+        continue;
+      }
       console.log('[C-05] Scheduling ban lift for', ban.discord_id, 'in', Math.round(remaining / 1000 / 60), 'mins');
       setTimeout(async () => {
         try {
@@ -2010,6 +2015,12 @@ client.on('interactionCreate', async interaction => {
 
     // NID button handlers
     if (interaction.customId.startsWith('nid_confirm_')) {
+      // Re-check permission at confirm time — the original slash command check
+      // only ran when the command was invoked, not when the button is pressed.
+      const nidPerm = await canUseCommand('nid', interaction);
+      if (!nidPerm.allowed) {
+        return interaction.reply({ content: nidPerm.reason, ephemeral: true });
+      }
       // customId = nid_confirm_<userId>_<actionType>; actionType itself contains
       // underscores (e.g. first_written_warning), so split off the prefix + userId
       // and rejoin the remainder as the full action type.
@@ -2689,7 +2700,54 @@ client.on('messageCreate', async (message) => {
 
         if (/^[\d\s\+\-\*\/\(\)\.]+$/.test(content) && content.length > 0) {
           try {
-            const result = Function('"use strict"; return (' + content + ')')();
+            // Safe recursive-descent arithmetic parser — no eval/Function().
+            // Supports: integers, +, -, *, /, parentheses. Rejects decimals in
+            // the final result (non-integer) and overflow.
+            const evalArith = (src) => {
+              let pos = 0;
+              const peek = () => { while (pos < src.length && src[pos] === ' ') pos++; return src[pos]; };
+              const consume = (ch) => { peek(); if (src[pos] !== ch) throw new Error('expected ' + ch); pos++; };
+              const parseExpr = () => {
+                let left = parseTerm();
+                for (;;) {
+                  const op = peek();
+                  if (op !== '+' && op !== '-') break;
+                  pos++;
+                  const right = parseTerm();
+                  left = op === '+' ? left + right : left - right;
+                }
+                return left;
+              };
+              const parseTerm = () => {
+                let left = parseFactor();
+                for (;;) {
+                  const op = peek();
+                  if (op !== '*' && op !== '/') break;
+                  pos++;
+                  const right = parseFactor();
+                  left = op === '*' ? left * right : left / right;
+                }
+                return left;
+              };
+              const parseFactor = () => {
+                peek();
+                if (src[pos] === '(') {
+                  consume('(');
+                  const val = parseExpr();
+                  consume(')');
+                  return val;
+                }
+                if (src[pos] === '-') { pos++; return -parseFactor(); }
+                const start = pos;
+                while (pos < src.length && /[\d.]/.test(src[pos])) pos++;
+                if (pos === start) throw new Error('expected number');
+                return parseFloat(src.slice(start, pos));
+              };
+              peek(); const val = parseExpr(); peek();
+              if (pos !== src.length) throw new Error('unexpected token');
+              return val;
+            };
+            const result = evalArith(content);
             if (typeof result === 'number' && isFinite(result) && result === Math.floor(result)) {
               value = result;
             }
