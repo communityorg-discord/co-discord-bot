@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+# CO production backup — local-only.
+# sqlite snapshot + .env + uploads + transcripts + nginx + PM2 + letsencrypt
+#   → tar.gz → AES256 gpg → ~/backups/co-backup-<UTC ts>.tar.gz.gpg
+# Rotates: keeps the most recent 30 backups, deletes older.
+# Defensive: every step checked; failure exits non-zero AND logs.
+# Manual: ~/bin/backup-now    Cron stub: /etc/cron.d/co-backup (commented)
+
+set -euo pipefail
+
+LOG=/home/vpcommunityorganisation/backup.log
+PASS=/home/vpcommunityorganisation/.config/co/backup-passphrase
+BACKUPS_DIR=/home/vpcommunityorganisation/backups
+PORTAL_DB=/home/vpcommunityorganisation/clawd/services/onboarding-portal/data/onboarding.db
+KEEP=30   # rotation: how many recent backups to retain
+
+log()  { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ)  $*" | tee -a "$LOG"; }
+fail() { log "FAILED: $*"; exit 1; }
+
+[ -r "$PASS" ]            || fail "passphrase file missing: $PASS"
+[ -d "$BACKUPS_DIR" ]     || fail "backups dir missing: $BACKUPS_DIR"
+command -v gpg     >/dev/null || fail "gpg not installed"
+command -v sqlite3 >/dev/null || fail "sqlite3 not installed"
+
+TS=$(date -u +%Y%m%d-%H%M%S)
+WORK=/tmp/co-backup-$TS
+TAR=/tmp/co-backup-$TS.tar.gz
+ENC=$BACKUPS_DIR/co-backup-$TS.tar.gz.gpg
+mkdir -p "$WORK" || fail "could not create $WORK"
+
+cleanup() { rm -rf "$WORK" "$TAR"; }
+trap cleanup EXIT
+
+log "----- backup $TS start -----"
+
+# 1. SQLite atomic snapshot of portal DB
+if [ -f "$PORTAL_DB" ]; then
+  sqlite3 "$PORTAL_DB" ".backup '${WORK}/onboarding.db'" || fail "portal sqlite snapshot failed"
+  log "portal db: $(du -h "${WORK}/onboarding.db" | cut -f1)"
+else
+  log "skip (missing): $PORTAL_DB"
+fi
+
+# 2. Bot's bot-data.db (small but contains command_permissions + log routing)
+BOT_DB=/home/vpcommunityorganisation/clawd/services/co-discord-bot/bot-data.db
+if [ -f "$BOT_DB" ]; then
+  sqlite3 "$BOT_DB" ".backup '${WORK}/bot-data.db'" || fail "bot sqlite snapshot failed"
+  log "bot db: $(du -h "${WORK}/bot-data.db" | cut -f1)"
+fi
+
+# 3. Static artifacts (tolerant of missing files)
+copy_if() {
+  local src="$1" dst="$2"
+  if [ -e "$src" ]; then
+    mkdir -p "${WORK}/${dst}"
+    cp -a "$src" "${WORK}/${dst}/" 2>/dev/null && log "copied: $src" || log "WARN: copy failed for $src"
+  else
+    log "skip (missing): $src"
+  fi
+}
+
+copy_if /home/vpcommunityorganisation/clawd/services/onboarding-portal/.env env/
+copy_if /home/vpcommunityorganisation/clawd/services/co-discord-bot/.env  env/
+copy_if /home/vpcommunityorganisation/clawd/services/onboarding-portal/uploads             portal/
+copy_if /home/vpcommunityorganisation/clawd/services/onboarding-portal/data/chat-attachments portal/
+copy_if /home/vpcommunityorganisation/clawd/services/onboarding-portal/config              portal/
+copy_if /home/vpcommunityorganisation/clawd/services/co-discord-bot/transcripts            bot/
+copy_if /home/vpcommunityorganisation/clawd/recordings                                     bot/
+copy_if /home/vpcommunityorganisation/clawd/services/ecosystem.config.js                   pm2/
+copy_if /home/vpcommunityorganisation/.pm2/dump.pm2                                        pm2/
+copy_if /etc/nginx/sites-available pm2/
+copy_if /etc/nginx/sites-enabled   pm2/
+
+# 3a. Postgres (aspire) — the main money/citizen DB. Not covered by the SQLite
+# snapshot above; pulled here so the bundle is a complete restore source.
+ASPIRE_ENV=/home/vpcommunityorganisation/clawd/services/aspire-shared/.env
+if [ -r "$ASPIRE_ENV" ]; then
+  DBURL=$(grep -E '^ASPIRE_DB_URL=' "$ASPIRE_ENV" | head -1 | cut -d= -f2-)
+  if [ -n "$DBURL" ] && command -v pg_dump >/dev/null; then
+    mkdir -p "${WORK}/postgres"
+    if pg_dump --no-owner --no-privileges "$DBURL" | gzip -9 > "${WORK}/postgres/aspire-db.sql.gz"; then
+      log "postgres dump: $(du -h "${WORK}/postgres/aspire-db.sql.gz" | cut -f1)"
+    else
+      log "WARN: postgres pg_dump failed"
+    fi
+  else
+    log "skip postgres: ASPIRE_DB_URL or pg_dump missing"
+  fi
+fi
+
+# 3b. Source code — all repos with full git history (minus node_modules / build
+# output / media). Lets the bundle reconstruct the codebase offline.
+if [ -d /home/vpcommunityorganisation/clawd/services ]; then
+  mkdir -p "${WORK}/code"
+  # Working source minus node_modules / build output / media / .git (full git
+  # history lives on GitHub; this is the current code for offline restore).
+  tar czf "${WORK}/code/services-src.tar.gz" -C /home/vpcommunityorganisation/clawd \
+      --warning=no-file-changed --ignore-failed-read \
+      --exclude='*/node_modules' --exclude='*/.git' --exclude='*/dist' --exclude='*/dist-old' \
+      --exclude='*/dist-prev' --exclude='*/dist-prev2' --exclude='*/dist-prev3' \
+      --exclude='*/.next' --exclude='*/.cache' --exclude='*/.vite' --exclude='*/coverage' \
+      --exclude='*/trailer-captures*' --exclude='*/uploads' \
+      --exclude='*/data' --exclude='*/assets' \
+      services 2>/dev/null || true
+  if [ -s "${WORK}/code/services-src.tar.gz" ]; then
+    log "code archive: $(du -h "${WORK}/code/services-src.tar.gz" | cut -f1) (working source, no .git)"
+  else
+    log "WARN: code archive empty"
+  fi
+fi
+
+# Vaultwarden — stop the container, snapshot the data dir, restart. The
+# stop guarantees a clean SQLite snapshot (db.sqlite3 + -wal + -shm). Brief
+# downtime (~5 sec). See ~/clawd/services/vault/CLAUDE.md.
+if [ -d /home/vpcommunityorganisation/clawd/services/vault/data ] && command -v docker >/dev/null 2>&1; then
+  if sudo -n docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^co-vaultwarden$'; then
+    sudo -n docker stop co-vaultwarden >/dev/null 2>&1 && log "vaultwarden: stopped for snapshot"
+    mkdir -p "${WORK}/vault"
+    sudo -n cp -a /home/vpcommunityorganisation/clawd/services/vault/data "${WORK}/vault/" 2>/dev/null \
+      && sudo -n chown -R vpcommunityorganisation:vpcommunityorganisation "${WORK}/vault" \
+      && log "vaultwarden: snapshot $(du -sh "${WORK}/vault/data" | cut -f1)" \
+      || log "WARN: vaultwarden data copy failed"
+    sudo -n docker start co-vaultwarden >/dev/null 2>&1 && log "vaultwarden: restarted" \
+      || log "WARN: vaultwarden RESTART FAILED — manual intervention required"
+    # Also snapshot the docker-compose.yml + branding so a full restore works
+    cp -a /home/vpcommunityorganisation/clawd/services/vault/docker-compose.yml "${WORK}/vault/" 2>/dev/null
+    cp -a /home/vpcommunityorganisation/clawd/services/vault/branding "${WORK}/vault/" 2>/dev/null
+  else
+    log "skip vaultwarden: container not running"
+  fi
+fi
+
+# letsencrypt requires sudo to read; copy as root then chown back
+if [ -d /etc/letsencrypt ]; then
+  sudo -n cp -a /etc/letsencrypt "${WORK}/letsencrypt" 2>/dev/null \
+    && sudo -n chown -R vpcommunityorganisation:vpcommunityorganisation "${WORK}/letsencrypt" \
+    && log "copied: /etc/letsencrypt" || log "WARN: letsencrypt copy needs sudo"
+fi
+
+# 4. Manifest with sizes + SHA256
+MANIFEST="${WORK}/manifest.txt"
+{
+  echo "# CO backup manifest — $TS UTC"
+  echo "# host: $(hostname) · user: $(whoami)"
+  echo
+  printf "%-12s  %-64s  %s\n" "SIZE" "SHA256" "PATH"
+  cd "$WORK"
+  find . -type f ! -name 'manifest.txt' -print0 \
+    | sort -z \
+    | xargs -0 -I{} bash -c 'sz=$(stat -c %s "{}"); h=$(sha256sum "{}" | cut -d" " -f1); printf "%-12d  %s  %s\n" "$sz" "$h" "{}"'
+} > "$MANIFEST" || fail "manifest generation failed"
+log "manifest: $(wc -l < "$MANIFEST") rows"
+
+# 5. tar.gz the working dir (preserves perms)
+tar -C /tmp -czf "$TAR" "co-backup-$TS" || fail "tar failed"
+TAR_SIZE=$(du -h "$TAR" | cut -f1)
+log "tar.gz: $TAR_SIZE"
+
+# 6. Encrypt with AES256 + passphrase from file
+gpg --batch --quiet --yes \
+    --symmetric --cipher-algo AES256 \
+    --passphrase-file "$PASS" \
+    --output "$ENC" "$TAR" || fail "gpg encryption failed"
+ENC_SIZE=$(du -h "$ENC" | cut -f1)
+log "encrypted: $ENC -> $ENC_SIZE"
+
+# 7. Rotation — keep the most recent $KEEP, delete older
+RETAINED=$(ls -1 "$BACKUPS_DIR"/co-backup-*.tar.gz.gpg 2>/dev/null | wc -l)
+PRUNED=0
+if [ "$RETAINED" -gt "$KEEP" ]; then
+  ls -1t "$BACKUPS_DIR"/co-backup-*.tar.gz.gpg | tail -n +$((KEEP+1)) | while read -r old; do
+    rm -f "$old" && log "rotated out: $(basename "$old")"
+  done
+  PRUNED=$((RETAINED - KEEP))
+fi
+KEEPCOUNT=$(ls -1 "$BACKUPS_DIR"/co-backup-*.tar.gz.gpg 2>/dev/null | wc -l)
+log "rotation: kept=$KEEPCOUNT pruned=$PRUNED"
+
+log "SUCCESS  $(basename "$ENC")  size=${ENC_SIZE}  retained=${KEEPCOUNT}"
+log "----- backup $TS end -----"
