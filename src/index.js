@@ -76,6 +76,7 @@ import { setupHaydenWatcher } from './services/haydenWatcher.js';
 import { setupDestructionWatcher } from './services/destructionWatcher.js';
 import { setupAspireWebhook } from './services/aspireWebhook.js';
 import { setupSelfDestruct } from './services/selfDestruct.js';
+import { setupClaudeBridge } from './services/claudeBridge.js';
 import * as panicBotCmd from './commands/panic-bot.js';
 import * as officeSetup from './commands/officeSetup.js';
 import * as counting from './commands/counting.js';
@@ -147,6 +148,7 @@ client.commands = new Collection();
 setupHaydenWatcher(client);
 setupDestructionWatcher(client);
 setupAspireWebhook(client);
+setupClaudeBridge(client);   // founders: reply "Claude …" to fix things from Discord
 
 // Module-scope tracking sets — shared by the 'ready' handler that
 // reads/syncs them and the top-level voiceStateUpdate / messageCreate
