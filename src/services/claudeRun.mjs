@@ -9,7 +9,7 @@
 //   CR_CHANNEL, CR_MSG (the trigger message), CR_PROMPT_B64 (base64 prompt),
 //   CR_RESUME (optional session id to continue).
 import { spawn } from 'node:child_process';
-import { mkdirSync, rmSync, existsSync, statSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, openSync, writeSync, closeSync, unlinkSync } from 'node:fs';
 
 const REPO = '/home/vpcommunityorganisation/clawd/services';
 const CLAUDE = '/home/vpcommunityorganisation/.npm-global/bin/claude';
@@ -59,14 +59,23 @@ const editMsg = (id, payload) => dapi('PATCH', `/channels/${CHANNEL}/messages/${
 
 // ── Host-level locks (work across BOTH bots) ──────────────────────────
 function claimMessage(id) { try { mkdirSync(CLAIMS, { recursive: true }); mkdirSync(`${CLAIMS}/${id}`); return true; } catch { return false; } }
+// PID-stamped lock file. If the lock exists but its owner PID is dead (e.g. a
+// run got killed by a bot restart before releasing), it's stale → clear + take
+// it. No more 20-min stuck locks blocking every new run.
 function acquireRunLock() {
-  try {
-    mkdirSync(LOCK_DIR, { recursive: true });
-    if (existsSync(RUN_LOCK)) { if (Date.now() - statSync(RUN_LOCK).mtimeMs > TIMEOUT_MS + 60_000) rmSync(RUN_LOCK, { recursive: true, force: true }); }
-    mkdirSync(RUN_LOCK); return true;
-  } catch { return false; }
+  mkdirSync(LOCK_DIR, { recursive: true });
+  for (let i = 0; i < 3; i++) {
+    try { const fd = openSync(RUN_LOCK, 'wx'); writeSync(fd, String(process.pid)); closeSync(fd); return true; }
+    catch {
+      let alive = false;
+      try { const pid = parseInt(readFileSync(RUN_LOCK, 'utf8'), 10); if (pid) { process.kill(pid, 0); alive = true; } } catch { alive = false; }
+      if (alive) return false;            // held by a live run
+      try { unlinkSync(RUN_LOCK); } catch { }   // stale → clear and retry
+    }
+  }
+  return false;
 }
-const releaseRunLock = () => { try { rmSync(RUN_LOCK, { recursive: true, force: true }); } catch { } };
+const releaseRunLock = () => { try { unlinkSync(RUN_LOCK); } catch { } };
 function rememberSession(replyId, sessionId) {
   if (!replyId || !sessionId) return;
   let map = {}; try { map = JSON.parse(readFileSync(SESS_FILE, 'utf8')); } catch { }

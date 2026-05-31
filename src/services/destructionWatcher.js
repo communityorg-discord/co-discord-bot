@@ -23,6 +23,40 @@ const SUPPRESS_ACTORS = new Set([
   '415922272956710912',  // evans
 ]);
 
+// Discord renders <t:unix:F> as a localized full date and <t:unix:R> as a relative
+// "x minutes ago" — far friendlier than a raw UTC string the reader has to parse.
+const ts = () => { const s = Math.floor(Date.now() / 1000); return `<t:${s}:F> · <t:${s}:R>`; };
+// A mention resolves to the live username (and is clickable); keep the tag in parens
+// for the permanent record in case the account later changes name or leaves.
+const execLabel = (u) => u ? `<@${u.id}>${u.tag ? ` (${u.tag})` : ''}` : 'unknown';
+
+// Friendly, human names for the audit-log actions we surface. Raw enum names like
+// "MemberKick" read as developer jargon — these read like plain English.
+const ACTION_LABEL = {
+  [AuditLogEvent.ChannelCreate]:     '➕ Channel created',
+  [AuditLogEvent.WebhookCreate]:     '🪝 Webhook created',
+  [AuditLogEvent.WebhookDelete]:     '🪝 Webhook deleted',
+  [AuditLogEvent.MemberKick]:        '👢 Member kicked',
+  [AuditLogEvent.IntegrationCreate]: '🔌 Integration added',
+  [AuditLogEvent.IntegrationDelete]: '🔌 Integration removed',
+  [AuditLogEvent.GuildUpdate]:       '🏠 Server settings changed',
+  [AuditLogEvent.RoleUpdate]:        '🎭 Role updated',
+  [AuditLogEvent.MemberRoleUpdate]:  '🎭 Member roles changed',
+};
+
+// Render an audit-log target as something a human can read — a @user / @role / #channel
+// mention rather than a bare "User 1507290590000189560".
+function targetLabel(entry) {
+  const id = entry.targetId;
+  if (!id) return entry.targetType || 'unknown';
+  switch (entry.targetType) {
+    case 'User':    return `<@${id}>`;
+    case 'Role':    return `<@&${id}>`;
+    case 'Channel': return `<#${id}>`;
+    default:        return `${entry.targetType || 'item'} \`${id}\``;
+  }
+}
+
 async function alert(client, body) {
   const embed = new EmbedBuilder()
     .setColor(0xEF4444)
@@ -65,8 +99,8 @@ export function setupDestructionWatcher(client) {
       `${E.cross} **CHANNEL DELETED** — ${channel.guild.name}\n` +
       `Channel: #${channel.name} (${channel.id})\n` +
       `Type: ${channel.type}\n` +
-      `Executor: ${exec?.tag || exec?.id || 'unknown'}\n` +
-      `Time: ${new Date().toUTCString()}`);
+      `By: ${execLabel(exec)}\n` +
+      `When: ${ts()}`);
   });
 
   client.on(Events.GuildRoleDelete, async (role) => {
@@ -75,8 +109,8 @@ export function setupDestructionWatcher(client) {
     await alert(client,
       `${E.cross} **ROLE DELETED** — ${role.guild.name}\n` +
       `Role: ${role.name} (${role.id}) — ${role.members?.size || '?'} members had it\n` +
-      `Executor: ${exec?.tag || exec?.id || 'unknown'}\n` +
-      `Time: ${new Date().toUTCString()}`);
+      `By: ${execLabel(exec)}\n` +
+      `When: ${ts()}`);
   });
 
   client.on(Events.MessageBulkDelete, async (messages, channel) => {
@@ -86,8 +120,8 @@ export function setupDestructionWatcher(client) {
     await alert(client,
       `${E.cross} **BULK MESSAGE DELETE** — ${channel.guild.name}\n` +
       `#${channel.name} — ${messages?.size || '?'} messages\n` +
-      `Executor: ${exec?.tag || exec?.id || 'unknown'}\n` +
-      `Time: ${new Date().toUTCString()}`);
+      `By: ${execLabel(exec)}\n` +
+      `When: ${ts()}`);
   });
 
   client.on(Events.GuildBanAdd, async (ban) => {
@@ -95,10 +129,10 @@ export function setupDestructionWatcher(client) {
     if (exec && SUPPRESS_ACTORS.has(exec.id)) return;
     await alert(client,
       `${E.ban} **MEMBER BANNED** — ${ban.guild.name}\n` +
-      `Target: ${ban.user.tag} (${ban.user.id})\n` +
-      `Reason: ${ban.reason || '(none)'}\n` +
-      `Executor: ${exec?.tag || exec?.id || 'unknown'}\n` +
-      `Time: ${new Date().toUTCString()}`);
+      `Target: <@${ban.user.id}> (${ban.user.tag})\n` +
+      `Reason: ${ban.reason || '_none given_'}\n` +
+      `By: ${execLabel(exec)}\n` +
+      `When: ${ts()}`);
   });
 
   client.on(Events.GuildBanRemove, async (ban) => {
@@ -107,9 +141,9 @@ export function setupDestructionWatcher(client) {
     // Unban is HIGH SIGNAL — someone undoing a security action
     await alert(client,
       `${E.warning} **MEMBER UNBANNED** — ${ban.guild.name}\n` +
-      `Target: ${ban.user.tag} (${ban.user.id})\n` +
-      `Executor: ${exec?.tag || exec?.id || 'unknown'}\n` +
-      `Time: ${new Date().toUTCString()}\n` +
+      `Target: <@${ban.user.id}> (${ban.user.tag})\n` +
+      `By: ${execLabel(exec)}\n` +
+      `When: ${ts()}\n` +
       `**This undoes a previous ban — investigate.**`);
   });
 
@@ -132,13 +166,15 @@ export function setupDestructionWatcher(client) {
       AuditLogEvent.MemberRoleUpdate,
     ]);
     if (!ALERT_ON.has(entry.action)) return;
-    const actionName = Object.keys(AuditLogEvent).find(k => AuditLogEvent[k] === entry.action) || `#${entry.action}`;
+    const label = ACTION_LABEL[entry.action]
+      || Object.keys(AuditLogEvent).find(k => AuditLogEvent[k] === entry.action)
+      || `Action #${entry.action}`;
     await alert(client,
-      `${E.shield} **Audit log: ${actionName}** — ${guild.name}\n` +
-      `Target: ${entry.targetType || '?'} ${entry.targetId || ''}\n` +
-      `Executor: ${entry.executor?.tag || entry.executor?.id || 'unknown'}\n` +
-      `Reason: ${entry.reason || '(none)'}\n` +
-      `Time: ${new Date().toUTCString()}`);
+      `${E.shield} **${label}** — ${guild.name}\n` +
+      `Target: ${targetLabel(entry)}\n` +
+      `By: ${execLabel(entry.executor)}\n` +
+      `Reason: ${entry.reason || '_none given_'}\n` +
+      `When: ${ts()}`);
   });
 
   console.log('[destructionWatcher] active — channel/role deletions, bulk deletes, bans/unbans, high-signal audit log entries');

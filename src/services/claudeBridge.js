@@ -79,8 +79,12 @@ export function setupClaudeBridge(client) {
       const env = { ...process.env, CR_CHANNEL: message.channel.id, CR_MSG: message.id, CR_PROMPT_B64: Buffer.from(prompt).toString('base64') };
       if (resume) env.CR_RESUME = resume;
 
-      const child = spawn('node', [RUNNER], { detached: true, stdio: 'ignore', env });
-      child.unref();  // fully detach — survives a bot restart
+      // setsid → the runner becomes a new session leader and is reparented to
+      // init immediately, so pm2's tree-kill on a bot restart can't reach it.
+      // (Plain detached:true wasn't enough — the runner was still a child at
+      // kill time and got taken down with the bot.)
+      const child = spawn('setsid', ['node', RUNNER], { detached: true, stdio: 'ignore', env });
+      child.unref();
       console.log(JSON.stringify({ msg: 'claudeBridge dispatched', user: message.author.username, resume: !!resume, instruction: instruction.slice(0, 120) }));
     } catch (e) {
       console.error('[claudeBridge]', e.message);
