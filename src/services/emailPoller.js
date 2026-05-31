@@ -144,7 +144,7 @@ export async function pollAllInboxes(client) {
               const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
               if (logChannel) {
                 const logEmbed = new EmbedBuilder()
-                  .setTitle(`New Email — ${inbox.emoji} ${inbox.name}`)
+                  .setTitle(`New Email — ${inbox.name}`)
                   .setColor(0x1a73e8)
                   .setDescription(`${E.dm} **New Email — ${inbox.name}**`)
                   .addFields(

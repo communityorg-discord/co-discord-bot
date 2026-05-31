@@ -101,7 +101,7 @@ export async function execute(interaction) {
       return interaction.reply({ ephemeral: true, content: `${E.cross} You do not have access to ticket \`${ref}\`.` });
     }
     const embed = new EmbedBuilder()
-      .setTitle(`${STATUS_EMOJI[t.status] || '•'} ${ref} — ${title(t.status)}`)
+      .setTitle(`${ref} — ${title(t.status)}`)
       .setDescription(`${E.ticket} ${t.title || '(no title)'}`)
       .setColor(PRIORITY_COLOR[t.priority] ?? 0x6366f1)
       .setURL(`${PORTAL_URL}?tab=admin&ticket=${t.id}`)

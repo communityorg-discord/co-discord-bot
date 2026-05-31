@@ -64,7 +64,7 @@ function buildEmailListEmbed(inbox, result, page) {
     };
   });
   const embed = new EmbedBuilder()
-    .setTitle(`${inbox.emoji} ${inbox.name}`)
+    .setTitle(`${inbox.name}`)
     .setColor(0x1a73e8)
     .setDescription(inbox.description || 'No description')
     .setFooter({ text: `Page ${page + 1}/${totalPages} • ${total} emails` });

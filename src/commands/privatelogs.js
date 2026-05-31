@@ -300,7 +300,7 @@ export async function handleSelect(interaction) {
     }
 
     const catEmbed = new EmbedBuilder()
-      .setTitle(`${cat.emoji} ${cat.label} — Private Bindings`)
+      .setTitle(`${cat.label} — Private Bindings`)
       .setColor(0x8b5cf6)
       .setDescription(`${E.logs} Private log bindings — separate from /orglogs.`)
       .addFields({ name: '​', value: typeRows.join('\n'), inline: false })
@@ -327,7 +327,7 @@ export async function handleSelect(interaction) {
 
     const modal = new ModalBuilder()
       .setCustomId(`privatelogs_channel_catchall_${globalKey}`)
-      .setTitle(`${cat.emoji} ${cat.label} — Set Channel`);
+      .setTitle(`${cat.label} — Set Channel`);
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(

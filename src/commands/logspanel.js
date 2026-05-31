@@ -286,7 +286,7 @@ export async function handleSelect(interaction) {
     }
 
     const catEmbed = new EmbedBuilder()
-      .setTitle(`${cat.emoji} ${cat.label} — Log Bindings`)
+      .setTitle(`${cat.label} — Log Bindings`)
       .setColor(0x5865F2)
       .addFields({ name: '​', value: typeRows.join('\n'), inline: false })
       .setFooter({ text: 'Community Organisation | Staff Assistant' })
@@ -312,7 +312,7 @@ export async function handleSelect(interaction) {
 
     const modal = new ModalBuilder()
       .setCustomId(`logspanel_channel_global_${globalKey}`)
-      .setTitle(`${cat.emoji} ${cat.label} — Set Channel`);
+      .setTitle(`${cat.label} — Set Channel`);
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(

@@ -297,7 +297,7 @@ export async function handleSelect(interaction) {
     }
 
     const catEmbed = new EmbedBuilder()
-      .setTitle(`${cat.emoji} ${cat.label} — Organisation Bindings`)
+      .setTitle(`${cat.label} — Organisation Bindings`)
       .setColor(0xf59e0b)
       .setDescription(`${E.logs} These apply to logs from **all CO servers**.`)
       .addFields({ name: '​', value: typeRows.join('\n'), inline: false })
@@ -324,7 +324,7 @@ export async function handleSelect(interaction) {
 
     const modal = new ModalBuilder()
       .setCustomId(`orglogs_channel_catchall_${globalKey}`)
-      .setTitle(`${cat.emoji} ${cat.label} — Set Channel`);
+      .setTitle(`${cat.label} — Set Channel`);
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(
