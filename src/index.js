@@ -2673,6 +2673,7 @@ client.on('guildMemberRemove', async (member) => {
       .setDescription(`${E.leave} A member left the server.`)
       .addFields(
         { name: 'Member', value: `${E.member} ${member.user?.username || 'Unknown'} (<@${member.user?.id || member.id}>)`, inline: true },
+        { name: 'User ID', value: `\`${member.user?.id || member.id}\``, inline: true },
         { name: 'Server', value: member.guild?.name || '—', inline: true },
       ).setTimestamp().setFooter({ text: 'Community Organisation | Member Log' });
     await logEvent(client, { embed, category: 'membership', type: 'member_leave', guildId: member.guild?.id });
