@@ -84,8 +84,33 @@ function rememberSession(replyId, sessionId) {
   try { writeFileSync(SESS_FILE, JSON.stringify(map)); } catch { }
 }
 
-const ACTIVITY = { Read: 'reading the code', Edit: 'editing code', MultiEdit: 'editing code', Write: 'writing a file', Bash: 'running a command', Grep: 'searching the code', Glob: 'looking for files', Task: 'spinning up a sub-agent', WebFetch: 'checking a page', TodoWrite: 'planning the steps' };
+// High-level stages, ticked off live as the session works through them.
+const PHASES = {
+  investigate: { emoji: '🔍', doing: 'Reading the code',         done: 'Read the code' },
+  edit:        { emoji: '✏️', doing: 'Editing the code',         done: 'Edited the code' },
+  build:       { emoji: '📦', doing: 'Building',                 done: 'Built it' },
+  deploy:      { emoji: '🚀', doing: 'Deploying',                done: 'Deployed' },
+  commit:      { emoji: '💾', doing: 'Committing to git',        done: 'Committed' },
+  run:         { emoji: '⚙️', doing: 'Running a command',        done: 'Ran a command' },
+  subagent:    { emoji: '🤖', doing: 'Working with a sub-agent', done: 'Used a sub-agent' },
+  think:       { emoji: '💭', doing: 'Thinking it through',      done: 'Thought it through' },
+};
+function phaseFor(name, input) {
+  if (['Read', 'Grep', 'Glob', 'LS'].includes(name)) return 'investigate';
+  if (['Edit', 'MultiEdit', 'Write', 'NotebookEdit'].includes(name)) return 'edit';
+  if (name === 'Task') return 'subagent';
+  if (name === 'Bash') {
+    const c = String(input?.command || '').toLowerCase();
+    if (/npm (run )?build|vite build|\btsc\b|webpack/.test(c)) return 'build';
+    if (/pm2 (restart|reload|start)/.test(c)) return 'deploy';
+    if (/git (commit|push)/.test(c)) return 'commit';
+    if (/git (add|status|diff|stash)/.test(c)) return 'edit';
+    return 'run';
+  }
+  return 'think';
+}
 const embed = (color, desc, footer) => ({ color, author: { name: 'Claude' }, description: String(desc).slice(0, 4000), footer: footer ? { text: footer } : undefined, timestamp: new Date().toISOString() });
+const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 (async () => {
   if (!TOKEN || !CHANNEL || !MSG) { console.error('[claudeRun] missing token/channel/msg'); process.exit(1); }
@@ -96,14 +121,25 @@ const embed = (color, desc, footer) => ({ color, author: { name: 'Claude' }, des
   await react('👀');
   await typing();
   const typer = setInterval(() => typing(), 8000);
-  const status = await reply({ embeds: [embed(0x6c7bff, '🔧 On it — spinning up a session…', 'live · working…')] });
+  const startedAt = Date.now();
+  const seen = [];                              // ordered phase keys (consecutive-deduped)
+  const pushPhase = (k) => { if (seen[seen.length - 1] !== k) seen.push(k); };
+  const renderProgress = () => {
+    const list = seen.slice(-8);
+    return (list.length ? list : ['investigate']).map((k, i) => {
+      const p = PHASES[k] || PHASES.think;
+      return i === list.length - 1 ? `${p.emoji} ${p.doing}…` : `✅ ${p.done}`;
+    }).join('\n');
+  };
+  const renderDone = () => seen.slice(-8).map(k => `✅ ${(PHASES[k] || PHASES.think).done}`).join('\n');
+  const status = await reply({ embeds: [embed(0x6c7bff, '🔧 Spinning up a session…', 'live · 0:00')] });
   const statusId = status?.id || null;
   let lastEdit = 0;
-  const setStatus = async (txt) => {
+  const setStatus = async () => {
     if (!statusId) return;
-    if (Date.now() - lastEdit < 3500) return;
+    if (Date.now() - lastEdit < 3000) return;
     lastEdit = Date.now();
-    await editMsg(statusId, { embeds: [embed(0x6c7bff, '🔧 ' + txt, 'live · working…')] }).catch(() => { });
+    await editMsg(statusId, { embeds: [embed(0x6c7bff, renderProgress(), `live · ${mmss(Date.now() - startedAt)}`)] }).catch(() => { });
   };
 
   const args = ['-p', '--output-format', 'stream-json', '--verbose', '--dangerously-skip-permissions'];
@@ -121,11 +157,11 @@ const embed = (color, desc, footer) => ({ color, author: { name: 'Claude' }, des
       const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
       if (!line.trim()) continue;
       let ev; try { ev = JSON.parse(line); } catch { continue; }
-      if (ev.type === 'system' && ev.subtype === 'init') { sessionId = ev.session_id || sessionId; setStatus('reading the code…'); }
+      if (ev.type === 'system' && ev.subtype === 'init') { sessionId = ev.session_id || sessionId; pushPhase('investigate'); setStatus(); }
       else if (ev.type === 'assistant' && ev.message?.content) {
-        const tools = ev.message.content.filter(b => b.type === 'tool_use').map(b => b.name);
-        if (tools.length) setStatus(ACTIVITY[tools[tools.length - 1]] || (tools[tools.length - 1] + '…'));
-        else { const t = ev.message.content.find(b => b.type === 'text'); if (t?.text) setStatus('thinking it through…'); }
+        const toolBlocks = ev.message.content.filter(b => b.type === 'tool_use');
+        if (toolBlocks.length) { const tb = toolBlocks[toolBlocks.length - 1]; pushPhase(phaseFor(tb.name, tb.input)); setStatus(); }
+        else if (ev.message.content.some(b => b.type === 'text' && b.text)) { pushPhase('think'); setStatus(); }
       } else if (ev.type === 'result') { finalText = ev.result; sessionId = ev.session_id || sessionId; isErr = !!ev.is_error; cost = ev.total_cost_usd || 0; turns = ev.num_turns || 0; }
     }
   });
@@ -140,7 +176,11 @@ const embed = (color, desc, footer) => ({ color, author: { name: 'Claude' }, des
     else await reply({ content: '❌ Couldn\'t finish — ' + msg });
   } else {
     await react('✅');
-    const e = embed(0x6c7bff, finalText, `session ${String(sessionId || '').slice(0, 8)} · ${turns} turns · $${cost.toFixed(3)} · reply to continue`);
+    // Final card: the completed stage checklist, then the summary — so you see
+    // the whole journey + the result.
+    const stages = renderDone();
+    const body = (stages ? stages + '\n\n' : '') + String(finalText);
+    const e = embed(0x4ade80, body, `✓ done in ${mmss(Date.now() - startedAt)} · ${turns} turns · $${cost.toFixed(3)} · reply to continue`);
     let replyId = statusId;
     if (statusId) await editMsg(statusId, { embeds: [e] });
     else { const r = await reply({ embeds: [e] }); replyId = r?.id; }
