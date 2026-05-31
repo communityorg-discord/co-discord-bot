@@ -1987,12 +1987,12 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
           await user.send({ embeds: [new EmbedBuilder()
             .setTitle('You Have Been Suspended')
             .setColor(0xEF4444)
-            .setDescription(`${E.suspend} You have been suspended from **Community Organisation**.\n\nIf you believe this is an error, you may appeal in the Appeals Server.`)
+            .setDescription(`${E.suspend} You have been suspended from **Community Organisation**. If you believe this is an error, you may appeal in the Appeals Server.`)
             .addFields(
-              { name: 'Reason', value: reason || 'No reason provided', inline: false },
-              { name: 'Duration', value: durationDisplay, inline: true },
-              { name: 'Expires', value: expiresDisplay, inline: true },
-              { name: 'Actioned By', value: moderatorName || 'Staff Management', inline: true },
+              { name: 'Reason', value: `${E.info} ${reason || 'No reason provided'}`, inline: false },
+              { name: 'Duration', value: `${E.calendar} ${durationDisplay}`, inline: true },
+              { name: 'Expires', value: `${E.pending} ${expiresDisplay}`, inline: true },
+              { name: 'Actioned By', value: `${E.staff} ${moderatorName || 'Staff Management'}`, inline: true },
             )
             .setFooter({ text: 'Community Organisation | Staff Assistant' })
             .setTimestamp()
@@ -2048,7 +2048,7 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
             .setTitle('Suspension Lifted')
             .setColor(0x22C55E)
             .setDescription(`${E.check} Your suspension from **Community Organisation** has ended and your roles have been restored.`)
-            .addFields({ name: 'Actioned By', value: moderatorName || 'Staff Management', inline: true })
+            .addFields({ name: 'Actioned By', value: `${E.staff} ${moderatorName || 'Staff Management'}`, inline: true })
             .setFooter({ text: 'Community Organisation | Staff Assistant' })
             .setTimestamp()
           ]});
@@ -2605,11 +2605,12 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
       const embed = new EmbedBuilder()
         .setTitle('CO Shop — Approval Required')
         .setColor(0xC9A84C)
+        .setDescription(`${E.ticket} A staff member has requested a CO Shop perk redemption. Approve or decline below.`)
         .addFields(
-          { name: 'Staff Member', value: staff_display_name || 'Unknown', inline: true },
-          { name: 'Perk Requested', value: perk_name || 'Unknown', inline: true },
-          { name: 'Cost', value: `${perk_cost} pts`, inline: true },
-          { name: 'Shop Closes', value: shopCloseFormatted, inline: true },
+          { name: 'Staff Member', value: `${E.staff} ${staff_display_name || 'Unknown'}`, inline: true },
+          { name: 'Perk Requested', value: `${E.star} ${perk_name || 'Unknown'}`, inline: true },
+          { name: 'Cost', value: `${E.aps} ${perk_cost} pts`, inline: true },
+          { name: 'Shop Closes', value: `${E.calendar} ${shopCloseFormatted}`, inline: true },
         )
         .setFooter({ text: 'Only one EOB member needs to action this. Buttons will disable once actioned.' })
         .setTimestamp();

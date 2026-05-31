@@ -18,7 +18,12 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setColor(0xf87171)
     .setTitle('Emergency override code')
-    .setDescription(`${E.warning} \`\`\`\n${code}\n\`\`\`\nEnter this on the dev site’s **Pending approvals** to push a pending action through **without the second admin** — for emergencies only.\n\n• Single use\n• Expires <t:${Math.floor(expiresAt / 1000)}:R>`)
+    .setDescription(`${E.warning} Enter this on the dev site’s **Pending approvals** to push a pending action through **without the second admin** — for emergencies only.`)
+    .addFields(
+      { name: 'Code', value: `\`\`\`\n${code}\n\`\`\``, inline: false },
+      { name: 'Uses', value: 'Single use', inline: true },
+      { name: 'Expires', value: `<t:${Math.floor(expiresAt / 1000)}:R>`, inline: true },
+    )
     .setFooter({ text: 'Community Organisation · emergency override' });
   return interaction.reply({ embeds: [embed], flags: 64 });
 }

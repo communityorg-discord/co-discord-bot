@@ -90,15 +90,18 @@ export async function execute(interaction) {
       return interaction.editReply({ content: 'No counting channels set up in this server.' });
     }
 
-    const lines = channels.map(c => {
-      const failedBy = c.failed_at !== null ? `Last ruined at **${c.failed_at}**` : 'Never ruined';
-      return `<#${c.channel_id}> — Current: **${c.current_count}** | High score: **${c.high_score}** | ${failedBy}`;
-    });
-
     const embed = new EmbedBuilder()
       .setTitle('Counting Leaderboard')
       .setColor(0x5865F2)
-      .setDescription(`${E.star} ${lines.join('\n')}`)
+      .setDescription(`${E.star} Counting channel stats for this server.`)
+      .addFields(channels.slice(0, 25).map((c, i) => {
+        const failedBy = c.failed_at !== null ? `Last ruined at **${c.failed_at}**` : 'Never ruined';
+        return {
+          name: `#${i + 1}`,
+          value: `<#${c.channel_id}>\nCurrent: **${c.current_count}** · High score: **${c.high_score}**\n${failedBy}`,
+          inline: true,
+        };
+      }))
       .setTimestamp();
 
     return interaction.editReply({ embeds: [embed] });

@@ -431,7 +431,11 @@ client.once('clientReady', async () => {
             await assignee.send({ embeds: [new EmbedBuilder()
               .setTitle('OVERDUE TASK')
               .setColor(0xEF4444)
-              .setDescription(`${E.warning} Your assignment **"${a.title}"** was due ${Math.round(hoursOverdue)} hour(s) ago and has not been marked complete.\n\nPlease complete it immediately or request an extension via the portal.`)
+              .setDescription(`${E.warning} Complete it immediately or request an extension via the portal.`)
+              .addFields(
+                { name: 'Assignment', value: a.title, inline: false },
+                { name: 'Overdue By', value: `${Math.round(hoursOverdue)} hour(s)`, inline: true },
+              )
               .setFooter({ text: `ASN-${a.id} | Community Organisation` })
               .setTimestamp()
             ]});
@@ -502,7 +506,11 @@ client.once('clientReady', async () => {
             await assignee.send({ embeds: [new EmbedBuilder()
               .setTitle('ESCALATION — 24+ Hours Overdue')
               .setColor(0xEF4444)
-              .setDescription(`${E.cross} Your assignment **"${a.title}"** is now **${Math.round(hoursOverdue)} hours overdue**. A case has been raised and this may force a Black grade override on your Activity Points this week.`)
+              .setDescription(`${E.cross} A case has been raised. This may force a Black grade override on your Activity Points this week.`)
+              .addFields(
+                { name: 'Assignment', value: a.title, inline: false },
+                { name: 'Overdue By', value: `${Math.round(hoursOverdue)} hours`, inline: true },
+              )
               .setFooter({ text: `ASN-${a.id} | Community Organisation` })
               .setTimestamp()
             ]});
@@ -613,8 +621,13 @@ client.once('clientReady', async () => {
           await user.send({ embeds: [new EmbedBuilder()
             .setColor(0xF59E0B)
             .setTitle('No Activity Points yet — week closes today')
-            .setDescription(`${E.pending} Hi ${staff.display_name || staff.full_name}!\n\nYou haven't accrued any Activity Points this week. The week closes at **midnight UTC tonight (Sunday)** and a zero week defaults to a **Black** grade.\n\nQuick wins: send some messages, join voice for 30 min, or submit a tasks/co-work claim from the Performance page.`)
-            .addFields({ name: 'Open', value: '[portal.communityorg.co.uk/performance](https://portal.communityorg.co.uk/performance?tab=activity)', inline: false })
+            .setDescription(`${E.pending} Hi ${staff.display_name || staff.full_name}! You haven't accrued any Activity Points this week.`)
+            .addFields(
+              { name: 'Deadline', value: 'Midnight UTC tonight (Sunday)', inline: true },
+              { name: 'Risk', value: 'A zero week defaults to a **Black** grade', inline: true },
+              { name: 'Quick Wins', value: 'Send some messages, join voice for 30 min, or submit a tasks/co-work claim from the Performance page.', inline: false },
+              { name: 'Open', value: '[portal.communityorg.co.uk/performance](https://portal.communityorg.co.uk/performance?tab=activity)', inline: false },
+            )
             .setFooter({ text: 'Community Organisation | Activity Points' })
             .setTimestamp()
           ]});
@@ -674,7 +687,8 @@ client.once('clientReady', async () => {
         const embed = new EmbedBuilder()
           .setTitle('Daily server-health digest — anomalies')
           .setColor(0xf59e0b)
-          .setDescription(`${E.server} ` + lines.join('\n'))
+          .setDescription(`${E.server} ${issues.length} guild(s) have configuration anomalies.`)
+          .addFields({ name: 'Anomalies', value: lines.join('\n').slice(0, 1024), inline: false })
           .setFooter({ text: 'Run /server-health for the live view' })
           .setTimestamp();
         for (const id of SUPERUSER_IDS) {
@@ -1032,7 +1046,7 @@ client.once('clientReady', async () => {
         await ch.send({ embeds: [new EmbedBuilder()
           .setColor(0xC9A84C)
           .setTitle(`CO Weekly Awards — week of ${prevWeekLabel}`)
-          .setDescription(`${E.kudos} **CO Weekly Awards — week of ${prevWeekLabel}**`)
+          .setDescription(`${E.kudos} This week's award winners and the shop points they earned.`)
           .addFields(fields.slice(0, 25))
           .setFooter({ text: 'Points added to monthly shop balances. Shop opens on the 30th.' })
           .setTimestamp()
@@ -1182,11 +1196,12 @@ client.once('clientReady', async () => {
       const embed = new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle('Staff Message Leaderboard')
-        .setDescription(`${E.aps} ` + lines.join('\n'))
+        .setDescription(`${E.aps} Top staff by messages sent this week.`)
         .addFields(
           { name: 'Week', value: weekKey, inline: true },
           { name: 'Total Staff Messages', value: String(totalAll), inline: true },
           { name: 'Active Staff', value: `${rows.length}/${totalStaff?.c || '?'} tracked`, inline: true },
+          { name: 'Rankings', value: lines.join('\n').slice(0, 1024), inline: false },
         )
         .setFooter({ text: 'Staff only | Resets every Monday | Updates every 5 minutes' })
         .setTimestamp();
@@ -1256,11 +1271,12 @@ client.once('clientReady', async () => {
       const embed = new EmbedBuilder()
         .setColor(0x22c55e)
         .setTitle('Staff Voice Channel Leaderboard')
-        .setDescription(`${E.aps} ` + lines.join('\n'))
+        .setDescription(`${E.aps} Top staff by voice channel time this week.`)
         .addFields(
           { name: 'Week', value: weekKey, inline: true },
           { name: 'Total VC Time', value: fmtTime(totalSecs), inline: true },
           { name: 'Participants', value: String(enriched.length), inline: true },
+          { name: 'Rankings', value: lines.join('\n').slice(0, 1024), inline: false },
         )
         .setFooter({ text: 'Staff only | Resets every Monday | Updates every 5 minutes' })
         .setTimestamp();
@@ -1313,11 +1329,12 @@ client.once('clientReady', async () => {
       const embed = new EmbedBuilder()
         .setColor(0xf59e0b)
         .setTitle('Staff Commands Used Leaderboard')
-        .setDescription(`${E.aps} ` + lines.join('\n'))
+        .setDescription(`${E.aps} Top staff by bot commands used this week.`)
         .addFields(
           { name: 'Week', value: weekKey, inline: true },
           { name: 'Total Commands', value: String(totalCmds), inline: true },
           { name: 'Users', value: String(enriched.length), inline: true },
+          { name: 'Rankings', value: lines.join('\n').slice(0, 1024), inline: false },
         )
         .setFooter({ text: 'Staff only | Resets every Monday | Updates every 5 minutes' })
         .setTimestamp();
@@ -1362,11 +1379,12 @@ client.once('clientReady', async () => {
       const embed = new EmbedBuilder()
         .setColor(0xec4899)
         .setTitle('Staff DMs Sent Leaderboard')
-        .setDescription(`${E.dm} ` + lines.join('\n'))
+        .setDescription(`${E.dm} Top staff by DMs sent this week.`)
         .addFields(
           { name: 'Week', value: weekKey, inline: true },
           { name: 'Total DMs', value: String(totalDMs), inline: true },
           { name: 'Senders', value: String(enriched.length), inline: true },
+          { name: 'Rankings', value: lines.join('\n').slice(0, 1024), inline: false },
         )
         .setFooter({ text: 'Staff only | Resets every Monday | Updates every 5 minutes' })
         .setTimestamp();
@@ -1421,11 +1439,12 @@ client.once('clientReady', async () => {
       const embed = new EmbedBuilder()
         .setColor(0x06b6d4)
         .setTitle('Assignments Completed Leaderboard')
-        .setDescription(`${E.logs} ` + lines.join('\n'))
+        .setDescription(`${E.logs} Top staff by assignments completed this week.`)
         .addFields(
           { name: 'Week', value: weekKey, inline: true },
           { name: 'Total Completed', value: String(total), inline: true },
           { name: 'Staff', value: String(enriched.length), inline: true },
+          { name: 'Rankings', value: lines.join('\n').slice(0, 1024), inline: false },
         )
         .setFooter({ text: 'Staff only | Resets every Monday | Updates every 5 minutes' })
         .setTimestamp();
@@ -1503,11 +1522,12 @@ client.once('clientReady', async () => {
       const embed = new EmbedBuilder()
         .setColor(0xef4444)
         .setTitle('Login Streak Leaderboard')
-        .setDescription(`${E.star} ` + lines.join('\n'))
+        .setDescription(`${E.star} Longest consecutive portal login streaks.`)
         .addFields(
           { name: 'Active Streaks', value: String(streaks.length), inline: true },
           { name: 'Longest', value: `${streaks[0].streak} days`, inline: true },
           { name: 'Leader', value: streaks[0].name, inline: true },
+          { name: 'Rankings', value: lines.join('\n').slice(0, 1024), inline: false },
         )
         .setFooter({ text: 'Consecutive days logged into the portal | Updates every 5 minutes' })
         .setTimestamp();
@@ -1667,7 +1687,12 @@ client.once('clientReady', async () => {
                 embeds: [new EmbedBuilder()
                   .setTitle('Poll Results')
                   .setColor(0x22C55E)
-                  .setDescription(`${E.aps} **${poll.question}**\n\nWinner: **${winners.join(', ')}** with ${maxVotes} vote${maxVotes !== 1 ? 's' : ''} (${totalVotes} total)`)
+                  .setDescription(`${E.aps} The poll has ended.`)
+                  .addFields(
+                    { name: 'Question', value: String(poll.question).slice(0, 1024), inline: false },
+                    { name: 'Winner', value: winners.join(', ').slice(0, 1024), inline: true },
+                    { name: 'Votes', value: `${maxVotes} vote${maxVotes !== 1 ? 's' : ''} (${totalVotes} total)`, inline: true },
+                  )
                   .setTimestamp()
                 ]
               });
@@ -1847,7 +1872,8 @@ client.once('clientReady', async () => {
         const embed = new EmbedBuilder()
           .setTitle('Portal DOWN')
           .setColor(0xEF4444)
-          .setDescription(`${E.cross} The CO Staff Portal (\`localhost:3016\`) is not responding.\n\n**Error:** ${e.message}`)
+          .setDescription(`${E.cross} The CO Staff Portal (\`localhost:3016\`) is not responding.`)
+          .addFields({ name: 'Error', value: String(e.message).slice(0, 1024), inline: false })
           .setTimestamp()
           .setFooter({ text: 'Community Organisation | Health Monitor' });
         await sendToWatchedUsers(client, embed);
@@ -1951,7 +1977,7 @@ client.on('interactionCreate', async interaction => {
         const embed = new EmbedBuilder()
           .setTitle(success ? `Command Executed` : `Command Failed`)
           .setColor(success ? 0x22c55e : 0xef4444)
-          .setDescription(success ? `${E.check} **Command Executed**` : `${E.cross} **Command Failed**`)
+          .setDescription(success ? `${E.check} A slash command was executed.` : `${E.cross} A slash command failed.`)
           .addFields(
             { name: 'Command', value: `/${interaction.commandName}`, inline: true },
             { name: 'User', value: `${portalUser?.display_name || interaction.user.username} (<@${interaction.user.id}>)`, inline: true },
@@ -2357,7 +2383,8 @@ client.on('interactionCreate', async interaction => {
         embeds: [new EmbedBuilder()
           .setTitle(`DM Exemptions (${exempts.length})`)
           .setColor(0x22c55e)
-          .setDescription(`${E.logs} ` + rows.join('\n\n'))
+          .setDescription(`${E.logs} Users exempt from staff DM logging.`)
+          .addFields({ name: 'Exempt Users', value: (exempts.length > 0 ? rows.join('\n\n') : 'No users are currently exempt.').slice(0, 1024), inline: false })
           .setFooter({ text: 'Community Organisation | Staff Assistant' })
           .setTimestamp()
         ],
@@ -2383,7 +2410,8 @@ client.on('interactionCreate', async interaction => {
         embeds: [new EmbedBuilder()
           .setTitle(`DM Exemptions (${exempts.length})`)
           .setColor(0x5865F2)
-          .setDescription(`${E.logs} ` + rows.join('\n\n'))
+          .setDescription(`${E.logs} Users exempt from staff DM logging.`)
+          .addFields({ name: 'Exempt Users', value: (exempts.length > 0 ? rows.join('\n\n') : 'No users are currently exempt.').slice(0, 1024), inline: false })
           .setFooter({ text: 'Community Organisation | Staff Assistant' })
           .setTimestamp()
         ],
@@ -2520,7 +2548,8 @@ client.on('interactionCreate', async interaction => {
         embeds: [new EmbedBuilder()
           .setTitle(`DM Exemptions (${exempts.length})`)
           .setColor(0x22c55e)
-          .setDescription(`${E.logs} ` + (exempts.length > 0 ? rows.join('\n\n') : 'No users are currently exempt.'))
+          .setDescription(`${E.logs} Users exempt from staff DM logging.`)
+          .addFields({ name: 'Exempt Users', value: (exempts.length > 0 ? rows.join('\n\n') : 'No users are currently exempt.').slice(0, 1024), inline: false })
           .setFooter({ text: 'Community Organisation | Staff Assistant' })
           .setTimestamp()
         ],
@@ -2560,7 +2589,8 @@ client.on('interactionCreate', async interaction => {
         embeds: [new EmbedBuilder()
           .setTitle(`DM Exemptions (${exempts.length})`)
           .setColor(0x22c55e)
-          .setDescription(`${E.logs} ` + (exempts.length > 0 ? rows.join('\n\n') : 'No users are currently exempt.'))
+          .setDescription(`${E.logs} Users exempt from staff DM logging.`)
+          .addFields({ name: 'Exempt Users', value: (exempts.length > 0 ? rows.join('\n\n') : 'No users are currently exempt.').slice(0, 1024), inline: false })
           .setFooter({ text: 'Community Organisation | Staff Assistant' })
           .setTimestamp()
         ],
@@ -2622,7 +2652,7 @@ client.on('guildMemberAdd', async (member) => {
   // Member-join log
   try {
     const embed = new EmbedBuilder().setTitle('Member Joined').setColor(0x22c55e)
-      .setDescription(`${E.join} **Member Joined**`)
+      .setDescription(`${E.join} A member joined the server.`)
       .addFields(
         { name: 'Member', value: `${E.member} ${member.user.username} (<@${member.user.id}>)`, inline: true },
         { name: 'Server', value: member.guild?.name || '—', inline: true },
@@ -2638,7 +2668,7 @@ client.on('guildMemberRemove', async (member) => {
   // Member-leave log
   try {
     const embed = new EmbedBuilder().setTitle('Member Left').setColor(0xef4444)
-      .setDescription(`${E.leave} **Member Left**`)
+      .setDescription(`${E.leave} A member left the server.`)
       .addFields(
         { name: 'Member', value: `${E.member} ${member.user?.username || 'Unknown'} (<@${member.user?.id || member.id}>)`, inline: true },
         { name: 'Server', value: member.guild?.name || '—', inline: true },
@@ -3001,7 +3031,7 @@ client.on('messageDelete', async (message) => {
     const embed = new EmbedBuilder()
       .setTitle('Message Deleted')
       .setColor(0xef4444)
-      .setDescription(`${E.cross} **Message Deleted**`)
+      .setDescription(`${E.cross} A message was deleted.`)
       .addFields(
         { name: 'Author', value: `${E.member} ${message.author.username} (<@${message.author.id}>)`, inline: true },
         { name: 'Channel', value: message.channel?.name ? `#${message.channel.name}` : message.channelId, inline: true },
@@ -3075,7 +3105,7 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
     const embed = new EmbedBuilder()
       .setTitle('Message Edited')
       .setColor(0xf59e0b)
-      .setDescription(`${E.logs} **Message Edited**`)
+      .setDescription(`${E.logs} A message was edited.`)
       .addFields(
         { name: 'Author', value: `${E.member} ${newMessage.author.username} (<@${newMessage.author.id}>)`, inline: true },
         { name: 'Channel', value: newMessage.channel?.name ? `#${newMessage.channel.name}` : newMessage.channelId, inline: true },

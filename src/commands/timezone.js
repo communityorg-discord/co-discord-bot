@@ -57,14 +57,11 @@ export async function execute(interaction) {
     header = `in ${n}${unit.startsWith('m') ? 'min' : unit.startsWith('h') ? 'h' : 'd'}`;
   }
 
-  const lines = ZONES.map(z =>
-    `**${z.label}** — ${fmt(when, z.tz)}`
-  ).join('\n');
-
   const embed = new EmbedBuilder()
     .setTitle(`World clock — ${header}`)
     .setColor(0x6366f1)
-    .setDescription(`${E.calendar} ${lines}`)
+    .setDescription(`${E.calendar} Current time across common staff timezones.`)
+    .addFields(ZONES.map(z => ({ name: z.label, value: fmt(when, z.tz), inline: true })))
     .setFooter({ text: `Discord-relative: <t:${Math.floor(when.getTime() / 1000)}:F>` });
 
   await interaction.reply({

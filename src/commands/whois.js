@@ -55,14 +55,21 @@ export async function execute(interaction) {
     .setThumbnail(target.displayAvatarURL())
     .addFields(
       { name: 'Discord', value: `<@${targetId}> (\`${targetId}\`)`, inline: false },
-      { name: 'Portal account', value: portalUser
-        ? `${portalUser.display_name || portalUser.full_name || portalUser.username} (id=${portalUser.id})\nPosition: **${portalUser.position || '—'}**\nDept: ${portalUser.department || '—'}\nAuth: \`${portalUser.auth_level ?? '?'}\` · Status: \`${portalUser.account_status || '?'}\``
-        : `${E.cross} Not linked to portal`,
-        inline: false },
-      { name: 'Bot verification', value: verified
-        ? `${E.check} Verified as **${verified.position}** ${verified.nickname ? `(nick: ${verified.nickname})` : ''}\nVerified at: ${verified.verified_at || '?'}\nLast queue: ${lastQueue ? `#${lastQueue.id} (${lastQueue.status})` : '—'}`
-        : `${E.cross} Not verified${lastQueue ? ` — last queue #${lastQueue.id} (${lastQueue.status})` : ''}`,
-        inline: false },
+      ...(portalUser ? [
+        { name: 'Portal Account', value: `${portalUser.display_name || portalUser.full_name || portalUser.username} (id=${portalUser.id})`, inline: false },
+        { name: 'Position', value: `**${portalUser.position || '—'}**`, inline: true },
+        { name: 'Department', value: portalUser.department || '—', inline: true },
+        { name: 'Auth / Status', value: `\`${portalUser.auth_level ?? '?'}\` · \`${portalUser.account_status || '?'}\``, inline: true },
+      ] : [
+        { name: 'Portal Account', value: `${E.cross} Not linked to portal`, inline: false },
+      ]),
+      ...(verified ? [
+        { name: 'Bot Verification', value: `${E.check} Verified as **${verified.position}** ${verified.nickname ? `(nick: ${verified.nickname})` : ''}`.trim(), inline: false },
+        { name: 'Verified At', value: verified.verified_at || '?', inline: true },
+        { name: 'Last Queue', value: lastQueue ? `#${lastQueue.id} (${lastQueue.status})` : '—', inline: true },
+      ] : [
+        { name: 'Bot Verification', value: `${E.cross} Not verified${lastQueue ? ` — last queue #${lastQueue.id} (${lastQueue.status})` : ''}`, inline: false },
+      ]),
       { name: 'Status flags', value: [
         activeSusp ? `${E.suspend} Suspended` : null,
         activeBan ? `${E.ban} Banned` : null,

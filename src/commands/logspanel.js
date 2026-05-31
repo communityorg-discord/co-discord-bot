@@ -257,7 +257,8 @@ export async function handleSelect(interaction) {
       const serverEmbed = new EmbedBuilder()
         .setTitle('Server Log Bindings')
         .setColor(0x5865F2)
-        .setDescription(`${E.logs} ` + 'Catch-all log channels for **this server only**. These receive all events of a type happening in this server.\n\n' + serverBindings.join('\n'))
+        .setDescription(`${E.logs} ` + 'Catch-all log channels for **this server only**. These receive all events of a type happening in this server.')
+        .addFields({ name: 'Bindings', value: serverBindings.join('\n').slice(0, 1024), inline: false })
         .setFooter({ text: 'Community Organisation | Staff Assistant' })
         .setTimestamp();
 

@@ -52,10 +52,11 @@ export async function execute(interaction) {
     embeds: [new EmbedBuilder()
       .setColor(failed > 0 ? 0xF59E0B : 0x22C55E)
       .setTitle(nickname ? 'Global Nickname Set' : 'Global Nickname Reset')
-      .setDescription(`${nickname ? `Set **${truncated}** for` : 'Reset nickname for'} <@${targetUser.id}>\n\n${results.join('\n')}`)
+      .setDescription(`${nickname ? `Set **${truncated}** for` : 'Reset nickname for'} <@${targetUser.id}>`)
       .addFields(
         { name: 'Success', value: String(success), inline: true },
         { name: 'Failed', value: String(failed), inline: true },
+        ...(results.length ? [{ name: 'Per-server', value: results.join('\n').slice(0, 1024), inline: false }] : []),
       )
       .setTimestamp()
     ]

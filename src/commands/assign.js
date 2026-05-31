@@ -387,7 +387,13 @@ export async function execute(interaction) {
       await targetUser.send({ embeds: [new EmbedBuilder()
         .setTitle('New Assignment')
         .setColor(0x5865F2)
-        .setDescription(`${E.inbox} You have been assigned a new task by **${assignerPortal.display_name}**.\n\n**Task:** ${taskDesc}\n**Due:** ${formatDate(dueDate)}\n\nCheck <#${ASSIGNMENTS_CHANNEL_ID}> for details.`)
+        .setDescription(`${E.inbox} You have been assigned a new task by **${assignerPortal.display_name}**.`)
+        .addFields(
+          { name: 'Task', value: taskDesc, inline: false },
+          { name: 'Due', value: formatDate(dueDate), inline: true },
+          { name: 'Assigned By', value: assignerPortal.display_name, inline: true },
+          { name: 'Details', value: `<#${ASSIGNMENTS_CHANNEL_ID}>`, inline: true },
+        )
         .setFooter({ text: `Assignment: ${assignmentNumber} | Community Organisation` })
         .setTimestamp()
       ]});
@@ -401,7 +407,13 @@ export async function execute(interaction) {
           await user.send({ embeds: [new EmbedBuilder()
             .setTitle('New Team Assignment')
             .setColor(0x5865F2)
-            .setDescription(`${E.inbox} A task has been assigned to **${team}** by **${assignerPortal.display_name}**.\n\n**Task:** ${taskDesc}\n**Due:** ${formatDate(dueDate)}\n\nPlease acknowledge this assignment in <#${ASSIGNMENTS_CHANNEL_ID}>.`)
+            .setDescription(`${E.inbox} A task has been assigned to **${team}** by **${assignerPortal.display_name}**. Please acknowledge it in <#${ASSIGNMENTS_CHANNEL_ID}>.`)
+            .addFields(
+              { name: 'Task', value: taskDesc, inline: false },
+              { name: 'Team', value: team, inline: true },
+              { name: 'Due', value: formatDate(dueDate), inline: true },
+              { name: 'Assigned By', value: assignerPortal.display_name, inline: true },
+            )
             .setFooter({ text: `Assignment: ${assignmentNumber} | Community Organisation` })
             .setTimestamp()
           ]}).catch(() => {});
@@ -517,7 +529,12 @@ export async function handleButton(interaction) {
           embeds: [new EmbedBuilder()
             .setTitle('Team Assignment — All Confirmed Complete')
             .setColor(0x22C55E)
-            .setDescription(`${E.check} All members of **${assignment.team}** have confirmed the task is complete:\n\n> "${assignment.title}"\n\n**Assignment:** ASN-${assignmentId}\n\nDo you approve?`)
+            .setDescription(`${E.check} All members of **${assignment.team}** have confirmed the task is complete. Do you approve?`)
+            .addFields(
+              { name: 'Task', value: `"${assignment.title}"`, inline: false },
+              { name: 'Team', value: assignment.team, inline: true },
+              { name: 'Assignment', value: `ASN-${assignmentId}`, inline: true },
+            )
             .setFooter({ text: 'Community Organisation | Staff Assistant' })
             .setTimestamp()
           ],
@@ -809,7 +826,13 @@ export async function handleModal(interaction) {
         embeds: [new EmbedBuilder()
           .setTitle('Task Completion — Action Required')
           .setColor(0xF59E0B)
-          .setDescription(`${E.pending} **${assigneeName}** has marked the following task as complete:\n\n> "${assignment.title}"\n\n**Assignment:** ASN-${assignmentId}\n**Completed at:** ${formatDate(new Date())}\n**Notes:** ${completionNotes || 'None provided'}\n\nDo you confirm this task was completed satisfactorily?`)
+          .setDescription(`${E.pending} **${assigneeName}** has marked a task as complete. Do you confirm it was completed satisfactorily?`)
+          .addFields(
+            { name: 'Task', value: `"${assignment.title}"`, inline: false },
+            { name: 'Assignment', value: `ASN-${assignmentId}`, inline: true },
+            { name: 'Completed At', value: formatDate(new Date()), inline: true },
+            { name: 'Notes', value: completionNotes || 'None provided', inline: false },
+          )
           .setFooter({ text: 'Community Organisation | Staff Assistant' })
           .setTimestamp()
         ],
@@ -868,7 +891,11 @@ export async function handleModal(interaction) {
       await assignee.send({ embeds: [new EmbedBuilder()
         .setTitle('Task Completion Not Accepted')
         .setColor(0xEF4444)
-        .setDescription(`${E.cross} Your task completion was not accepted by **${assignerName}**.\n\n**Task:** ${assignment.title}\n**Reason:** ${rejectReason}\n\nThe task remains open. Please address the feedback and mark it complete again when ready.`)
+        .setDescription(`${E.cross} Your task completion was not accepted by **${assignerName}**. The task remains open — please address the feedback and mark it complete again when ready.`)
+        .addFields(
+          { name: 'Task', value: assignment.title, inline: false },
+          { name: 'Reason', value: rejectReason, inline: false },
+        )
         .setFooter({ text: 'Community Organisation | Staff Assistant' })
         .setTimestamp()
       ]});
@@ -976,7 +1003,13 @@ export async function handleModal(interaction) {
       await delegateUser.send({ embeds: [new EmbedBuilder()
         .setTitle('Delegated Assignment')
         .setColor(0x5865F2)
-        .setDescription(`${E.acting} **${delegatorName}** has delegated a task to you.\n\n**Task:** ${assignment.title}\n**Due:** ${formatDate(assignment.due_date)}\n**Reason:** ${delegateReason}\n\nCheck <#${ASSIGNMENTS_CHANNEL_ID}> for details.`)
+        .setDescription(`${E.acting} **${delegatorName}** has delegated a task to you. Check <#${ASSIGNMENTS_CHANNEL_ID}> for details.`)
+        .addFields(
+          { name: 'Task', value: assignment.title, inline: false },
+          { name: 'Due', value: formatDate(assignment.due_date), inline: true },
+          { name: 'Delegated By', value: delegatorName, inline: true },
+          { name: 'Reason', value: delegateReason, inline: false },
+        )
         .setFooter({ text: `Assignment: ${assignmentNumber} | Community Organisation` })
         .setTimestamp()
       ]});

@@ -272,7 +272,8 @@ export async function handleSelect(interaction) {
       const embed = new EmbedBuilder()
         .setTitle('Private Catch-All Channels')
         .setColor(0x8b5cf6)
-        .setDescription(`${E.logs} Private catch-all channels — separate from /orglogs catch-all bindings.\n\n` + catchallLines.join('\n'))
+        .setDescription(`${E.logs} Private catch-all channels — separate from /orglogs catch-all bindings.`)
+        .addFields({ name: 'Catch-All Bindings', value: catchallLines.join('\n'), inline: false })
         .setFooter({ text: 'Community Organisation | Private Logs' })
         .setTimestamp();
 

@@ -55,7 +55,10 @@ export async function execute(interaction) {
         embeds: [new EmbedBuilder()
           .setTitle('Auth Override Removed')
           .setColor(0xF59E0B)
-          .setDescription(`${E.shield} Auth override for <@${targetUserId}> has been removed.\n\nTheir auth level will revert to their position-based level on next verification/role sync.`)
+          .setDescription('The authorisation override has been removed. Their auth level will revert to their position-based level on next verification/role sync.')
+          .addFields(
+            { name: 'User', value: `${E.shield} <@${targetUserId}>`, inline: true },
+          )
           .setTimestamp()
         ]
       });

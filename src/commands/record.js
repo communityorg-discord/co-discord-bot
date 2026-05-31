@@ -77,8 +77,9 @@ export async function execute(interaction) {
       const liveEmbed = new EmbedBuilder()
         .setColor(0xef4444)
         .setTitle('Recording in Progress')
-        .setDescription(`${E.processing} Recording active in **${voiceChannel.name}**\nStarted by **${interaction.user.tag}** — <t:${startTs}:R>`)
+        .setDescription(`${E.processing} Recording active in **${voiceChannel.name}**.`)
         .addFields(
+          { name: 'Started by', value: `**${interaction.user.tag}** — <t:${startTs}:R>`, inline: true },
           { name: 'Participants (0)', value: '*Waiting for speakers...*', inline: true },
           { name: 'Duration', value: '`00:00`', inline: true },
         )
@@ -191,7 +192,8 @@ export async function execute(interaction) {
       embeds: [new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle('Recent Recordings')
-        .setDescription(`${E.info} ` + lines.join('\n\n'))
+        .setDescription(`${E.info} The ${lines.length} most recent recording${lines.length !== 1 ? 's' : ''} for this server.`)
+        .addFields({ name: 'Recordings', value: lines.join('\n\n').slice(0, 1024), inline: false })
         .setFooter({ text: 'CO Recording System' })
       ]
     });

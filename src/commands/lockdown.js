@@ -111,7 +111,10 @@ export async function execute(interaction) {
       const result = db.prepare(`INSERT INTO lockdown_state (guild_id, channel_id, lockdown_type, locked_by, reason, auto_unlock_at)
         VALUES (?, ?, 'channel', ?, ?, ?)`).run(interaction.guildId, channel.id, interaction.user.id, reason, autoUnlock?.toISOString() || null);
       await snapshotAndLock(channel, result.lastInsertRowid);
-      await channel.send({ embeds: [new EmbedBuilder().setColor(0xEF4444).setTitle('Channel Locked').setDescription(`${E.warning} This channel has been locked.\n**Reason:** ${reason}${autoUnlock ? `\n**Auto-unlock:** <t:${Math.floor(autoUnlock.getTime() / 1000)}:R>` : ''}`).setTimestamp()] });
+      await channel.send({ embeds: [new EmbedBuilder().setColor(0xEF4444).setTitle('Channel Locked').setDescription(`${E.warning} This channel has been locked.`).addFields(
+        { name: 'Reason', value: reason.slice(0, 1024), inline: false },
+        ...(autoUnlock ? [{ name: 'Auto-unlock', value: `<t:${Math.floor(autoUnlock.getTime() / 1000)}:R>`, inline: true }] : []),
+      ).setTimestamp()] });
       await interaction.editReply({ content: `<#${channel.id}> locked.` });
     } else {
       const lockdown = db.prepare("SELECT * FROM lockdown_state WHERE guild_id = ? AND channel_id = ? AND is_active = 1").get(interaction.guildId, channel.id);
@@ -137,7 +140,7 @@ export async function execute(interaction) {
         }
         const sysChannel = guild.systemChannel || channels.first();
         if (sysChannel) {
-          await sysChannel.send({ embeds: [new EmbedBuilder().setColor(0x7F1D1D).setTitle(`${sub === 'global' ? 'GLOBAL ' : ''}SERVER LOCKDOWN`).setDescription(`${E.warning} All channels locked.\n**Reason:** ${reason}`).setTimestamp()] }).catch(() => {});
+          await sysChannel.send({ embeds: [new EmbedBuilder().setColor(0x7F1D1D).setTitle(`${sub === 'global' ? 'GLOBAL ' : ''}SERVER LOCKDOWN`).setDescription(`${E.warning} All channels locked.`).addFields({ name: 'Reason', value: reason.slice(0, 1024), inline: false }).setTimestamp()] }).catch(() => {});
         }
         lockedCount++;
       } else {

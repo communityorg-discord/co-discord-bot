@@ -61,9 +61,6 @@ export async function execute(interaction) {
   const memberDisplay = guild ? (await guild.members.fetch(author.id).catch(() => null))?.displayName : author.username;
 
   const content = msg.content || '_(no text · embeds/attachments only)_';
-  const attached = msg.attachments.size > 0
-    ? `\n\n${msg.attachments.size} attachment${msg.attachments.size === 1 ? '' : 's'}`
-    : '';
 
   const embed = new EmbedBuilder()
     .setAuthor({
@@ -71,12 +68,16 @@ export async function execute(interaction) {
       iconURL: author.displayAvatarURL(),
       url: msg.url,
     })
-    .setDescription(`${E.inbox} ${content.slice(0, 4000)}` + attached)
+    .setDescription(`${E.inbox} ${content.slice(0, 4000)}`)
     .setColor(0x6366f1)
     .setTimestamp(msg.createdTimestamp)
     .setFooter({
       text: `${guild ? `${guild.name} · ` : ''}#${channel.name || 'dm'} · quoted by ${interaction.user.username}`,
     });
+
+  if (msg.attachments.size > 0) {
+    embed.addFields({ name: 'Attachments', value: `${msg.attachments.size} attachment${msg.attachments.size === 1 ? '' : 's'}`, inline: true });
+  }
 
   // Forward image attachment as embed image (Discord only supports one)
   const firstImage = [...msg.attachments.values()].find(a => /image\//i.test(a.contentType || '') || /\.(png|jpe?g|gif|webp)$/i.test(a.name || ''));

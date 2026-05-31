@@ -269,7 +269,8 @@ export async function handleSelect(interaction) {
       const embed = new EmbedBuilder()
         .setTitle('Organisation Catch-All Channels')
         .setColor(0xf59e0b)
-        .setDescription(`${E.logs} Catch-all channels receive **all logs of a type** from **every CO server** in one channel. Individual type bindings take priority when set.\n\n` + catchallLines.join('\n'))
+        .setDescription(`${E.logs} Catch-all channels receive **all logs of a type** from **every CO server** in one channel. Individual type bindings take priority when set.`)
+        .addFields({ name: 'Catch-All Bindings', value: catchallLines.join('\n'), inline: false })
         .setFooter({ text: 'Community Organisation | Organisation-Wide Logs' })
         .setTimestamp();
 

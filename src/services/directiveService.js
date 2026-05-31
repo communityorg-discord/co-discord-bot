@@ -374,8 +374,13 @@ export async function postMemoEmbed(client, data) {
         embeds: [new EmbedBuilder()
           .setColor(URGENCY_COLORS[data.urgency] || URGENCY_COLORS.Medium)
           .setTitle(`SCSC Memo Issued — ${data.memo_number}`)
-          .setDescription(`${E.logs} A SCSC Memo has been issued that affects you directly.\n\n**${data.title}**\n\n${(data.description || '').slice(0, 500)}`)
-          .addFields(data.action_required ? [{ name: 'Action Required', value: `${E.warning} ${data.action_required}` }] : [])
+          .setDescription(`${E.logs} A SCSC Memo has been issued that affects you directly.`)
+          .addFields(
+            { name: 'Subject', value: data.title, inline: false },
+            { name: 'Details', value: (data.description || 'No details provided').slice(0, 500), inline: false },
+            { name: 'Urgency', value: data.urgency || 'Medium', inline: true },
+            ...(data.action_required ? [{ name: 'Action Required', value: `${E.warning} ${data.action_required}`, inline: false }] : []),
+          )
           .setFooter({ text: 'Standards and Compliance Sub-Committee' })
           .setTimestamp()
         ],

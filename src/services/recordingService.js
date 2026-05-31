@@ -169,8 +169,10 @@ class RecordingTimeline {
       const embed = new EmbedBuilder()
         .setColor(0xef4444)
         .setTitle('Recording in Progress')
-        .setDescription(`${E.bot} Recording active in **${this._channelName}**\nStarted by **${this._startedByTag}** — <t:${this._startTs}:R>`)
+        .setDescription(`${E.bot} Recording is active. Use /record stop to end.`)
         .addFields(
+          { name: 'Channel', value: this._channelName, inline: true },
+          { name: 'Started By', value: `${this._startedByTag} — <t:${this._startTs}:R>`, inline: true },
           { name: `Participants (${status.speakerCount})`, value: participantLines, inline: true },
           { name: 'Duration', value: `\`${status.durationStr}\``, inline: true },
         )

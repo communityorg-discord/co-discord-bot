@@ -102,7 +102,12 @@ export async function execute(interaction) {
     const list = ids.length > 0 ? ids.map(i => `<@${i}>`).join(', ') : '*(empty — only superusers can join)*';
     await interaction.editReply({
       embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Office configured')
-        .setDescription(`${E.check} <#${channel.id}> is now managed.\n\n**Allowlist:** ${list}`)
+        .setDescription(`${E.check} <#${channel.id}> is now managed.`)
+        .addFields(
+          { name: 'Channel', value: `<#${channel.id}>`, inline: true },
+          { name: 'Allowlist size', value: String(ids.length), inline: true },
+          { name: 'Allowlist', value: list, inline: false },
+        )
         .setFooter({ text: 'Anyone not on the allowlist gets kicked and DMd a request button.' })]
     });
 
@@ -137,7 +142,12 @@ export async function execute(interaction) {
     await interaction.editReply({
       embeds: [new EmbedBuilder().setColor(sub === 'add' ? 0x22C55E : 0xF59E0B)
         .setTitle(`${sub === 'add' ? 'Added' : 'Removed'} ${user.tag}`)
-        .setDescription(`${sub === 'add' ? E.check : E.warning} <#${channel.id}> allowlist (${list.length}): ${list.length ? list.map(i => `<@${i}>`).join(', ') : '*(empty)*'}`)]
+        .setDescription(`${sub === 'add' ? E.check : E.warning} Updated the allowlist for <#${channel.id}>.`)
+        .addFields(
+          { name: 'Channel', value: `<#${channel.id}>`, inline: true },
+          { name: 'Allowlist size', value: String(list.length), inline: true },
+          { name: 'Allowlist', value: list.length ? list.map(i => `<@${i}>`).join(', ') : '*(empty)*', inline: false },
+        )]
     });
 
     await logAction(interaction.client, {
@@ -187,8 +197,9 @@ export async function execute(interaction) {
     const wrLines = wrs.length > 0 ? wrs.map(w => `<#${w.channel_id}>`).join('\n') : '*None — run `/office waiting`*';
     await interaction.editReply({
       embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Managed Offices')
-        .setDescription(`${E.info} ${officeLines}`)
+        .setDescription(`${E.info} Voice-channel access control for this server.`)
         .addFields(
+          { name: 'Managed channels', value: officeLines, inline: false },
           { name: 'Waiting rooms', value: wrLines, inline: false },
           { name: 'Request feed', value: feed ? `<#${feed}>` : '*Not set — run `/office feed`*', inline: false },
         )]

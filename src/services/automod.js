@@ -123,7 +123,11 @@ export class AutoMod {
       VALUES (?, 'warning', ?, 'AUTOMOD', 'AutoMod')`).run(member.id, `[AutoMod] ${reason}`);
     await member.send({ embeds: [new EmbedBuilder()
       .setColor(0xF59E0B).setTitle('Automated Warning')
-      .setDescription(`${E.warning} **Automated Warning**\n\nYou received an automated warning in **${guild.name}**.\n\n**Reason:** ${reason}`)
+      .setDescription(`${E.warning} You received an automated warning.`)
+      .addFields(
+        { name: 'Server', value: guild.name, inline: true },
+        { name: 'Reason', value: (reason || 'Not specified').slice(0, 1000), inline: false },
+      )
       .setFooter({ text: 'CO AutoMod System' }).setTimestamp()
     ]}).catch(() => {});
   }
@@ -151,7 +155,11 @@ export class AutoMod {
     await member.roles.set(qRole ? [qRole.id] : []).catch(() => {});
     await member.send({ embeds: [new EmbedBuilder()
       .setColor(0xDC2626).setTitle('Quarantined')
-      .setDescription(`${E.suspend} **Quarantined**\n\nYou have been quarantined in **${guild.name}**.\n\n**Reason:** ${reason}\n\nThe moderation team has been notified.`)
+      .setDescription(`${E.suspend} You have been quarantined. The moderation team has been notified.`)
+      .addFields(
+        { name: 'Server', value: guild.name, inline: true },
+        { name: 'Reason', value: (reason || 'Not specified').slice(0, 1000), inline: false },
+      )
       .setFooter({ text: 'CO AutoMod System' }).setTimestamp()
     ]}).catch(() => {});
   }
@@ -174,7 +182,8 @@ export class AutoMod {
     if (sysChannel) {
       await sysChannel.send({ embeds: [new EmbedBuilder()
         .setColor(0x7F1D1D).setTitle('RAID LOCKDOWN ACTIVATED')
-        .setDescription(`${E.warning} **RAID LOCKDOWN ACTIVATED**\n\nServer auto-locked due to suspected raid.\n\n**Reason:** ${reason}`)
+        .setDescription(`${E.warning} Server auto-locked due to suspected raid.`)
+        .addFields({ name: 'Reason', value: (reason || 'Not specified').slice(0, 1000), inline: false })
         .setTimestamp()
       ]}).catch(() => {});
     }
@@ -443,7 +452,12 @@ export class AutoMod {
           if (member) {
             await member.send({ embeds: [new EmbedBuilder()
               .setColor(0xF59E0B).setTitle('Verification Required')
-              .setDescription(`${E.warning} **Verification Required**\n\nYou joined **${guild.name}** ${Math.floor(hours)} hours ago without verifying.\n\nRun \`/verify\` immediately. You will be removed in ${config.verify_terminate_hours - config.verify_warning_hours} hours.`)
+              .setDescription(`${E.warning} Run \`/verify\` immediately or you will be removed.`)
+              .addFields(
+                { name: 'Server', value: guild.name, inline: true },
+                { name: 'Joined', value: `${Math.floor(hours)} hours ago`, inline: true },
+                { name: 'Removal In', value: `${config.verify_terminate_hours - config.verify_warning_hours} hours`, inline: true },
+              )
               .setFooter({ text: 'CO AutoMod System' })
             ]}).catch(() => {});
           }
@@ -455,7 +469,11 @@ export class AutoMod {
           if (member) {
             await member.send({ embeds: [new EmbedBuilder()
               .setColor(0xEF4444).setTitle('Removed — Failure to Verify')
-              .setDescription(`${E.cross} **Removed — Failure to Verify**\n\nYou were removed from **${guild.name}** for not verifying within ${config.verify_terminate_hours} hours.`)
+              .setDescription(`${E.cross} You were removed for not verifying in time.`)
+              .addFields(
+                { name: 'Server', value: guild.name, inline: true },
+                { name: 'Verify Window', value: `${config.verify_terminate_hours} hours`, inline: true },
+              )
               .setFooter({ text: 'CO AutoMod System' })
             ]}).catch(() => {});
             await member.kick('[AutoMod] Verify timeout').catch(() => {});

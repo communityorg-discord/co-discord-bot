@@ -38,11 +38,12 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setTitle('Investigation Opened')
     .setColor(0xF59E0B)
-    .setDescription(`${E.investigate} Investigation **${caseRef}** opened for **${displayName}**.\n\nReason: ${reason}`)
+    .setDescription(`${E.investigate} Investigation **${caseRef}** opened for **${displayName}**.`)
     .addFields(
       { name: 'Investigated User', value: `<@${target.id}>`, inline: true },
       { name: 'Opened By', value: interaction.user.username, inline: true },
-      { name: 'Case ID', value: caseRef, inline: true }
+      { name: 'Case ID', value: caseRef, inline: true },
+      { name: 'Reason', value: reason.slice(0, 1024), inline: false }
     )
     .setTimestamp();
 

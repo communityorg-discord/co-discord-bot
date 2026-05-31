@@ -27,15 +27,15 @@ export async function execute(interaction) {
           .setTimestamp();
       }
 
-      const rows = exempts.map(e =>
-        `**${e.display_name || 'Unknown'}** — <@${e.discord_id}>\n` +
-        `   Added by: ${e.exempted_by} · <t:${Math.floor(new Date(e.created_at).getTime() / 1000)}:R>`
-      );
-
       return new EmbedBuilder()
         .setTitle(`DM Exemptions (${exempts.length})`)
         .setColor(0x5865F2)
-        .setDescription(`${E.dm} ${rows.join('\n\n')}`)
+        .setDescription(`${E.dm} These users are skipped on mass/team DMs.`)
+        .addFields(exempts.slice(0, 25).map(e => ({
+          name: e.display_name || 'Unknown',
+          value: `<@${e.discord_id}>\nAdded by: ${e.exempted_by} · <t:${Math.floor(new Date(e.created_at).getTime() / 1000)}:R>`,
+          inline: true,
+        })))
         .setFooter({ text: 'Community Organisation | Staff Assistant' })
         .setTimestamp();
     };

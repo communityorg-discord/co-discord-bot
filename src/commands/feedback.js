@@ -105,11 +105,12 @@ export async function handleModalSubmit(interaction) {
   const embed = new EmbedBuilder()
     .setTitle(`${KIND_LABEL[kind] || kind} — ${summary}`)
     .setColor(kind === 'bug' ? 0xef4444 : kind === 'feature' ? 0x6366f1 : 0x22c55e)
-    .setDescription(`${E.inbox} **Admin · feedback for you + Evan**\n\n` + detail.slice(0, 3900))
+    .setDescription(`${E.inbox} **Admin · feedback for you + Evan**`)
     .addFields(
       { name: 'From', value: `<@${interaction.user.id}> \`${interaction.user.username}\``, inline: true },
       { name: 'Server', value: guildName, inline: true },
       { name: 'Channel', value: interaction.channel ? `<#${interaction.channel.id}>` : '_dm_', inline: true },
+      { name: 'Details', value: detail.slice(0, 1024), inline: false },
     )
     .setFooter({ text: 'CO Bot · /feedback' })
     .setTimestamp();

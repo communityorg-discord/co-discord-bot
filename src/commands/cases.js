@@ -41,11 +41,12 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setTitle(`Recent Cases — ${user.display_name || user.full_name}`)
     .setColor(0x5865F2)
-    .setDescription(cases.map(c =>
-      `${typeEmojis[c.case_type] || E.logs} **${c.case_number}** — ${c.case_type}\n` +
-      `Status: \`${c.status?.toUpperCase()}\` | Stage: \`${c.stage}\`\n` +
-      `${c.subject || 'No subject'}`
-    ).join('\n\n'))
+    .setDescription(`${E.logs} Your ${cases.length} most recent case${cases.length === 1 ? '' : 's'} in Case Management.`)
+    .addFields(cases.slice(0, 24).map(c => ({
+      name: c.case_number,
+      value: `${typeEmojis[c.case_type] || E.logs} ${c.case_type}\nStatus: \`${c.status?.toUpperCase()}\` · Stage: \`${c.stage}\`\n${c.subject || 'No subject'}`,
+      inline: false,
+    })))
     .addFields({ name: 'View in Portal', value: `[Open Case Management](${process.env.PORTAL_URL}/cases)`, inline: false })
     .setFooter({ text: 'Community Organisation | Case Management' })
     .setTimestamp();
