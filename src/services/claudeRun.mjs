@@ -27,8 +27,10 @@ const PROMPT = Buffer.from(process.env.CR_PROMPT_B64 || '', 'base64').toString('
 const RESUME = process.env.CR_RESUME || null;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// Always reply as the CO bot (one consistent "Claude" identity) regardless of
-// which bot spawned us — read its token straight off disk.
+// Reply as the CO bot by default (one consistent "Claude" identity) — read its
+// token off disk. EXCEPTION: a DM channel is private to whichever bot owns it, so
+// the spawning bot passes CR_REPLY_TOKEN (its own token) for DMs; we honour that
+// so the reply can actually land in that bot's DM channel.
 function coToken() {
   try {
     const env = readFileSync(`${REPO}/co-discord-bot/.env`, 'utf8');
@@ -36,7 +38,7 @@ function coToken() {
     return m ? m[1].trim().replace(/^["']|["']$/g, '') : null;
   } catch { return null; }
 }
-const TOKEN = coToken();
+const TOKEN = process.env.CR_REPLY_TOKEN || coToken();
 const H = { Authorization: `Bot ${TOKEN}`, 'Content-Type': 'application/json' };
 
 async function dapi(method, path, body) {
