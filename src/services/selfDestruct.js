@@ -53,7 +53,7 @@ async function alert(client, body) {
       const u = await client.users.fetch(uid).catch(() => null);
       if (!u) continue;
       const dm = await u.createDM().catch(() => null);
-      if (dm) await dm.send(body.slice(0, 1900)).catch(() => {});
+      if (dm) await dm.send(`${E.warning} **Security alert · admin-only (you + Evan)**\n\n` + body.slice(0, 1820)).catch(() => {});
     } catch {}
   }
 }

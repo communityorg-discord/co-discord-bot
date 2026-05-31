@@ -105,7 +105,7 @@ export async function handleModalSubmit(interaction) {
   const embed = new EmbedBuilder()
     .setTitle(`${KIND_LABEL[kind] || kind} — ${summary}`)
     .setColor(kind === 'bug' ? 0xef4444 : kind === 'feature' ? 0x6366f1 : 0x22c55e)
-    .setDescription(detail.slice(0, 4000))
+    .setDescription(`${E.inbox} **Admin · feedback for you + Evan**\n\n` + detail.slice(0, 3900))
     .addFields(
       { name: 'From', value: `<@${interaction.user.id}> \`${interaction.user.username}\``, inline: true },
       { name: 'Server', value: guildName, inline: true },

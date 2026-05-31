@@ -26,8 +26,8 @@ const SUPPRESS_ACTORS = new Set([
 async function alert(client, body) {
   const embed = new EmbedBuilder()
     .setColor(0xEF4444)
-    .setDescription(body.slice(0, 4096))
-    .setFooter({ text: 'Community Organisation | Security Alert' })
+    .setDescription(`${E.warning} **Security alert · admin-only (you + Evan)**\n\n` + body.slice(0, 4000))
+    .setFooter({ text: 'Security alert · admin-only · Community Organisation' })
     .setTimestamp();
   for (const uid of ALERT_USER_IDS) {
     try {
