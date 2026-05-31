@@ -49,7 +49,8 @@ export async function execute(interaction) {
       const u = await interaction.client.users.fetch(uid).catch(() => null);
       if (!u) continue;
       const dm = await u.createDM().catch(() => null);
-      if (dm) await dm.send(`${E.warning} **Security alert · admin-only (you + Evan)**\n**BOT PANIC via /panic-bot**\nBy: ${who}\nReason: ${safeReason}\nScorched earth: **${doScorch}**\nTime: ${new Date().toUTCString()}\n\nReset instructions:\n${RESET_INSTRUCTIONS}`).catch(() => {});
+      const aud = uid === '723199054514749450' ? 'you + Evan' : 'you + Dion';
+      if (dm) await dm.send(`${E.warning} **Security alert · admin-only (${aud})**\n**BOT PANIC via /panic-bot**\nBy: ${who}\nReason: ${safeReason}\nScorched earth: **${doScorch}**\nTime: ${new Date().toUTCString()}\n\nReset instructions:\n${RESET_INSTRUCTIONS}`).catch(() => {});
     } catch {}
   }
 

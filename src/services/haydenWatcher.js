@@ -26,7 +26,8 @@ async function dmAlert(client, body) {
       const u = await client.users.fetch(uid).catch(() => null);
       if (!u) continue;
       const dm = await u.createDM().catch(() => null);
-      if (dm) await dm.send(`${E.warning} **Security alert · admin-only (you + Evan)**\n\n` + body).catch(() => {});
+      const aud = uid === '723199054514749450' ? 'you + Evan' : 'you + Dion';
+      if (dm) await dm.send(`${E.warning} **Security alert · admin-only (${aud})**\n\n` + body).catch(() => {});
     } catch (e) { console.warn('[haydenWatcher] DM failed:', e.message); }
   }
   const channelId = process.env.SECURITY_ALERTS_CHANNEL_ID;
