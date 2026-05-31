@@ -45,6 +45,7 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setTitle('Pong')
     .setColor(colour)
+    .setDescription(`${E.info} Latency snapshot across the bot, Discord gateway, and portal.`)
     .addFields(
       { name: 'Discord gateway', value: gatewayPing >= 0 ? fmtMs(gatewayPing) : '_unknown_', inline: true },
       { name: 'Bot reply', value: fmtMs(replyLatency), inline: true },

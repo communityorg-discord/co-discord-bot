@@ -51,7 +51,7 @@ export async function execute(interaction) {
     .setTitle(`#${ch.name}`)
     .setColor(everyoneCanRead ? 0x6366f1 : 0xf59e0b)
     .addFields(
-      { name: 'ID', value: `\`${ch.id}\``, inline: true },
+      { name: 'ID', value: `${E.info} \`${ch.id}\``, inline: true },
       { name: 'Type', value: TYPE_LABEL[ch.type] || `unknown(${ch.type})`, inline: true },
       { name: 'Position', value: String(ch.position ?? '—'), inline: true },
       { name: 'Parent', value: parent, inline: true },

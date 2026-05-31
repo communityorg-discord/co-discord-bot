@@ -51,7 +51,7 @@ async function sendWelcomeDM(client, discordUser, entry, approvedBy) {
       .setColor(0x22C55E)
       .setDescription(WELCOME_DESCRIPTION)
       .addFields(
-        { name: 'Server Invites', value: inviteLines.join('\n') || 'No invites available', inline: false },
+        { name: 'Server Invites', value: `${E.link} ` + (inviteLines.join('\n') || 'No invites available'), inline: false },
         { name: 'Your Position', value: entry.position, inline: true },
         { name: 'Approved By', value: `<@${approvedBy}>`, inline: true },
       )
@@ -135,7 +135,7 @@ export async function execute(interaction) {
       .setTitle(`Verification Request #${queueId}${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''}`)
       .setColor(isOfficial ? 0xFFD700 : 0x8B4513)
       .addFields(
-        { name: 'User', value: `<@${discordId}> (${discordId})`, inline: false },
+        { name: 'User', value: `${E.id} <@${discordId}> (${discordId})`, inline: false },
         { name: 'Position Requested', value: position, inline: false },
         { name: 'Nickname Requested', value: nickname, inline: false },
         { name: 'Supervisor', value: isOfficial ? 'None' : (portalUser?.supervisor_name || 'N/A'), inline: false },
@@ -233,7 +233,7 @@ export async function handleSelect(interaction) {
       await applyVerification({ client: interaction.client, discordId: queue.discord_id, nickname: queue.nickname, override: { authLevel: selectedAuthLevel }, sendDM: false, interaction });
       const { logAction } = await import('../utils/logger.js');
       await logAction(interaction.client, { action: 'Member Verified (Auth Selected)', target: { discordId: queue.discord_id, name: queue.nickname }, moderator: { discordId: interaction.user.id, name: interaction.user.username }, color: 0x22C55E });
-      await interaction.editReply({ embeds: [new EmbedBuilder().setTitle('Verification Approved').setColor(0x22C55E).setDescription('Approved <@' + queue.discord_id + '> with auth level ' + selectedAuthLevel + '.')] }).catch(() => {});
+      await interaction.editReply({ embeds: [new EmbedBuilder().setTitle('Verification Approved').setColor(0x22C55E).setDescription(E.check + ' Approved <@' + queue.discord_id + '> with auth level ' + selectedAuthLevel + '.')] }).catch(() => {});
       return;
     }
   } catch (err) {
@@ -279,7 +279,7 @@ export async function handleButton(interaction) {
     const failedCount = results.filter(r => !r.success).length;
 
     const fields = [
-      { name: 'User', value: `<@${entry.discord_id}> (${entry.discord_id})`, inline: false },
+      { name: 'User', value: `${E.check} <@${entry.discord_id}> (${entry.discord_id})`, inline: false },
       { name: 'Position', value: entry.position, inline: true },
       { name: 'Nickname', value: entry.requested_nickname, inline: true },
       { name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false },
@@ -313,7 +313,7 @@ export async function handleButton(interaction) {
     const ackEmbed = new EmbedBuilder()
       .setColor(0x22C55E)
       .setTitle(`Verification #${queueId} Approved`)
-      .setDescription(`Approved <@${entry.discord_id}> at **Level ${overrideLevel}** override.`)
+      .setDescription(`${E.check} Approved <@${entry.discord_id}> at **Level ${overrideLevel}** override.`)
       .setTimestamp();
 
     await interaction.editReply({ embeds: [ackEmbed] });
@@ -392,7 +392,7 @@ export async function handleButton(interaction) {
     const infoEmbed = new EmbedBuilder()
       .setColor(0x5865F2)
       .setTitle('Authorisation Level Override')
-      .setDescription(`Select the authorisation level to assign for verification request **#${queueId}**.\n\nThe selected level will be applied across all servers.`)
+      .setDescription(`${E.shield} Select the authorisation level to assign for verification request **#${queueId}**.\n\nThe selected level will be applied across all servers.`)
       .setTimestamp();
 
     await interaction.reply({ embeds: [infoEmbed], components: [overrideRow], ephemeral: true });
@@ -509,7 +509,7 @@ export async function handleModal(interaction) {
       : '';
 
     const fields = [
-      { name: 'User', value: `<@${entry.discord_id}> (${entry.discord_id})`, inline: false },
+      { name: 'User', value: `${E.check} <@${entry.discord_id}> (${entry.discord_id})`, inline: false },
       { name: 'Position', value: entry.position, inline: true },
       { name: 'Nickname', value: nickname, inline: true },
       { name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false },
@@ -531,7 +531,7 @@ export async function handleModal(interaction) {
           embeds: [new EmbedBuilder()
             .setColor(0xF59E0B)
             .setTitle('Nickname Could Not Be Set')
-            .setDescription(`I was unable to set <@${entry.discord_id}>'s nickname to **${nickname}** in ${nicknameFailed.length} server(s) due to Discord role hierarchy.\n\nPlease set it manually.`)
+            .setDescription(`${E.warning} I was unable to set <@${entry.discord_id}>'s nickname to **${nickname}** in ${nicknameFailed.length} server(s) due to Discord role hierarchy.\n\nPlease set it manually.`)
             .setTimestamp()
           ]
         });
@@ -583,7 +583,7 @@ export async function handleModal(interaction) {
     .setColor(0xef4444)
     .setTitle(`Verification Request #${queueId} — Denied`)
     .addFields(
-      { name: 'User', value: `<@${entry.discord_id}> (${entry.discord_id})`, inline: false },
+      { name: 'User', value: `${E.cross} <@${entry.discord_id}> (${entry.discord_id})`, inline: false },
       { name: 'Position Requested', value: entry.position, inline: false },
       { name: 'Nickname Requested', value: entry.requested_nickname, inline: false },
       { name: 'Supervisor', value: entry.supervisor_name || 'N/A', inline: false },
@@ -616,7 +616,7 @@ export async function handleModal(interaction) {
       embeds: [new EmbedBuilder()
         .setColor(0xef4444)
         .setTitle('CO Verification Denied')
-        .setDescription(`Your CO staff verification request has been denied.\n\n**Reason:** ${reason}\n\nIf you believe this is an error, please contact a superuser.`)
+        .setDescription(`${E.cross} Your CO staff verification request has been denied.\n\n**Reason:** ${reason}\n\nIf you believe this is an error, please contact a superuser.`)
         .setTimestamp()
       ]
     });

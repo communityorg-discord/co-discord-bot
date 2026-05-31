@@ -100,7 +100,7 @@ export async function execute(interaction) {
       .addFields(
         {
           name: `Yours (${personal.length})`,
-          value: personal.length ? personal.map(s => `\`${s.name}\` · used ${s.use_count}×`).join('\n').slice(0, 1024) : '_None — use `/snippet save` to add._',
+          value: personal.length ? `${E.info} ` + personal.map(s => `\`${s.name}\` · used ${s.use_count}×`).join('\n').slice(0, 1018) : '_None — use `/snippet save` to add._',
           inline: false,
         },
         {

@@ -108,7 +108,7 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setTitle(`Audit log — ${guild.name}`)
     .setColor(0x6366f1)
-    .setDescription(lines.join('\n').slice(0, 4096))
+    .setDescription(`${E.logs} ` + lines.join('\n').slice(0, 4090))
     .setFooter({
       text: `Filter: ${action}${target ? ` · target ${target.username}` : ''} · ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}`,
     })

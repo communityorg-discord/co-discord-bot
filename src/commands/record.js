@@ -58,7 +58,7 @@ export async function execute(interaction) {
         embeds: [new EmbedBuilder()
           .setColor(0xef4444)
           .setTitle('Recording Started')
-          .setDescription(`Recording is now active in **${voiceChannel.name}**.`)
+          .setDescription(`${E.processing} Recording is now active in **${voiceChannel.name}**.`)
           .addFields(
             { name: 'Access Code', value: `**${accessCode}**`, inline: true },
             { name: 'Recording ID', value: `\`${recordingKey}\``, inline: true },
@@ -77,7 +77,7 @@ export async function execute(interaction) {
       const liveEmbed = new EmbedBuilder()
         .setColor(0xef4444)
         .setTitle('Recording in Progress')
-        .setDescription(`Recording active in **${voiceChannel.name}**\nStarted by **${interaction.user.tag}** — <t:${startTs}:R>`)
+        .setDescription(`${E.processing} Recording active in **${voiceChannel.name}**\nStarted by **${interaction.user.tag}** — <t:${startTs}:R>`)
         .addFields(
           { name: 'Participants (0)', value: '*Waiting for speakers...*', inline: true },
           { name: 'Duration', value: '`00:00`', inline: true },
@@ -122,7 +122,7 @@ export async function execute(interaction) {
       const embed = new EmbedBuilder()
         .setColor(0x22c55e)
         .setTitle('Recording Complete')
-        .setDescription(`Recording from **${rec.channel_name}** is ready.`)
+        .setDescription(`${E.check} Recording from **${rec.channel_name}** is ready.`)
         .addFields(
           { name: 'Duration', value: durationStr, inline: true },
           { name: 'Participants', value: String(participants.filter(p => p.discord_id !== 'BOT').length), inline: true },
@@ -145,7 +145,7 @@ export async function execute(interaction) {
       const finalEmbed = new EmbedBuilder()
         .setColor(0x22c55e)
         .setTitle('Recording Ended')
-        .setDescription(`Recording stopped by **${interaction.user.tag}**`)
+        .setDescription(`${E.check} Recording stopped by **${interaction.user.tag}**`)
         .addFields(
           { name: 'Duration', value: `**${durationStr}**`, inline: true },
           { name: 'Participants', value: String(participants.filter(p => p.discord_id !== 'BOT').length), inline: true },
@@ -191,7 +191,7 @@ export async function execute(interaction) {
       embeds: [new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle('Recent Recordings')
-        .setDescription(lines.join('\n\n'))
+        .setDescription(`${E.info} ` + lines.join('\n\n'))
         .setFooter({ text: 'CO Recording System' })
       ]
     });

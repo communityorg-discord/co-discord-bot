@@ -54,7 +54,7 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setTitle('Kudos!')
     .setColor(0xfacc15)
-    .setDescription(`<@${interaction.user.id}> wants to thank <@${target.id}> for…\n\n> ${reason.split('\n').join('\n> ')}`)
+    .setDescription(`${E.kudos} <@${interaction.user.id}> wants to thank <@${target.id}> for…\n\n> ${reason.split('\n').join('\n> ')}`)
     .setFooter({
       text: recentCount === 1
         ? 'First kudos for this staffer in the last 30 days'
@@ -71,7 +71,7 @@ export async function execute(interaction) {
           new EmbedBuilder()
             .setTitle('You got kudos!')
             .setColor(0xfacc15)
-            .setDescription(`<@${interaction.user.id}> just sent you a public thanks for…\n\n> ${reason.split('\n').join('\n> ')}`)
+            .setDescription(`${E.kudos} <@${interaction.user.id}> just sent you a public thanks for…\n\n> ${reason.split('\n').join('\n> ')}`)
             .setFooter({ text: `In ${interaction.guild?.name || 'a CO server'}` })
             .setTimestamp(),
         ],

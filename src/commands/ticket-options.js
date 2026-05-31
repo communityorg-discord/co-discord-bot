@@ -62,7 +62,7 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setTitle('Ticket Options')
     .setColor(0x5865F2)
-    .setDescription('Select an action to manage this ticket.')
+    .setDescription(`${E.ticket} Select an action to manage this ticket.`)
     .addFields(
       { name: 'Opened By', value: `<@${ticket.user_id}>`, inline: true },
       { name: 'Claimed By', value: ticket.claimed_by ? `<@${ticket.claimed_by}>` : 'Nobody', inline: true },

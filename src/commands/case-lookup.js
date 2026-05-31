@@ -56,7 +56,7 @@ export async function execute(interaction) {
 
     const embed = new EmbedBuilder()
       .setTitle(`${row.case_number}`)
-      .setDescription(row.subject || '_No subject_')
+      .setDescription(`${E.investigate} ${row.subject || '_No subject_'}`)
       .setColor(statusColour)
       .addFields(
         { name: 'Type',     value: row.case_type, inline: true },

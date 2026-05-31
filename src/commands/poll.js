@@ -56,7 +56,7 @@ export function buildPollEmbed(poll, options, votes, ended = false) {
 
   const embed = new EmbedBuilder()
     .setTitle(`${poll.question}`)
-    .setDescription(lines.join('\n\n'))
+    .setDescription(`${E.announce} ${lines.join('\n\n')}`)
     .setColor(ended ? 0x808080 : 0x5865F2)
     .addFields(
       { name: 'Total Votes', value: String(totalVotes), inline: true },

@@ -81,7 +81,7 @@ export async function execute(interaction) {
       .setTitle('Personal Email Monitoring')
       .setColor(0x22C55E)
       .addFields(
-        { name: 'Email Address', value: setup.co_email, inline: true },
+        { name: 'Email Address', value: `${E.inbox} ${setup.co_email}`, inline: true },
         { name: 'Status', value: 'Active', inline: true },
         { name: 'IMAP Host', value: `${setup.imap_host}:${setup.imap_port}`, inline: true },
         { name: 'Configured', value: `<t:${Math.floor(new Date(setup.created_at).getTime() / 1000)}:R>`, inline: false },

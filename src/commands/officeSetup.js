@@ -102,7 +102,7 @@ export async function execute(interaction) {
     const list = ids.length > 0 ? ids.map(i => `<@${i}>`).join(', ') : '*(empty — only superusers can join)*';
     await interaction.editReply({
       embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Office configured')
-        .setDescription(`<#${channel.id}> is now managed.\n\n**Allowlist:** ${list}`)
+        .setDescription(`${E.check} <#${channel.id}> is now managed.\n\n**Allowlist:** ${list}`)
         .setFooter({ text: 'Anyone not on the allowlist gets kicked and DMd a request button.' })]
     });
 
@@ -137,7 +137,7 @@ export async function execute(interaction) {
     await interaction.editReply({
       embeds: [new EmbedBuilder().setColor(sub === 'add' ? 0x22C55E : 0xF59E0B)
         .setTitle(`${sub === 'add' ? 'Added' : 'Removed'} ${user.tag}`)
-        .setDescription(`<#${channel.id}> allowlist (${list.length}): ${list.length ? list.map(i => `<@${i}>`).join(', ') : '*(empty)*'}`)]
+        .setDescription(`${sub === 'add' ? E.check : E.warning} <#${channel.id}> allowlist (${list.length}): ${list.length ? list.map(i => `<@${i}>`).join(', ') : '*(empty)*'}`)]
     });
 
     await logAction(interaction.client, {
@@ -160,7 +160,7 @@ export async function execute(interaction) {
 
     await interaction.editReply({
       embeds: [new EmbedBuilder().setColor(0xF59E0B).setTitle('Unmanaged')
-        .setDescription(`<#${channel.id}> is no longer managed.`)]
+        .setDescription(`${E.warning} <#${channel.id}> is no longer managed.`)]
     });
 
     await logAction(interaction.client, {
@@ -187,7 +187,7 @@ export async function execute(interaction) {
     const wrLines = wrs.length > 0 ? wrs.map(w => `<#${w.channel_id}>`).join('\n') : '*None — run `/office waiting`*';
     await interaction.editReply({
       embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Managed Offices')
-        .setDescription(officeLines)
+        .setDescription(`${E.info} ${officeLines}`)
         .addFields(
           { name: 'Waiting rooms', value: wrLines, inline: false },
           { name: 'Request feed', value: feed ? `<#${feed}>` : '*Not set — run `/office feed`*', inline: false },
@@ -202,7 +202,7 @@ export async function execute(interaction) {
     setRequestFeed(guild.id, channel.id);
     await interaction.editReply({
       embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Request feed set')
-        .setDescription(`Office access requests will be posted in <#${channel.id}>.`)]
+        .setDescription(`${E.check} Office access requests will be posted in <#${channel.id}>.`)]
     });
     await logAction(interaction.client, {
       action: 'Office Request Feed Set',
@@ -220,7 +220,7 @@ export async function execute(interaction) {
     upsertWaitingRoom(guild.id, channel.id, channel.name);
     await interaction.editReply({
       embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Waiting room registered')
-        .setDescription(`<#${channel.id}> is now a waiting room. Anyone joining will trigger an access request in the feed channel.`)]
+        .setDescription(`${E.check} <#${channel.id}> is now a waiting room. Anyone joining will trigger an access request in the feed channel.`)]
     });
     await logAction(interaction.client, {
       action: 'Office Waiting Room Set',
@@ -238,7 +238,7 @@ export async function execute(interaction) {
     deleteWaitingRoom(channel.id);
     await interaction.editReply({
       embeds: [new EmbedBuilder().setColor(0xF59E0B).setTitle('Waiting room removed')
-        .setDescription(`<#${channel.id}> is no longer a waiting room.`)]
+        .setDescription(`${E.warning} <#${channel.id}> is no longer a waiting room.`)]
     });
     await logAction(interaction.client, {
       action: 'Office Waiting Room Removed',

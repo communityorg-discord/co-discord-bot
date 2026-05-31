@@ -33,7 +33,7 @@ export async function execute(interaction) {
     .setTitle(`Leave Balance — ${user.display_name || user.full_name}`)
     .setColor(0x5865F2)
     .addFields(
-      { name: 'Annual Leave', value: `${annualRemaining} / ${annualTotal} days remaining`, inline: true },
+      { name: 'Annual Leave', value: `${E.leave} ${annualRemaining} / ${annualTotal} days remaining`, inline: true },
       { name: 'Wellbeing Days', value: `${wellbeingRemaining} / ${wellbeingTotal} remaining`, inline: true },
       { name: 'Pending Requests', value: String(pending.length), inline: true }
     )

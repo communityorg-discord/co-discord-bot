@@ -76,7 +76,7 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setTitle(dryRun ? 'Mass role sync — dry run' : 'Mass role sync — done')
     .setColor(dryRun ? 0xf59e0b : 0x22c55e)
-    .setDescription(`Walked ${verified.length} verified member${verified.length === 1 ? '' : 's'} across ${serverIds.length} guild${serverIds.length === 1 ? '' : 's'}.`)
+    .setDescription(`${E.role} Walked ${verified.length} verified member${verified.length === 1 ? '' : 's'} across ${serverIds.length} guild${serverIds.length === 1 ? '' : 's'}.`)
     .addFields(
       { name: dryRun ? 'Would grant' : 'Granted', value: String(totalGranted), inline: true },
       { name: 'Already had', value: String(totalAlready), inline: true },

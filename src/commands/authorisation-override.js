@@ -55,7 +55,7 @@ export async function execute(interaction) {
         embeds: [new EmbedBuilder()
           .setTitle('Auth Override Removed')
           .setColor(0xF59E0B)
-          .setDescription(`Auth override for <@${targetUserId}> has been removed.\n\nTheir auth level will revert to their position-based level on next verification/role sync.`)
+          .setDescription(`${E.shield} Auth override for <@${targetUserId}> has been removed.\n\nTheir auth level will revert to their position-based level on next verification/role sync.`)
           .setTimestamp()
         ]
       });
@@ -102,7 +102,7 @@ export async function execute(interaction) {
       .setTitle(`Authorisation Override — Level ${newAuthLevel}`)
       .setColor(updated > 0 ? 0x22c55e : 0xef4444)
       .addFields(
-        { name: 'Target', value: `<@${targetUserId}>`, inline: false },
+        { name: 'Target', value: `${E.shield} <@${targetUserId}>`, inline: false },
         { name: 'New Auth Level', value: newAuthLevelRoleName, inline: false },
         { name: 'Reason', value: reason, inline: false },
         { name: 'Actioned By', value: `<@${interaction.user.id}>`, inline: false },

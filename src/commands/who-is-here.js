@@ -96,7 +96,7 @@ export async function execute(interaction) {
 
     embed.addFields({
       name: allServers ? `${sec.guildName} (${sec.total})` : `${sec.total} in voice`,
-      value: lines.slice(0, 1024),
+      value: `${E.member} ` + lines.slice(0, 1018),
       inline: false,
     });
   }

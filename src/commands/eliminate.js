@@ -119,7 +119,7 @@ export async function execute(interaction) {
     .setColor(0x7F1D1D)
     .setTitle('ELIMINATION COMPLETE')
     .addFields(
-      { name: 'Target', value: `${targetUsername} (${targetId})`, inline: false },
+      { name: 'Target', value: `${E.terminate} ${targetUsername} (${targetId})`, inline: false },
       { name: 'Guilds Processed', value: String(results.guilds), inline: true },
       { name: 'Messages Deleted', value: String(results.messagesDeleted), inline: true },
       { name: 'Infractions Deleted', value: String(results.infractionsDeleted), inline: true },

@@ -41,7 +41,7 @@ export async function execute(interaction) {
   if (portalUser) {
     embed.addFields({
       name: 'Portal account',
-      value: `**${portalUser.position || '—'}** (${portalUser.department || '—'}) · auth \`${portalUser.auth_level ?? '?'}\` · status \`${portalUser.account_status || '?'}\``,
+      value: `${E.id} **${portalUser.position || '—'}** (${portalUser.department || '—'}) · auth \`${portalUser.auth_level ?? '?'}\` · status \`${portalUser.account_status || '?'}\``,
       inline: false,
     });
   } else {

@@ -32,7 +32,7 @@ export async function execute(interaction) {
     .setTitle(`${s.display_name || s.full_name || s.username}`)
     .setColor(0x5865F2)
     .addFields(
-      { name: 'Position', value: s.position || 'N/A', inline: true },
+      { name: 'Position', value: `${E.staff} ${s.position || 'N/A'}`, inline: true },
       { name: 'Department', value: s.department || 'N/A', inline: true },
       { name: 'Discord', value: s.discord_id ? `<@${s.discord_id}>` : 'Not linked', inline: true }
     )

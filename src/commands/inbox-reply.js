@@ -33,7 +33,7 @@ export async function execute(interaction) {
       { name: 'Replied At', value: `<t:${Math.floor(new Date(reply.replied_at).getTime() / 1000)}:F>`, inline: true },
       { name: 'To', value: reply.reply_to || 'N/A', inline: true },
       { name: 'Subject', value: reply.reply_subject || 'N/A', inline: false },
-      { name: 'Message', value: (reply.reply_body || '(no content)').slice(0, 1024), inline: false },
+      { name: 'Message', value: `${E.inbox} ${(reply.reply_body || '(no content)')}`.slice(0, 1024), inline: false },
     )
     .setFooter({ text: 'CO Inbox System' })
     .setTimestamp();

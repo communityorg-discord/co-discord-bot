@@ -96,7 +96,7 @@ export async function execute(interaction) {
     const embed = new EmbedBuilder()
       .setTitle(`APS — ${user.display_name || user.full_name || 'You'}`)
       .setColor(gradeColor)
-      .setDescription(`Week **${wk}** · Tier **${userTier.team_name}**`)
+      .setDescription(`${E.aps} Week **${wk}** · Tier **${userTier.team_name}**`)
       .addFields(
         { name: 'Grade', value: grade.toUpperCase(), inline: true },
         { name: 'Points', value: `${total} / ${userTier.green_target}`, inline: true },

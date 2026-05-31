@@ -69,7 +69,7 @@ export async function execute(interaction) {
     .setColor(0x5865F2)
     .setThumbnail(client.user.displayAvatarURL())
     .addFields(
-      { name: 'Version', value: `\`v${getBotVersion()}\``, inline: true },
+      { name: 'Version', value: `${E.info} \`v${getBotVersion()}\``, inline: true },
       { name: 'Uptime', value: `${fmtUptime(process.uptime())} (started <t:${procStart}:R>)`, inline: true },
       { name: 'Node', value: `\`${process.version}\``, inline: true },
       { name: 'Servers', value: String(guilds.length), inline: true },

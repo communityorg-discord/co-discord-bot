@@ -208,7 +208,7 @@ export async function execute(interaction) {
     return interaction.editReply({ embeds: [new EmbedBuilder()
       .setTitle(`${scope === 'global' ? 'Global' : 'Server'} Purge Complete`)
       .setColor(0x22c55e)
-      .setDescription(`Deleted **${totalDeleted}** messages across **${processedChannels}** channels.`)
+      .setDescription(`${E.check} Deleted **${totalDeleted}** messages across **${processedChannels}** channels.`)
       .setTimestamp()
     ]});
   }
@@ -281,7 +281,7 @@ export async function execute(interaction) {
     const summaryEmbed = new EmbedBuilder()
       .setTitle('Channel Purged')
       .setColor(0xef4444)
-      .setDescription(`**${deleted}** message${deleted !== 1 ? 's' : ''} deleted from <#${channel.id}>`)
+      .setDescription(`${E.gavel} **${deleted}** message${deleted !== 1 ? 's' : ''} deleted from <#${channel.id}>`)
       .addFields(
         { name: 'Moderator', value: moderatorName, inline: true },
         { name: 'Reason', value: reason, inline: true },
@@ -325,7 +325,7 @@ export async function execute(interaction) {
     await interaction.editReply({ embeds: [new EmbedBuilder()
       .setTitle('Purge Complete')
       .setColor(0x22c55e)
-      .setDescription(`Deleted **${deleted}** message${deleted !== 1 ? 's' : ''} from <#${channel.id}>.`)
+      .setDescription(`${E.check} Deleted **${deleted}** message${deleted !== 1 ? 's' : ''} from <#${channel.id}>.`)
       .addFields(
         { name: 'Transcript', value: `[View at portal.communityorg.co.uk](${transcriptUrl})`, inline: false },
         ...(tooOld > 0 ? [{ name: 'Note', value: `${tooOld} message(s) skipped — older than 14 days.`, inline: false }] : [])

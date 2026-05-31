@@ -64,7 +64,7 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setTitle(`World clock — ${header}`)
     .setColor(0x6366f1)
-    .setDescription(lines)
+    .setDescription(`${E.calendar} ${lines}`)
     .setFooter({ text: `Discord-relative: <t:${Math.floor(when.getTime() / 1000)}:F>` });
 
   await interaction.reply({

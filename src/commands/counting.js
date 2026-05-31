@@ -98,7 +98,7 @@ export async function execute(interaction) {
     const embed = new EmbedBuilder()
       .setTitle('Counting Leaderboard')
       .setColor(0x5865F2)
-      .setDescription(lines.join('\n'))
+      .setDescription(`${E.star} ${lines.join('\n')}`)
       .setTimestamp();
 
     return interaction.editReply({ embeds: [embed] });

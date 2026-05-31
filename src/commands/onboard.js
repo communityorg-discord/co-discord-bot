@@ -131,7 +131,7 @@ export async function handleModal(interaction) {
     await targetUser.send({ embeds: [new EmbedBuilder()
       .setColor(0x5865F2)
       .setTitle('Welcome to Community Organisation')
-      .setDescription('Welcome to the CO team! Your staff portal account has been set up.')
+      .setDescription(`${E.join} Welcome to the CO team! Your staff portal account has been set up.`)
       .addFields(...dmFields)
       .setFooter({ text: 'Community Organisation | Keep these credentials private' })
       .setTimestamp()
@@ -175,7 +175,7 @@ export async function handleModal(interaction) {
   await interaction.editReply({ embeds: [new EmbedBuilder()
     .setColor(0x22C55E)
     .setTitle('Onboarding Complete')
-    .setDescription(`**${targetUser.tag}** has been onboarded as **${matchedPosition}**.`)
+    .setDescription(`${E.check} **${targetUser.tag}** has been onboarded as **${matchedPosition}**.`)
     .addFields(
       { name: 'Nickname', value: nickname, inline: true },
       { name: 'Steps', value: steps.map((s, i) => `${i + 1}. ${s}`).join('\n'), inline: false },

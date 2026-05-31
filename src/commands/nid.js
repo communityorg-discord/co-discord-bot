@@ -50,7 +50,7 @@ export async function execute(interaction) {
       { name: 'Incident Summary', value: incident, inline: false },
       { name: 'Submitted By', value: supervisor.display_name || supervisor.full_name, inline: true }
     )
-    .setDescription('Please confirm this NID submission. This will be sent to DMSPC for review.')
+    .setDescription(`${E.gavel} Please confirm this NID submission. This will be sent to DMSPC for review.`)
     .setFooter({ text: 'Section 5.1 — CO Internal Staff Policy' });
 
   const row = new ActionRowBuilder().addComponents(

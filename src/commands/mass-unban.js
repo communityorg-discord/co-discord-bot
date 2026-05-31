@@ -82,6 +82,7 @@ export async function execute(interaction) {
     const embed = new EmbedBuilder()
       .setTitle('Mass Unban (Global)')
       .setColor(0x22C55E)
+      .setDescription(`${E.unban} All previously banned members have been unbanned across every server.`)
       .addFields(
         { name: 'Total Unbanned', value: String(totalUnbanned), inline: true },
         { name: 'Total Failed', value: String(totalFailed), inline: true },
@@ -131,6 +132,7 @@ export async function execute(interaction) {
     const embed = new EmbedBuilder()
       .setTitle('Mass Unban (Local)')
       .setColor(0x22C55E)
+      .setDescription(`${E.unban} All previously banned members have been unbanned in this server.`)
       .addFields(
         { name: 'Server', value: guild.name, inline: true },
         { name: 'Unbanned', value: String(unbanned), inline: true },

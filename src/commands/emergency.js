@@ -4,6 +4,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { SUPERUSER_IDS } from '../config.js';
 import { createEmergencyCode } from '../utils/botDb.js';
+import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('emergency')
@@ -17,7 +18,7 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setColor(0xf87171)
     .setTitle('Emergency override code')
-    .setDescription(`\`\`\`\n${code}\n\`\`\`\nEnter this on the dev site’s **Pending approvals** to push a pending action through **without the second admin** — for emergencies only.\n\n• Single use\n• Expires <t:${Math.floor(expiresAt / 1000)}:R>`)
+    .setDescription(`${E.warning} \`\`\`\n${code}\n\`\`\`\nEnter this on the dev site’s **Pending approvals** to push a pending action through **without the second admin** — for emergencies only.\n\n• Single use\n• Expires <t:${Math.floor(expiresAt / 1000)}:R>`)
     .setFooter({ text: 'Community Organisation · emergency override' });
   return interaction.reply({ embeds: [embed], flags: 64 });
 }

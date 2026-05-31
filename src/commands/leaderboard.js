@@ -80,7 +80,7 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setTitle(title)
     .setColor(type === 'voice' ? 0x22c55e : 0x6366f1)
-    .setDescription(lines.join('\n'))
+    .setDescription(`${E.star} ${lines.join('\n')}`)
     .addFields({ name: 'Week', value: weekKey, inline: true })
     .setFooter({ text: 'Live data — updates every 5 minutes' })
     .setTimestamp();

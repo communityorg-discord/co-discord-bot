@@ -143,7 +143,7 @@ function buildOverviewEmbed() {
   return new EmbedBuilder()
     .setTitle('Organisation-Wide Log Channels')
     .setColor(0xf59e0b)
-    .setDescription('These channels receive logs from **every CO server** — not just this one.\nSelect a category below to configure.')
+    .setDescription(`${E.logs} These channels receive logs from **every CO server** — not just this one.\nSelect a category below to configure.`)
     .addFields(fields)
     .setFooter({ text: 'Community Organisation | Use /logspanel for per-server logs' })
     .setTimestamp();
@@ -269,7 +269,7 @@ export async function handleSelect(interaction) {
       const embed = new EmbedBuilder()
         .setTitle('Organisation Catch-All Channels')
         .setColor(0xf59e0b)
-        .setDescription('Catch-all channels receive **all logs of a type** from **every CO server** in one channel. Individual type bindings take priority when set.\n\n' + catchallLines.join('\n'))
+        .setDescription(`${E.logs} Catch-all channels receive **all logs of a type** from **every CO server** in one channel. Individual type bindings take priority when set.\n\n` + catchallLines.join('\n'))
         .setFooter({ text: 'Community Organisation | Organisation-Wide Logs' })
         .setTimestamp();
 
@@ -299,7 +299,7 @@ export async function handleSelect(interaction) {
     const catEmbed = new EmbedBuilder()
       .setTitle(`${cat.emoji} ${cat.label} — Organisation Bindings`)
       .setColor(0xf59e0b)
-      .setDescription('These apply to logs from **all CO servers**.')
+      .setDescription(`${E.logs} These apply to logs from **all CO servers**.`)
       .addFields({ name: '​', value: typeRows.join('\n'), inline: false })
       .setFooter({ text: 'Community Organisation | Organisation-Wide Logs' })
       .setTimestamp();

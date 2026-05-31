@@ -50,7 +50,7 @@ export async function execute(interaction) {
       embeds: [new EmbedBuilder()
         .setTitle('Warning Issued')
         .setColor(0xF59E0B)
-        .setDescription(`You have received a warning in **Community Organisation**.`)
+        .setDescription(`${E.warning} You have received a warning in **Community Organisation**.`)
         .addFields(
           { name: 'Reason', value: reason, inline: false },
           { name: 'Issued By', value: `<@${interaction.user.id}>`, inline: true },
@@ -98,7 +98,7 @@ export async function execute(interaction) {
           embeds: [new EmbedBuilder()
             .setTitle(`Auto-Escalation — ${escalation.label}`)
             .setColor(escalation.color)
-            .setDescription(`You have been **${escalation.label.toLowerCase()}** from **Community Organisation** due to reaching **${warningCount} active warnings**.`)
+            .setDescription(`${E.gavel} You have been **${escalation.label.toLowerCase()}** from **Community Organisation** due to reaching **${warningCount} active warnings**.`)
             .addFields(
               { name: 'Threshold', value: `${escalation.count} warnings → ${escalation.label}`, inline: true },
               { name: 'Active Warnings', value: String(warningCount), inline: true },
@@ -150,7 +150,7 @@ export async function execute(interaction) {
   const replyEmbed = new EmbedBuilder()
     .setTitle('Warning Issued')
     .setColor(escalation ? escalation.color : 0xF59E0B)
-    .setDescription(`**${targetName}** has been warned.`)
+    .setDescription(`${E.warning} **${targetName}** has been warned.`)
     .addFields(
       { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },
       { name: 'Reason', value: reason, inline: false },

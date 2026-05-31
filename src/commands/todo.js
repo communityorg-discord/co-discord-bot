@@ -57,10 +57,10 @@ export async function execute(interaction) {
       .setFooter({ text: 'Reference items by their number — /todo done index:N · /todo remove index:N' });
 
     if (open.length === 0) {
-      embed.setDescription('_Inbox zero. Nothing open._');
+      embed.setDescription(`${E.check} _Inbox zero. Nothing open._`);
     } else {
       const lines = open.map((t, i) => `**${i + 1}.** ${t.text}`).join('\n');
-      embed.addFields({ name: `Open (${open.length})`, value: lines.slice(0, 1024), inline: false });
+      embed.addFields({ name: `Open (${open.length})`, value: `${E.pending} ` + lines.slice(0, 1018), inline: false });
     }
     if (done.length > 0) {
       const lines = done.slice(0, 5).map(t => `~~${t.text}~~`).join('\n');

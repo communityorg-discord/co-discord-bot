@@ -257,7 +257,7 @@ export async function execute(interaction) {
     await interaction.editReply({ embeds: [new EmbedBuilder()
       .setTitle('Transcript Generated')
       .setColor(0x22c55e)
-      .setDescription(`Captured **${allMessages.length}** message${allMessages.length !== 1 ? 's' : ''} from <#${targetChannel.id}>.`)
+      .setDescription(`${E.logs} Captured **${allMessages.length}** message${allMessages.length !== 1 ? 's' : ''} from <#${targetChannel.id}>.`)
       .addFields(
         { name: 'Transcript', value: `[View at portal.communityorg.co.uk](${transcriptUrl})`, inline: false },
         { name: 'Expires', value: 'After 1 year', inline: true },

@@ -117,7 +117,7 @@ export async function execute(interaction) {
     const embed = new EmbedBuilder()
       .setTitle(`Activity Points — ${targetDbUser.display_name || targetDbUser.full_name}${viewingNote}`)
       .setColor(gradeColor(currentGrade))
-      .setDescription('_BRAG was retired in 2026-04-26 — this view now reads from Activity Points._')
+      .setDescription(`${E.aps} _BRAG was retired in 2026-04-26 — this view now reads from Activity Points._`)
       .addFields(
         { name: 'Position', value: targetDbUser.position || 'N/A', inline: true },
         { name: 'Department', value: targetDbUser.department || 'N/A', inline: true },

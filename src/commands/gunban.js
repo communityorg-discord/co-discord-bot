@@ -70,7 +70,7 @@ export async function execute(interaction) {
   await interaction.editReply({ embeds: [new EmbedBuilder()
     .setTitle('Global Unban')
     .setColor(0x22C55E)
-    .setDescription(`Global ban removed from <@${userId}>.`)
+    .setDescription(`${E.unban} Global ban removed from <@${userId}>.`)
     .addFields(
       { name: 'Unbanned From', value: String(unbannedCount), inline: true },
       { name: 'Reason', value: reason, inline: false },

@@ -51,7 +51,7 @@ export async function execute(interaction) {
     .setTitle('CO Staff Portal — quick links')
     .setColor(0x6366f1)
     .setURL(PORTAL)
-    .setDescription(`Portal: **${PORTAL}**`)
+    .setDescription(`${E.link} Portal: **${PORTAL}**`)
     .setFooter({ text: 'Use /help for bot commands · /feedback to suggest a missing link' });
 
   for (const sec of LINKS) {

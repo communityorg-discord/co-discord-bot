@@ -118,7 +118,7 @@ export async function execute(interaction) {
       .setTitle(`${titlePrefix} Complete`)
       .setColor(statusColor)
       .addFields(
-        { name: 'User', value: `<@${targetUserId}>`, inline: false },
+        { name: 'User', value: `${E.ban} <@${targetUserId}>`, inline: false },
         { name: 'Scope', value: 'All Servers', inline: true },
         { name: 'Duration', value: isTempBan ? durationStr : 'Permanent', inline: true },
         { name: 'Banned From', value: results.join(', ') || 'None', inline: false },

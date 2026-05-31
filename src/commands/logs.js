@@ -45,7 +45,7 @@ export async function execute(interaction) {
       return `**${t.name}** — ${ch ? `<#${ch}>` : '_not set_'}`;
     });
     const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('Log channels in this server')
-      .setDescription(lines.join('\n'))
+      .setDescription(`${E.logs} ${lines.join('\n')}`)
       .setFooter({ text: 'Dion + Evan also get every log in their DMs.' });
     return interaction.reply({ embeds: [embed], flags: 64 });
   }

@@ -38,7 +38,7 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setTitle('Investigation Opened')
     .setColor(0xF59E0B)
-    .setDescription(`Investigation **${caseRef}** opened for **${displayName}**.\n\nReason: ${reason}`)
+    .setDescription(`${E.investigate} Investigation **${caseRef}** opened for **${displayName}**.\n\nReason: ${reason}`)
     .addFields(
       { name: 'Investigated User', value: `<@${target.id}>`, inline: true },
       { name: 'Opened By', value: interaction.user.username, inline: true },
@@ -79,7 +79,7 @@ export async function handleSelect(interaction) {
     const embed = new EmbedBuilder()
       .setTitle(`Case ${caseData.case_ref}`)
       .setColor(0xF59E0B)
-      .setDescription(caseData.description || 'No description provided.')
+      .setDescription(`${E.investigate} ${caseData.description || 'No description provided.'}`)
       .addFields(
         { name: 'Type', value: caseData.case_type, inline: true },
         { name: 'Status', value: caseData.status, inline: true },
@@ -109,7 +109,7 @@ export async function handleSelect(interaction) {
       const embed = new EmbedBuilder()
         .setTitle('Investigation Started')
         .setColor(0xF59E0B)
-        .setDescription(`Investigation **${caseData.case_ref}** has been started for **${displayName}**.\n\nThis user has been notified via DM and their access has been restricted.`)
+        .setDescription(`${E.investigate} Investigation **${caseData.case_ref}** has been started for **${displayName}**.\n\nThis user has been notified via DM and their access has been restricted.`)
         .addFields(
           { name: 'Case', value: caseData.case_ref, inline: true },
           { name: 'Investigated', value: displayName, inline: true }
@@ -135,7 +135,7 @@ export async function handleSelect(interaction) {
       const embed = new EmbedBuilder()
         .setTitle(`Case ${caseData.case_ref} — Investigation In Progress`)
         .setColor(0xF59E0B)
-        .setDescription(`Investigation for **${displayName}** is currently in progress.\n\nUse the select menu below to record the outcome.`)
+        .setDescription(`${E.investigate} Investigation for **${displayName}** is currently in progress.\n\nUse the select menu below to record the outcome.`)
         .addFields(
           { name: 'Reason', value: caseData.description || 'No description', inline: false },
           { name: 'Investigated', value: `<@${caseData.discord_id}>`, inline: true },
@@ -183,7 +183,7 @@ export async function handleSelect(interaction) {
     await interaction.editReply({ embeds: [new EmbedBuilder()
       .setTitle('Investigation Ended')
       .setColor(outcome === 'nfa' ? 0x22C55E : 0xEF4444)
-      .setDescription(`Investigation ended for **${displayName}**.`)
+      .setDescription(`${E.gavel} Investigation ended for **${displayName}**.`)
       .addFields(
         { name: 'Outcome', value: outcomeLabels[outcome], inline: true },
         { name: 'Reason', value: reason2, inline: false },

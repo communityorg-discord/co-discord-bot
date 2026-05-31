@@ -1,4 +1,5 @@
 import { randomBytes } from 'crypto';
+import { E } from '../lib/emoji.js';
 
 // HTML-escape any user/attachment-derived text before interpolating into the
 // transcript. The transcript is served same-origin on the staff portal, so an
@@ -168,7 +169,7 @@ export async function closeTicketWithTranscript(ticket, ticketChannel, panel, cl
             .setTitle(`🎫 Ticket Closed — ${panel.name}`)
             .setColor(0x6b7280)
             .addFields(
-              { name: 'Ticket Channel', value: ticketChannel.name || ticket.discord_channel_id, inline: true },
+              { name: 'Ticket Channel', value: `${E.ticket} ${ticketChannel.name || ticket.discord_channel_id}`, inline: true },
               { name: 'Opened By', value: `<@${ticket.user_id}>`, inline: true },
               { name: 'Claimed By', value: ticket.claimed_by ? `<@${ticket.claimed_by}>` : 'Nobody', inline: true },
               { name: 'Closed By', value: `${closerInteraction.user} (<@${closerInteraction.user.id}>)`, inline: true },

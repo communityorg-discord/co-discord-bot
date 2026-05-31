@@ -193,7 +193,7 @@ export async function handleWaitingRoomJoin(client, voiceState) {
   if (allOffices.length === 0) {
     await member.send({
       embeds: [new EmbedBuilder().setColor(0x6b7280).setTitle('No offices configured')
-        .setDescription('There are no managed offices to request access to in this server.')]
+        .setDescription(`${E.info} There are no managed offices to request access to in this server.`)]
     }).catch(() => {});
     return;
   }

@@ -58,7 +58,7 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setTitle(`Kudos leaderboard — ${winKey === 'all' ? 'all time' : `last ${days}d`}`)
     .setColor(0xfacc15)
-    .setDescription(lines.join('\n'))
+    .setDescription(`${E.kudos} ${lines.join('\n')}`)
     .setFooter({ text: `${totalThisWindow} kudo${totalThisWindow === 1 ? '' : 's'} across ${recipients.length} staff · use /thanks to add to it` })
     .setTimestamp();
 

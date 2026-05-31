@@ -122,7 +122,7 @@ export async function execute(interaction) {
     .setTitle('DM Scheduled')
     .setColor(0x22C55E)
     .addFields(
-      { name: 'Recipient', value: `<@${targetUser.id}>`, inline: true },
+      { name: 'Recipient', value: `${E.calendar} <@${targetUser.id}>`, inline: true },
       { name: 'Send At', value: `<t:${Math.floor(sendAt.getTime() / 1000)}:F> (<t:${Math.floor(sendAt.getTime() / 1000)}:R>)`, inline: true },
       { name: 'Subject', value: subject || 'None', inline: true },
       { name: 'Message Preview', value: message.slice(0, 200) + (message.length > 200 ? '...' : ''), inline: false },

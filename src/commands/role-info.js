@@ -55,6 +55,7 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setTitle(`@${role.name}`)
     .setColor(role.color || 0x6b7280)
+    .setDescription(`${E.role} Details for <@&${role.id}>.`)
     .addFields(
       { name: 'ID', value: `\`${role.id}\``, inline: true },
       { name: 'Position', value: `${role.position} of ${guild.roles.cache.size}`, inline: true },

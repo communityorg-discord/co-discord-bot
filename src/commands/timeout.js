@@ -127,7 +127,7 @@ async function handleAddTimeout(interaction) {
       embeds: [new EmbedBuilder()
         .setTitle('You Have Been Timed Out')
         .setColor(0xF59E0B)
-        .setDescription(`You have been timed out in **Community Organisation**.`)
+        .setDescription(`${E.suspend} You have been timed out in **Community Organisation**.`)
         .addFields(
           { name: 'Reason', value: reason, inline: false },
           { name: 'Duration', value: durationDisplay, inline: true },
@@ -161,7 +161,7 @@ async function handleAddTimeout(interaction) {
     embeds: [new EmbedBuilder()
       .setTitle('User Timed Out')
       .setColor(0xF59E0B)
-      .setDescription(`**${targetName}** has been timed out.`)
+      .setDescription(`${E.suspend} **${targetName}** has been timed out.`)
       .addFields(
         { name: 'User', value: `<@${targetId}>`, inline: true },
         { name: 'Duration', value: durationDisplay, inline: true },
@@ -211,7 +211,7 @@ async function handleRemoveTimeout(interaction) {
       embeds: [new EmbedBuilder()
         .setTitle('Timeout Removed')
         .setColor(0x22C55E)
-        .setDescription(`Your timeout in **Community Organisation** has been removed.`)
+        .setDescription(`${E.check} Your timeout in **Community Organisation** has been removed.`)
         .addFields(
           { name: 'Removed By', value: `<@${interaction.user.id}>`, inline: true },
           ...(reason !== 'Not specified' ? [{ name: 'Reason', value: reason, inline: false }] : []),
@@ -241,7 +241,7 @@ async function handleRemoveTimeout(interaction) {
     embeds: [new EmbedBuilder()
       .setTitle('Timeout Removed')
       .setColor(0x22C55E)
-      .setDescription(`Timeout for **${targetName}** has been removed.`)
+      .setDescription(`${E.check} Timeout for **${targetName}** has been removed.`)
       .addFields(
         { name: 'User', value: `<@${targetId}>`, inline: true },
         { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: true },

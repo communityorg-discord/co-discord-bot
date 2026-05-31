@@ -146,7 +146,7 @@ function buildOverviewEmbed() {
   return new EmbedBuilder()
     .setTitle('Private Log Channels')
     .setColor(0x8b5cf6)
-    .setDescription('Private log channels — separate from organisation-wide logs.\nThese do not interfere with /orglogs bindings.\nSelect a category below to configure.')
+    .setDescription(`${E.logs} Private log channels — separate from organisation-wide logs.\nThese do not interfere with /orglogs bindings.\nSelect a category below to configure.`)
     .addFields(fields)
     .setFooter({ text: 'Community Organisation | Use /orglogs for organisation-wide logs' })
     .setTimestamp();
@@ -272,7 +272,7 @@ export async function handleSelect(interaction) {
       const embed = new EmbedBuilder()
         .setTitle('Private Catch-All Channels')
         .setColor(0x8b5cf6)
-        .setDescription('Private catch-all channels — separate from /orglogs catch-all bindings.\n\n' + catchallLines.join('\n'))
+        .setDescription(`${E.logs} Private catch-all channels — separate from /orglogs catch-all bindings.\n\n` + catchallLines.join('\n'))
         .setFooter({ text: 'Community Organisation | Private Logs' })
         .setTimestamp();
 
@@ -302,7 +302,7 @@ export async function handleSelect(interaction) {
     const catEmbed = new EmbedBuilder()
       .setTitle(`${cat.emoji} ${cat.label} — Private Bindings`)
       .setColor(0x8b5cf6)
-      .setDescription('Private log bindings — separate from /orglogs.')
+      .setDescription(`${E.logs} Private log bindings — separate from /orglogs.`)
       .addFields({ name: '​', value: typeRows.join('\n'), inline: false })
       .setFooter({ text: 'Community Organisation | Private Logs' })
       .setTimestamp();

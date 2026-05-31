@@ -146,7 +146,7 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setTitle(`${panel.name}`)
     .setColor(0x5865F2)
-    .setDescription('If you wish to make a ticket, please click the button below.')
+    .setDescription(`${E.ticket} If you wish to make a ticket, please click the button below.`)
     .setFooter({ text: 'Community Organisation | Ticket System' })
     .setTimestamp();
 

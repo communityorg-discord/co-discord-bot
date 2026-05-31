@@ -34,7 +34,7 @@ export async function execute(interaction) {
       embeds: [new EmbedBuilder()
         .setTitle('Employment Terminated')
         .setColor(0xEF4444)
-        .setDescription('Your employment with Community Organisation has been terminated.')
+        .setDescription(`${E.terminate} Your employment with Community Organisation has been terminated.`)
         .addFields(
           { name: 'Reason', value: reason },
           { name: 'Effective', value: `<t:${Math.floor(Date.now() / 1000)}:F>` }
@@ -61,7 +61,7 @@ export async function execute(interaction) {
   await interaction.editReply({ embeds: [new EmbedBuilder()
     .setTitle('Staff Terminated')
     .setColor(0x7F1D1D)
-    .setDescription(`**${portalUser?.display_name || target.username}** has been terminated.`)
+    .setDescription(`${E.terminate} **${portalUser?.display_name || target.username}** has been terminated.`)
     .addFields(
       { name: 'Reason', value: reason, inline: false },
       { name: 'Moderator', value: interaction.user.username, inline: true },

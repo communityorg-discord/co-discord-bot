@@ -22,7 +22,7 @@ export async function execute(interaction) {
         return new EmbedBuilder()
           .setTitle('DM Exemptions')
           .setColor(0x5865F2)
-          .setDescription('No users are currently exempt from mass/team DMs.')
+          .setDescription(`${E.dm} No users are currently exempt from mass/team DMs.`)
           .setFooter({ text: 'Community Organisation | Staff Assistant' })
           .setTimestamp();
       }
@@ -35,7 +35,7 @@ export async function execute(interaction) {
       return new EmbedBuilder()
         .setTitle(`DM Exemptions (${exempts.length})`)
         .setColor(0x5865F2)
-        .setDescription(rows.join('\n\n'))
+        .setDescription(`${E.dm} ${rows.join('\n\n')}`)
         .setFooter({ text: 'Community Organisation | Staff Assistant' })
         .setTimestamp();
     };

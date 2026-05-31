@@ -22,14 +22,14 @@ function buildInfractionsPage(infractions, page, total, target, includeDeleted, 
     .setFooter({ text: `Community Organisation | Page ${page} of ${totalPages}` });
 
   if (infractions.length === 0) {
-    embed.setDescription('No active infractions.');
+    embed.setDescription(`${E.check} No active infractions.`);
   } else {
     const descLines = pageItems.map(i => {
       const exp = i.expires_at ? ` ${E.calendar} <t:${Math.floor(new Date(i.expires_at).getTime()/1000)}:R>` : '';
       const active = i.active === 0 ? ' ~~(deleted)~~' : '';
       return `**#${i.id}** \`${i.type}\`${exp}${active} — ${i.reason}\n*By ${i.moderator_name || 'Unknown'} <t:${Math.floor(new Date(i.created_at).getTime()/1000)}:R>*`;
     });
-    let description = descLines.join('\n\n');
+    let description = `${E.gavel} ` + descLines.join('\n\n');
     if (description.length > 4096) description = description.substring(0, 4090) + '...';
     embed.setDescription(description);
   }
@@ -99,7 +99,7 @@ export async function execute(interaction) {
       await interaction.reply({ embeds: [new EmbedBuilder()
         .setTitle('Infraction Deleted')
         .setColor(0x22C55E)
-        .setDescription(`Infraction #${id} has been deleted and moved to deleted history.`)
+        .setDescription(`${E.check} Infraction #${id} has been deleted and moved to deleted history.`)
         .addFields({ name: 'Deleted By', value: interaction.user.username, inline: true })
         .setFooter({ text: 'Community Organisation' })
         .setTimestamp()

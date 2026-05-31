@@ -35,7 +35,7 @@ export async function execute(interaction) {
     .setColor(0xfacc15)
     .setThumbnail(target.displayAvatarURL())
     .addFields(
-      { name: 'Received (all time)', value: String(receivedTotal), inline: true },
+      { name: 'Received (all time)', value: `${E.kudos} ${receivedTotal}`, inline: true },
       { name: 'Received (30d)', value: String(last30Received), inline: true },
       { name: 'Given (all time)', value: String(givenTotal), inline: true },
     );

@@ -59,7 +59,7 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
     .setTitle('CO Organisation Statistics')
-    .setDescription(`Real-time data from the portal, bot, and Discord.\n\u200b`)
+    .setDescription(`${E.info} Real-time data from the portal, bot, and Discord.\n\u200b`)
     .addFields(
       { name: 'Staff', value: [
         `**Active:** ${activeStaff}`,

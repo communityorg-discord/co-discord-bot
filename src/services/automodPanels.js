@@ -101,7 +101,7 @@ function buildConfigEmbed() {
   return new EmbedBuilder()
     .setColor(0x5865F2)
     .setTitle('AUTOMOD CONFIGURATION')
-    .setDescription('Select a module from the dropdown below to view and edit its settings.')
+    .setDescription(`${E.shield} Select a module from the dropdown below to view and edit its settings.`)
     .setFooter({ text: 'CO AutoMod System' });
 }
 
@@ -163,7 +163,7 @@ function buildImmunityEmbed(guildId) {
   return new EmbedBuilder()
     .setColor(0x5865F2)
     .setTitle('IMMUNITY MANAGEMENT')
-    .setDescription(`Grant immunity to users, roles, or servers from specific automod modules.\n\n**Currently Immune:**\n${list}`)
+    .setDescription(`${E.shield} Grant immunity to users, roles, or servers from specific automod modules.\n\n**Currently Immune:**\n${list}`)
     .setFooter({ text: 'CO AutoMod System' })
     .setTimestamp();
 }
@@ -186,7 +186,7 @@ function buildApprovalEmbed(guildId) {
   return new EmbedBuilder()
     .setColor(pending > 0 ? 0xF59E0B : 0x22C55E)
     .setTitle('APPROVAL REQUESTS')
-    .setDescription(`**Pending:** ${pending}  |  **Approved today:** ${approvedToday}  |  **Denied today:** ${deniedToday}`)
+    .setDescription(`${E.pending} **Pending:** ${pending}  |  **Approved today:** ${approvedToday}  |  **Denied today:** ${deniedToday}`)
     .setFooter({ text: 'CO AutoMod System' })
     .setTimestamp();
 }
@@ -307,7 +307,7 @@ export async function handleInteraction(interaction) {
     const incidents = db.prepare('SELECT * FROM automod_incidents WHERE guild_id = ? ORDER BY created_at DESC LIMIT 15').all(guildId);
     if (incidents.length === 0) return interaction.reply({ content: 'No recent incidents.', ephemeral: true });
     const desc = incidents.map(i => `**${i.incident_type}** | ${i.target_discord_id ? `<@${i.target_discord_id}>` : 'N/A'} | ${i.severity} | ${i.action_taken} | <t:${Math.floor(new Date(i.created_at).getTime() / 1000)}:R>`).join('\n');
-    return interaction.reply({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Recent Incidents').setDescription(desc).setTimestamp()], ephemeral: true });
+    return interaction.reply({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Recent Incidents').setDescription(`${E.logs} ${desc}`).setTimestamp()], ephemeral: true });
   }
 
   // ── Config select dropdown ──
@@ -543,7 +543,7 @@ export async function handleInteraction(interaction) {
     const list = db.prepare('SELECT * FROM automod_immunity WHERE guild_id = ? OR guild_id IS NULL ORDER BY created_at DESC').all(guildId);
     if (list.length === 0) return interaction.reply({ content: 'No immunities.', ephemeral: true });
     const desc = list.map(i => `**#${i.id}** | ${i.target_type} \`${i.target_id}\` | from: **${i.immune_from}** ${i.expires_at ? `(expires <t:${Math.floor(new Date(i.expires_at).getTime() / 1000)}:R>)` : '(permanent)'}`).join('\n');
-    return interaction.reply({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('All Immunities').setDescription(desc)], ephemeral: true });
+    return interaction.reply({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('All Immunities').setDescription(`${E.shield} ${desc}`)], ephemeral: true });
   }
 
   // ── Immunity remove → ephemeral select ──
@@ -577,7 +577,7 @@ export async function handleInteraction(interaction) {
     const embeds = pending.map(r => new EmbedBuilder()
       .setColor(0xF59E0B).setTitle(`Approval #${r.id}`)
       .addFields(
-        { name: 'Requester', value: `<@${r.requester_discord_id}>`, inline: true },
+        { name: 'Requester', value: `${E.pending} <@${r.requester_discord_id}>`, inline: true },
         { name: 'Action', value: r.action_type, inline: true },
         { name: 'Description', value: r.action_description, inline: false },
       ).setTimestamp(new Date(r.created_at))

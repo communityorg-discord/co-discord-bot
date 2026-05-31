@@ -80,7 +80,7 @@ export async function execute(interaction) {
       ].filter(Boolean).join(' · ');
       embed.addFields({
         name: `${STATUS_EMOJI[t.status] || '•'} \`${t.ticket_ref}\` — ${title(t.status)}`,
-        value: `**${t.title || '(no title)'}**\n${title(t.priority)} priority · ${fmtDate(t.created_at)}${badges ? `\n${badges}` : ''}`,
+        value: `${E.ticket} **${t.title || '(no title)'}**\n${title(t.priority)} priority · ${fmtDate(t.created_at)}${badges ? `\n${badges}` : ''}`,
       });
     }
     embed.setFooter({ text: 'Open the portal to see more →' });
@@ -102,7 +102,7 @@ export async function execute(interaction) {
     }
     const embed = new EmbedBuilder()
       .setTitle(`${STATUS_EMOJI[t.status] || '•'} ${ref} — ${title(t.status)}`)
-      .setDescription(t.title || '(no title)')
+      .setDescription(`${E.ticket} ${t.title || '(no title)'}`)
       .setColor(PRIORITY_COLOR[t.priority] ?? 0x6366f1)
       .setURL(`${PORTAL_URL}?tab=admin&ticket=${t.id}`)
       .addFields(

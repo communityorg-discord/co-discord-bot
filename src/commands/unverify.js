@@ -67,7 +67,7 @@ export async function execute(interaction) {
     .setTitle(`Unverification Request #${queueId}`)
     .setColor(0x8B1A1A)
     .addFields(
-      { name: 'User', value: `<@${target.id}> (${target.id})`, inline: false },
+      { name: 'User', value: `${E.id} <@${target.id}> (${target.id})`, inline: false },
       { name: 'Current Position', value: verified?.position || 'Unknown', inline: false },
       { name: 'Employee Number', value: verified?.employee_number || 'N/A', inline: false },
       { name: 'Requested By', value: `<@${interaction.user.id}>`, inline: false },
@@ -160,7 +160,7 @@ export async function handleModal(interaction) {
     .setColor(0xef4444)
     .setTitle(`Unverification Request #${queueId} — Completed`)
     .addFields(
-      { name: 'User', value: `<@${entry.discord_id}> (${entry.discord_id})`, inline: false },
+      { name: 'User', value: `${E.cross} <@${entry.discord_id}> (${entry.discord_id})`, inline: false },
       { name: 'Previous Position', value: entry.position || 'Unknown', inline: true },
       { name: 'Approved By', value: `<@${interaction.user.id}>`, inline: false },
       { name: 'Reason', value: reason, inline: false },
@@ -192,7 +192,7 @@ export async function handleModal(interaction) {
         embeds: [new EmbedBuilder()
           .setTitle('CO Verification Removed')
           .setColor(0xef4444)
-          .setDescription(`Your CO staff verification has been removed by <@${interaction.user.id}>.`)
+          .setDescription(`${E.id} Your CO staff verification has been removed by <@${interaction.user.id}>.`)
           .addFields(
             { name: 'Reason', value: reason, inline: false },
           )

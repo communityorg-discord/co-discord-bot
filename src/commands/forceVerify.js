@@ -86,7 +86,7 @@ export async function execute(interaction) {
       .setTitle(`Verification Request #${queueId}${isOfficial ? ' [OFFICIAL ACCOUNT]' : ''} [Force]`)
       .setColor(isOfficial ? 0xFFD700 : 0x8B4513)
       .addFields(
-        { name: 'User', value: `<@${discordId}> (${discordId})`, inline: false },
+        { name: 'User', value: `${E.id} <@${discordId}> (${discordId})`, inline: false },
         { name: 'Position Requested', value: position, inline: false },
         { name: 'Nickname Requested', value: nickname, inline: false },
         { name: 'Supervisor', value: isOfficial ? 'None' : (portalUser?.supervisor_name || 'N/A'), inline: false },

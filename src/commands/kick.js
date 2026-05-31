@@ -56,7 +56,7 @@ export async function execute(interaction) {
       embeds: [new EmbedBuilder()
         .setTitle('You Have Been Kicked')
         .setColor(0xEF4444)
-        .setDescription(`You have been kicked from **${interaction.guild.name}**. You may rejoin if you believe this was a mistake.`)
+        .setDescription(`${E.gavel} You have been kicked from **${interaction.guild.name}**. You may rejoin if you believe this was a mistake.`)
         .addFields(
           { name: 'Reason', value: reason, inline: false },
           { name: 'Server', value: interaction.guild.name, inline: true },
@@ -88,7 +88,7 @@ export async function execute(interaction) {
     embeds: [new EmbedBuilder()
       .setTitle('User Kicked')
       .setColor(0xEF4444)
-      .setDescription(`**${targetName}** has been kicked from the server.`)
+      .setDescription(`${E.gavel} **${targetName}** has been kicked from the server.`)
       .addFields(
         { name: 'User', value: `<@${targetId}>`, inline: true },
         { name: 'Reason', value: reason, inline: false },

@@ -73,7 +73,7 @@ export async function execute(interaction) {
   }
 
   if (onlineTotal === 0) {
-    embed.setDescription(`_All ${verified.length} verified staff are offline._`);
+    embed.setDescription(`${E.member} _All ${verified.length} verified staff are offline._`);
   } else if (buckets.offline.length > 0) {
     embed.addFields({
       name: `offline (${buckets.offline.length})`,

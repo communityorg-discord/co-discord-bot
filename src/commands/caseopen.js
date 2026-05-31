@@ -68,7 +68,7 @@ export async function execute(interaction) {
     const embed = new EmbedBuilder()
       .setTitle(`Case opened — ${resp.case_number}`)
       .setColor(0x10b981)
-      .setDescription(`**${subject}**\n\nA case officer will be in touch.`)
+      .setDescription(`${E.check} **${subject}**\n\nA case officer will be in touch.`)
       .addFields(
         { name: 'Type',   value: case_type.replace(/_/g, ' '), inline: true },
         { name: 'Status', value: 'Open · Intake', inline: true },

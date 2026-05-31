@@ -123,7 +123,7 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setTitle('Select an Inbox')
     .setColor(0x1a73e8)
-    .setDescription('Choose an inbox to access:')
+    .setDescription(`${E.inbox} Choose an inbox to access:`)
     .addFields(accessibleInboxes.map(ib => ({
       name: `${ib.emoji} ${ib.name}`,
       value: ib.description || '\u200B',
@@ -300,7 +300,7 @@ export async function handleInboxInteraction(interaction) {
       const embed = new EmbedBuilder()
         .setTitle('Select an Inbox')
         .setColor(0x1a73e8)
-        .setDescription('Choose an inbox to access:')
+        .setDescription(`${E.inbox} Choose an inbox to access:`)
         .addFields(accessibleInboxes.map(ib => ({
           name: `${ib.emoji} ${ib.name}`,
           value: ib.description || '\u200B',

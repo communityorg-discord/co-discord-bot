@@ -62,7 +62,7 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setTitle(`${winners.length === 1 ? 'And the lucky one is…' : `${winners.length} picked`}`)
     .setColor(role.color || 0x6366f1)
-    .setDescription(winners.map(m => `<@${m.id}>`).join('\n'))
+    .setDescription(`${E.star} ` + winners.map(m => `<@${m.id}>`).join('\n'))
     .setFooter({
       text: `From @${role.name} — pool of ${pool.length}${onlineOnly ? ' (online only)' : ''} · picked by ${interaction.user.username}`,
     })

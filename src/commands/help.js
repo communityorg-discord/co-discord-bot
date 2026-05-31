@@ -172,8 +172,8 @@ export async function execute(interaction) {
     .setTitle('CO Bot — Command Reference')
     .setDescription(
       search
-        ? `**${totalCmds} match${totalCmds === 1 ? '' : 'es'}** for \`${search}\`\n\u200b`
-        : `**${totalCmds} commands** across ${CATEGORIES.length} categories\n\u200b`
+        ? `${E.info} **${totalCmds} match${totalCmds === 1 ? '' : 'es'}** for \`${search}\`\n\u200b`
+        : `${E.info} **${totalCmds} commands** across ${CATEGORIES.length} categories\n\u200b`
     )
     .setFooter({ text: 'Community Organisation | Staff Assistant' })
     .setTimestamp();

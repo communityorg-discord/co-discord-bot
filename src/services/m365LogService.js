@@ -1,5 +1,6 @@
 import { ClientSecretCredential } from '@azure/identity';
 import { EmbedBuilder } from 'discord.js';
+import { E } from '../lib/emoji.js';
 
 const credential = new ClientSecretCredential(
   process.env.MICROSOFT_TENANT_ID,
@@ -98,7 +99,7 @@ async function checkAuditLogs() {
       .join('\n');
 
     const fields = [
-      { name: 'Performed By', value: String(initiatedBy), inline: true },
+      { name: 'Performed By', value: `${E.staff} ${String(initiatedBy)}`, inline: true },
       { name: 'Target', value: String(targets).slice(0, 256), inline: true },
       { name: 'Result', value: success ? 'Success' : `Failed: ${log.resultReason || 'Unknown'}`, inline: true },
       { name: 'Category', value: log.category || 'Unknown', inline: true },
@@ -154,7 +155,7 @@ async function checkEmailActivity() {
           .setAuthor({ name: 'M365 | Email Received' })
           .setTitle(msg.subject?.slice(0, 100) || '(No subject)')
           .addFields(
-            { name: 'To', value: user.displayName || user.userPrincipalName, inline: true },
+            { name: 'To', value: `${E.inbox} ${user.displayName || user.userPrincipalName}`, inline: true },
             { name: 'From', value: `${fromName}\n${fromAddr}`, inline: true },
             { name: 'Type', value: isExternal ? 'External' : 'Internal', inline: true },
             ...(msg.importance === 'high' ? [{ name: 'Priority', value: 'High', inline: true }] : []),
@@ -180,7 +181,7 @@ async function checkEmailActivity() {
           .setAuthor({ name: 'M365 | Email Sent' })
           .setTitle(msg.subject?.slice(0, 100) || '(No subject)')
           .addFields(
-            { name: 'From', value: user.displayName || user.userPrincipalName, inline: true },
+            { name: 'From', value: `${E.dm} ${user.displayName || user.userPrincipalName}`, inline: true },
             { name: 'To', value: toList.slice(0, 256) || 'Unknown', inline: true },
             { name: 'Type', value: isExternal ? 'External' : 'Internal', inline: true },
           )

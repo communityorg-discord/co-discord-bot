@@ -85,7 +85,7 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setTitle(`${matches.size} match${matches.size === 1 ? '' : 'es'} for "${q}"`)
     .setColor(0x6366f1)
-    .setDescription(lines.join('\n').slice(0, 4096))
+    .setDescription(`${E.investigate} ${lines.join('\n')}`.slice(0, 4096))
     .setFooter({
       text: matches.size > 25
         ? `Showing top 25 of ${matches.size} (sorted by guild presence)`

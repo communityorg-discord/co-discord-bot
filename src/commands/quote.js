@@ -71,7 +71,7 @@ export async function execute(interaction) {
       iconURL: author.displayAvatarURL(),
       url: msg.url,
     })
-    .setDescription(content.slice(0, 4000) + attached)
+    .setDescription(`${E.inbox} ${content.slice(0, 4000)}` + attached)
     .setColor(0x6366f1)
     .setTimestamp(msg.createdTimestamp)
     .setFooter({

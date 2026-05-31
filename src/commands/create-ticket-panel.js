@@ -50,7 +50,7 @@ export async function execute(interaction) {
     .setTitle('Ticket Panel Created')
     .setColor(0x22c55e)
     .addFields(
-      { name: 'Panel Name', value: panelName, inline: true },
+      { name: 'Panel Name', value: `${E.ticket} ${panelName}`, inline: true },
       { name: 'Staff Role', value: `<@&${staffRole.id}>`, inline: true },
       { name: 'Ping Role', value: `<@&${pingRole.id}>`, inline: true },
       { name: 'Category', value: category.name, inline: true },

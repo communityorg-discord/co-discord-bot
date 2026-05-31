@@ -101,7 +101,7 @@ export async function execute(interaction) {
       .setTitle(`${r.g.name}`)
       .setColor(colour)
       .addFields(
-        { name: 'Members', value: String(r.members), inline: true },
+        { name: 'Members', value: `${E.shield} ${String(r.members)}`, inline: true },
         { name: 'Roles', value: String(r.roles), inline: true },
         { name: 'AutoMod', value: r.automod, inline: true },
         { name: 'Bot perms', value: [
@@ -119,7 +119,7 @@ export async function execute(interaction) {
     embeds.push(new EmbedBuilder()
       .setTitle('+ more guilds')
       .setColor(0x6b7280)
-      .setDescription(`${reports.length - 9} additional guilds not shown — Discord caps at 10 embeds per reply. Re-run with scope:here in the specific server you want to check.`));
+      .setDescription(`${E.info} ${reports.length - 9} additional guilds not shown — Discord caps at 10 embeds per reply. Re-run with scope:here in the specific server you want to check.`));
   }
   await interaction.editReply({ embeds });
 }

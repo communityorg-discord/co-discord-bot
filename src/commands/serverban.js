@@ -122,7 +122,7 @@ export async function execute(interaction) {
       embeds: [new EmbedBuilder()
         .setTitle(isTempBan ? 'You Have Been Temporarily Banned' : 'You Have Been Banned')
         .setColor(0xEF4444)
-        .setDescription(`You have been banned from **${interaction.guild.name}**.`)
+        .setDescription(`${E.ban} You have been banned from **${interaction.guild.name}**.`)
         .addFields(
           { name: 'Reason', value: reason, inline: false },
           ...(isTempBan ? [{ name: 'Duration', value: formatDuration(durationMs), inline: true }, { name: 'Expires', value: `<t:${Math.floor((Date.now() + durationMs) / 1000)}:R>`, inline: true }] : []),
@@ -159,7 +159,7 @@ export async function execute(interaction) {
     embeds: [new EmbedBuilder()
       .setTitle(isTempBan ? 'User Temporarily Banned' : 'User Banned')
       .setColor(0xEF4444)
-      .setDescription(`**${targetName}** has been banned from this server.`)
+      .setDescription(`${E.ban} **${targetName}** has been banned from this server.`)
       .addFields(
         { name: 'User', value: `<@${targetId}>`, inline: true },
         { name: 'Duration', value: isTempBan ? formatDuration(durationMs) : 'Permanent', inline: true },

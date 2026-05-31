@@ -77,7 +77,7 @@ export async function handleModalSubmit(interaction) {
     .setAuthor({ name: `${display} — standup`, iconURL: interaction.user.displayAvatarURL() })
     .setColor(0x6366f1)
     .addFields(
-      { name: 'Yesterday', value: yesterday.slice(0, 1024), inline: false },
+      { name: 'Yesterday', value: `${E.standup} ${yesterday.slice(0, 1018)}`, inline: false },
       { name: 'Today',     value: today.slice(0, 1024),     inline: false },
     )
     .setTimestamp();

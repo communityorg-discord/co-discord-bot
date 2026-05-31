@@ -57,7 +57,7 @@ export async function execute(interaction) {
       embeds: [new EmbedBuilder()
         .setTitle('Global Ban')
         .setColor(0x7F1D1D)
-        .setDescription('You have been globally banned from all Community Organisation servers.')
+        .setDescription(`${E.gban} You have been globally banned from all Community Organisation servers.`)
         .addFields(
           { name: 'Reason', value: reason },
           { name: 'Appeal', value: appealable ? 'You may appeal this ban in the Appeals Server.' : 'This ban is **not appealable**.' }
@@ -94,7 +94,7 @@ export async function execute(interaction) {
   await interaction.editReply({ embeds: [new EmbedBuilder()
     .setTitle('Global Ban')
     .setColor(0x7F1D1D)
-    .setDescription(`**${target.username}** has been globally banned.`)
+    .setDescription(`${E.gban} **${target.username}** has been globally banned.`)
     .addFields(
       { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },
       { name: 'Banned', value: String(bannedCount), inline: true },

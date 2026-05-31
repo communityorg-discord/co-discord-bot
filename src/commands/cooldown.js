@@ -49,7 +49,7 @@ export async function execute(interaction) {
     .setTitle('Channel Cooldown Set')
     .setColor(seconds === 0 ? 0x22C55E : 0xF59E0B)
     .addFields(
-      { name: 'Channel', value: `<#${targetChannel.id}>`, inline: true },
+      { name: 'Channel', value: `${E.check} <#${targetChannel.id}>`, inline: true },
       { name: 'Duration', value: durationText, inline: true },
       { name: 'Set By', value: `<@${interaction.user.id}>`, inline: true },
       { name: 'Reason', value: reason, inline: false }

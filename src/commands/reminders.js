@@ -47,7 +47,7 @@ export async function execute(interaction) {
     const embed = new EmbedBuilder()
       .setTitle(`Your reminders — ${rows.length}`)
       .setColor(0x6366f1)
-      .setDescription(lines.join('\n\n').slice(0, 4000))
+      .setDescription(`${E.calendar} ` + lines.join('\n\n').slice(0, 4000))
       .setFooter({ text: 'Cancel one with /reminders cancel index:N' });
     return interaction.reply({ embeds: [embed], ephemeral: true });
   }

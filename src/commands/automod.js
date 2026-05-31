@@ -71,7 +71,7 @@ export async function execute(interaction) {
           embeds: [new EmbedBuilder()
             .setColor(0xF59E0B).setTitle('Approval Request')
             .addFields(
-              { name: 'Requester', value: `<@${interaction.user.id}>`, inline: true },
+              { name: 'Requester', value: `${E.pending} <@${interaction.user.id}>`, inline: true },
               { name: 'Action', value: actionType, inline: true },
               { name: 'Description', value: description, inline: false },
               { name: 'Expires', value: `<t:${Math.floor(Date.now() / 1000 + 1200)}:R>`, inline: true },

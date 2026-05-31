@@ -108,7 +108,7 @@ export async function execute(interaction) {
   const buildEmbed = () => new EmbedBuilder()
     .setTitle(`${subject}`)
     .setColor(0x5865F2)
-    .setDescription(message)
+    .setDescription(`${E.inbox} ${message}`)
     .addFields({ name: 'From', value: `${senderPortalUser?.display_name || interaction.user.username} — via CO Staff Management`, inline: false })
     .setFooter({ text: 'Community Organisation | Staff Assistant' })
     .setTimestamp();
@@ -169,7 +169,7 @@ export async function execute(interaction) {
           .setTitle('Message Sent')
           .setColor(0x22c55e)
           .setDescription(
-            `Message delivered to **${portalUser?.display_name || target.username}**.` +
+            `${E.check} Message delivered to **${portalUser?.display_name || target.username}**.` +
             (emailConfirm ? `\n\n${E.dm} Recipient must click **Acknowledge & Confirm Read** in the DM.` : '')
           )
           .addFields(
@@ -187,7 +187,7 @@ export async function execute(interaction) {
         embeds: [new EmbedBuilder()
           .setTitle('Failed to Send')
           .setColor(0xef4444)
-          .setDescription(`Could not deliver message to **${portalUser?.display_name || target.username}**. They may have DMs disabled.`)
+          .setDescription(`${E.cross} Could not deliver message to **${portalUser?.display_name || target.username}**. They may have DMs disabled.`)
           .setFooter({ text: 'Community Organisation | Staff Assistant' })
           .setTimestamp()
         ]
@@ -291,6 +291,7 @@ export async function execute(interaction) {
     .setTitle(mass ? 'Mass DM Complete' : `Team DM Complete`)
     .setColor(failed === 0 ? 0x22c55e : 0xf59e0b)
     .setDescription(
+      `${E.check} ` +
       (mass ? `Message sent to all active CO staff.` : `Message sent to **${TEAMS[team]}**.`) +
       exemptNote +
       (emailConfirm ? `\n\n${E.dm} All recipients must click **Acknowledge & Confirm Read** in their DM.` : '')

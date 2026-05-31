@@ -71,7 +71,7 @@ export async function execute(interaction) {
     .setColor(0x6366f1)
     .setThumbnail(g.iconURL() || null)
     .addFields(
-      { name: 'ID', value: `\`${g.id}\``, inline: true },
+      { name: 'ID', value: `${E.server} \`${g.id}\``, inline: true },
       { name: 'Created', value: `<t:${Math.floor(g.createdTimestamp / 1000)}:R>`, inline: true },
       { name: 'Owner', value: owner ? `<@${owner.id}>` : `\`${g.ownerId}\``, inline: true },
       { name: 'Members', value: `**${g.memberCount}** total · ${humans} human · ${presence.bots} bot`, inline: false },

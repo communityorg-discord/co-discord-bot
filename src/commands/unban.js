@@ -30,7 +30,7 @@ export async function execute(interaction) {
       await interaction.editReply({ embeds: [new EmbedBuilder()
         .setTitle('Not Banned')
         .setColor(0xEF4444)
-        .setDescription(`<@${userId}> is not currently banned from this server.`)
+        .setDescription(`${E.warning} <@${userId}> is not currently banned from this server.`)
       ]});
       return;
     }
@@ -44,7 +44,7 @@ export async function execute(interaction) {
     await interaction.editReply({ embeds: [new EmbedBuilder()
       .setTitle('Unban Failed')
       .setColor(0xEF4444)
-      .setDescription(`Failed to unban <@${userId}>: ${e.message}`)
+      .setDescription(`${E.cross} Failed to unban <@${userId}>: ${e.message}`)
     ]});
     return;
   }
@@ -66,7 +66,7 @@ export async function execute(interaction) {
   await interaction.editReply({ embeds: [new EmbedBuilder()
     .setTitle('User Unbanned')
     .setColor(0x22C55E)
-    .setDescription(`<@${userId}> has been unbanned from this server.`)
+    .setDescription(`${E.unban} <@${userId}> has been unbanned from this server.`)
     .addFields(
       { name: 'Reason', value: reason, inline: false },
       { name: 'Moderator', value: interaction.user.username, inline: true },

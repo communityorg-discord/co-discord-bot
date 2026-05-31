@@ -67,7 +67,7 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder()
     .setTitle(`Role re-sync — ${verified.nickname || target.username}`)
     .setColor(0x6366f1)
-    .setDescription(`Position: **${verified.position}**\nRoles checked: \`${expectedRoleNames.join('`, `')}\``)
+    .setDescription(`${E.role} Position: **${verified.position}**\nRoles checked: \`${expectedRoleNames.join('`, `')}\``)
     .addFields(perGuild.slice(0, 24).map(g => ({
       name: g.name,
       value: g.failed?.length ? `${g.status}\n_${g.failed.slice(0, 3).join('; ')}_` : g.status,

@@ -112,7 +112,7 @@ function buildInfoEmbed(guildId) {
   return new EmbedBuilder()
     .setTitle('Log Channel Configuration Panel')
     .setColor(0x5865F2)
-    .setDescription('Configure where different types of logs are sent **in this server**.\n\nUse the selectors below to set a channel for each log type. For organisation-wide logs across all servers, use `/orglogs`.')
+    .setDescription(`${E.logs} Configure where different types of logs are sent **in this server**.\n\nUse the selectors below to set a channel for each log type. For organisation-wide logs across all servers, use \`/orglogs\`.`)
     .addFields(...fields)
     .setFooter({ text: 'Community Organisation | Staff Assistant' })
     .setTimestamp();
@@ -257,7 +257,7 @@ export async function handleSelect(interaction) {
       const serverEmbed = new EmbedBuilder()
         .setTitle('Server Log Bindings')
         .setColor(0x5865F2)
-        .setDescription('Catch-all log channels for **this server only**. These receive all events of a type happening in this server.\n\n' + serverBindings.join('\n'))
+        .setDescription(`${E.logs} ` + 'Catch-all log channels for **this server only**. These receive all events of a type happening in this server.\n\n' + serverBindings.join('\n'))
         .setFooter({ text: 'Community Organisation | Staff Assistant' })
         .setTimestamp();
 

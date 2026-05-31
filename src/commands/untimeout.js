@@ -50,7 +50,7 @@ export async function execute(interaction) {
       embeds: [new EmbedBuilder()
         .setTitle('Timeout Removed')
         .setColor(0x22C55E)
-        .setDescription(`Your timeout in **Community Organisation** has been removed.`)
+        .setDescription(`${E.check} Your timeout in **Community Organisation** has been removed.`)
         .addFields(
           { name: 'Removed By', value: `<@${interaction.user.id}>`, inline: true },
           ...(reason !== 'Not specified' ? [{ name: 'Reason', value: reason, inline: false }] : []),
@@ -81,7 +81,7 @@ export async function execute(interaction) {
     embeds: [new EmbedBuilder()
       .setTitle('Timeout Removed')
       .setColor(0x22C55E)
-      .setDescription(`Timeout for **${targetName}** has been removed.`)
+      .setDescription(`${E.check} Timeout for **${targetName}** has been removed.`)
       .addFields(
         { name: 'User', value: `<@${target.id}>`, inline: true },
         { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: true },

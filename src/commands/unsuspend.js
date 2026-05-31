@@ -47,7 +47,7 @@ export async function execute(interaction) {
   await interaction.editReply({ embeds: [new EmbedBuilder()
     .setTitle('Suspension Lifted')
     .setColor(0x22C55E)
-    .setDescription(`**${portalUser?.display_name || target.username}**'s suspension has been lifted and roles restored.`)
+    .setDescription(`${E.check} **${portalUser?.display_name || target.username}**'s suspension has been lifted and roles restored.`)
     .addFields(
       { name: 'Reason', value: reason, inline: false },
       { name: 'Moderator', value: interaction.user.username, inline: true },
