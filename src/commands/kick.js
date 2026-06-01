@@ -5,31 +5,25 @@ import { addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
-import { resolveUser } from '../utils/resolveUser.js';
 import { E } from '../lib/emoji.js';
 
 export const data = new SlashCommandBuilder()
   .setName('kick')
   .setDescription('Kick a user from the server (they can rejoin)')
-  .addStringOption(opt => opt.setName('user').setDescription('User to kick (@mention or user ID)').setRequired(true))
-  .addStringOption(opt => opt.setName('reason').setDescription('Reason for the kick').setRequired(false));
+  .addUserOption(opt => opt.setName('user').setDescription('User to kick').setRequired(true))
+  .addStringOption(opt => opt.setName('reason').setDescription('Reason for the kick').setRequired(true));
 
 export async function execute(interaction) {
   const perm = await canUseCommand('kick', interaction);
   if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
-  const userArg = interaction.options.getString('user');
-  const reason = interaction.options.getString('reason') || 'Not specified';
+  const target = interaction.options.getUser('user');
+  const reason = interaction.options.getString('reason');
+  const targetId = target.id;
 
   if (!interaction.inGuild()) {
     return interaction.reply({ content: `${E.cross} This command cannot be used in DMs.` , ephemeral: true });
   }
-
-  const resolved = await resolveUser(userArg, interaction.guild);
-  if (!resolved) {
-    return interaction.reply({ content: `${E.cross} Could not find user: ${userArg}. Use @mention or a user ID.`, ephemeral: true });
-  }
-  const { id: targetId, user: target } = resolved;
 
   const member = await interaction.guild.members.fetch(targetId).catch(() => null);
   if (!member) {

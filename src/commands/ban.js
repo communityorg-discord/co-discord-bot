@@ -11,15 +11,15 @@ import { E } from '../lib/emoji.js';
 export const data = new SlashCommandBuilder()
   .setName('ban')
   .setDescription('Permanently or temporarily ban a user from all CO servers. Requires superuser.')
-  .addStringOption(opt =>
-    opt.setName('user_id')
-      .setDescription('The user\'s Discord ID or mention')
+  .addUserOption(opt =>
+    opt.setName('user')
+      .setDescription('User to ban (pick from the list, or paste an ID for someone not in the server)')
       .setRequired(true)
   )
   .addStringOption(opt =>
     opt.setName('reason')
       .setDescription('Reason for the ban')
-      .setRequired(false)
+      .setRequired(true)
   )
   .addStringOption(opt =>
     opt.setName('duration')
@@ -37,9 +37,9 @@ export async function execute(interaction) {
       return interaction.reply({ content: `${E.cross} This command cannot be used in DMs.`, ephemeral: true });
     }
 
-    const targetUserId = interaction.options.getString('user_id').replace(/[<@!>]/g, '');
+    const targetUserId = interaction.options.getUser('user').id;
     const durationStr = interaction.options.getString('duration');
-    const reason = interaction.options.getString('reason') || 'Not specified';
+    const reason = interaction.options.getString('reason');
 
     if (!/^\d{17,19}$/.test(targetUserId)) {
       return interaction.reply({ content: `${E.cross} Invalid user ID format.`, ephemeral: true });

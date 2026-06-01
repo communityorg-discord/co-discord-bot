@@ -5,7 +5,6 @@ import { addInfraction, insertTempBan, clearTempBan, getPendingTempBans } from '
 import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
-import { resolveUser } from '../utils/resolveUser.js';
 import { E } from '../lib/emoji.js';
 
 function parseDuration(str) {
@@ -53,18 +52,19 @@ function formatDuration(ms) {
 export const data = new SlashCommandBuilder()
   .setName('serverban')
   .setDescription('Ban a user from THIS server only (single-guild scope)')
-  .addStringOption(opt => opt.setName('user').setDescription('User to ban (@mention or user ID)').setRequired(true))
+  .addUserOption(opt => opt.setName('user').setDescription('User to ban').setRequired(true))
   .addStringOption(opt => opt.setName('duration').setDescription('Duration for temp ban: 1d, 7d (omit for permanent)').setRequired(false))
-  .addStringOption(opt => opt.setName('reason').setDescription('Reason for the ban').setRequired(false))
+  .addStringOption(opt => opt.setName('reason').setDescription('Reason for the ban').setRequired(true))
   .addIntegerOption(opt => opt.setName('delete_messages').setDescription('Delete message history: 0–7 days').setRequired(false));
 
 export async function execute(interaction) {
   const perm = await canUseCommand('serverban', interaction);
   if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
-  const userArg = interaction.options.getString('user');
+  const target = interaction.options.getUser('user');
+  const targetId = target.id;
   const durationStr = interaction.options.getString('duration');
-  const reason = interaction.options.getString('reason') || 'Not specified';
+  const reason = interaction.options.getString('reason');
   const deleteDays = interaction.options.getInteger('delete_messages') ?? 0;
 
   if (!interaction.inGuild()) {
@@ -74,12 +74,6 @@ export async function execute(interaction) {
   if (deleteDays < 0 || deleteDays > 7) {
     return interaction.reply({ content: `${E.cross} Delete messages must be between 0 and 7 days.` , ephemeral: true });
   }
-
-  const resolved = await resolveUser(userArg, interaction.guild);
-  if (!resolved) {
-    return interaction.reply({ content: `${E.cross} Could not find user: ${userArg}. Use @mention or a user ID.`, ephemeral: true });
-  }
-  const { id: targetId, user: target } = resolved;
 
   const portalUser = getUserByDiscordId(targetId);
   const targetName = portalUser?.display_name || target.username;

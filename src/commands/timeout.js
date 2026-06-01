@@ -5,7 +5,6 @@ import { addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
-import { resolveUser } from '../utils/resolveUser.js';
 import { E } from '../lib/emoji.js';
 
 function parseDuration(str) {
@@ -49,11 +48,11 @@ export const data = new SlashCommandBuilder()
   .setName('timeout')
   .setDescription('Timeout management — add or remove a timeout from a user')
   .addSubcommand(sub => sub.setName('add').setDescription('Apply a timeout to a user')
-    .addStringOption(opt => opt.setName('user').setDescription('User to timeout (@mention or user ID)').setRequired(true))
+    .addUserOption(opt => opt.setName('user').setDescription('User to timeout').setRequired(true))
     .addStringOption(opt => opt.setName('duration').setDescription('Duration: 10s, 5m, 2h, 1d').setRequired(true))
-    .addStringOption(opt => opt.setName('reason').setDescription('Reason for the timeout').setRequired(false)))
+    .addStringOption(opt => opt.setName('reason').setDescription('Reason for the timeout').setRequired(true)))
   .addSubcommand(sub => sub.setName('remove').setDescription('Remove a timeout from a user')
-    .addStringOption(opt => opt.setName('user').setDescription('User to remove timeout from (@mention or user ID)').setRequired(true))
+    .addUserOption(opt => opt.setName('user').setDescription('User to remove timeout from').setRequired(true))
     .addStringOption(opt => opt.setName('reason').setDescription('Reason for removing the timeout').setRequired(false)));
 
 export async function execute(interaction) {
@@ -80,19 +79,14 @@ export async function execute(interaction) {
 }
 
 async function handleAddTimeout(interaction) {
-  const userArg = interaction.options.getString('user');
+  const target = interaction.options.getUser('user');
+  const targetId = target.id;
   const durationStr = interaction.options.getString('duration');
-  const reason = interaction.options.getString('reason') || 'Not specified';
+  const reason = interaction.options.getString('reason');
 
   if (!interaction.inGuild()) {
     return interaction.reply({ content: `${E.cross} This command cannot be used in DMs.`, ephemeral: true });
   }
-
-  const resolved = await resolveUser(userArg, interaction.guild);
-  if (!resolved) {
-    return interaction.reply({ content: `${E.cross} Could not find user: ${userArg}. Use @mention or a user ID.`, ephemeral: true });
-  }
-  const { id: targetId, user: target } = resolved;
 
   const durationMs = parseDuration(durationStr);
   if (!durationMs || durationMs < 10000) {
@@ -177,18 +171,13 @@ async function handleAddTimeout(interaction) {
 }
 
 async function handleRemoveTimeout(interaction) {
-  const userArg = interaction.options.getString('user');
+  const target = interaction.options.getUser('user');
+  const targetId = target.id;
   const reason = interaction.options.getString('reason') || 'Not specified';
 
   if (!interaction.inGuild()) {
     return interaction.reply({ content: `${E.cross} This command cannot be used in DMs.` });
   }
-
-  const resolved = await resolveUser(userArg, interaction.guild);
-  if (!resolved) {
-    return interaction.reply({ content: `${E.cross} Could not find user: ${userArg}. Use @mention or a user ID.` });
-  }
-  const { id: targetId, user: target } = resolved;
 
   const member = await interaction.guild.members.fetch(targetId).catch(() => null);
   if (!member) {

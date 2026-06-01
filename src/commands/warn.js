@@ -5,7 +5,6 @@ import { addInfraction, getInfractions } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
-import { resolveUser } from '../utils/resolveUser.js';
 import { E } from '../lib/emoji.js';
 
 // Auto-escalation thresholds for active warnings
@@ -17,25 +16,20 @@ const THRESHOLDS = [
 export const data = new SlashCommandBuilder()
   .setName('warn')
   .setDescription('Warn a user')
-  .addStringOption(opt => opt.setName('user').setDescription('User to warn (@mention or user ID)').setRequired(true))
+  .addUserOption(opt => opt.setName('user').setDescription('User to warn').setRequired(true))
   .addStringOption(opt => opt.setName('reason').setDescription('Reason for the warning').setRequired(true));
 
 export async function execute(interaction) {
   const perm = await canUseCommand('warn', interaction);
   if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
-  const userArg = interaction.options.getString('user');
+  const target = interaction.options.getUser('user');
   const reason = interaction.options.getString('reason');
+  const targetId = target.id;
 
   if (!interaction.inGuild()) {
     return interaction.reply({ content: `${E.cross} This command cannot be used in DMs.`, ephemeral: true });
   }
-
-  const resolved = await resolveUser(userArg, interaction.guild);
-  if (!resolved) {
-    return interaction.reply({ content: `${E.cross} Could not find user: ${userArg}. Use @mention or a user ID.`, ephemeral: true });
-  }
-  const { id: targetId, user: target } = resolved;
 
   const portalUser = getUserByDiscordId(targetId);
   const targetName = portalUser?.display_name || target.username;
