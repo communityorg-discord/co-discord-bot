@@ -53,8 +53,8 @@ export const data = new SlashCommandBuilder()
   .setName('serverban')
   .setDescription('Ban a user from THIS server only (single-guild scope)')
   .addUserOption(opt => opt.setName('user').setDescription('User to ban').setRequired(true))
-  .addStringOption(opt => opt.setName('duration').setDescription('Duration for temp ban: 1d, 7d (omit for permanent)').setRequired(false))
   .addStringOption(opt => opt.setName('reason').setDescription('Reason for the ban').setRequired(true))
+  .addStringOption(opt => opt.setName('duration').setDescription('Duration for temp ban: 1d, 7d (omit for permanent)').setRequired(false))
   .addIntegerOption(opt => opt.setName('delete_messages').setDescription('Delete message history: 0–7 days').setRequired(false));
 
 export async function execute(interaction) {

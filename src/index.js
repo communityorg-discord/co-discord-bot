@@ -168,7 +168,7 @@ const welcomeTracker     = new Map(); // discord_id → count this week
 const ATLAS_DISCORD_USER_ID = '1465559216172568812';
 const ATLAS_GATE_NOTICE_COOLDOWN_MS = 5 * 60_000; // 5m per user
 const atlasGateNoticeCooldown = new Map(); // discord_id → last notice ms
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm, serverHealth, syncRoles, whois, leaderboard, myroles, roleInfo, serverinfo, channelInfo, syncAllRoles, findUser, auditLog, botPerms, feedback, embedCmd, whoIsHere, quote, snippet, ping, staffOnline, timezone, randomPick, standup, thanks, kudosLeaderboard, todoCmd, reminders, myKudos, links, breakCmd, idea, panicBotCmd, logsCmd, emergencyCmd];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, ban, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm, serverHealth, syncRoles, whois, leaderboard, myroles, roleInfo, serverinfo, channelInfo, syncAllRoles, findUser, auditLog, botPerms, feedback, embedCmd, whoIsHere, quote, snippet, ping, staffOnline, timezone, randomPick, standup, thanks, kudosLeaderboard, todoCmd, reminders, myKudos, links, breakCmd, idea, panicBotCmd, logsCmd, emergencyCmd];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -244,16 +244,22 @@ client.once('clientReady', async () => {
   console.log(`[CO Bot] Logged in as ${client.user.tag}`);
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
+  // Re-register slash commands on every startup so a plain `pm2 restart`
+  // actually pushes the latest command definitions (option types,
+  // required flags, etc.) to Discord. Previously this only ran behind a
+  // `--register` CLI flag, so edits to a command's options never reached
+  // Discord on a normal restart — they were live in the handler but the
+  // slash-command UI still showed the old schema.
+  try {
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: commands.map(c => c.data.toJSON()) }
+    );
+    console.log('[CO Bot] Slash commands registered.');
+  } catch (e) {
+    console.error('[CO Bot] Failed to register commands:', e.message);
+  }
   if (process.argv.includes('--register')) {
-    try {
-      await rest.put(
-        Routes.applicationCommands(client.user.id),
-        { body: commands.map(c => c.data.toJSON()) }
-      );
-      console.log('[CO Bot] Slash commands registered.');
-    } catch (e) {
-      console.error('[CO Bot] Failed to register commands:', e.message);
-    }
     // One-off registration run: exit so we don't run a second full bot
     // instance alongside the pm2-managed one.
     process.exit(0);
