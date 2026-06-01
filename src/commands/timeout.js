@@ -1,6 +1,6 @@
 // COMMAND_PERMISSION_FALLBACK: auth_level >= 5
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { canUseCommand } from '../utils/permissions.js';
+import { canUseCommand, isSuperuser } from '../utils/permissions.js';
 import { addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
@@ -86,6 +86,10 @@ async function handleAddTimeout(interaction) {
 
   if (!interaction.inGuild()) {
     return interaction.reply({ content: `${E.cross} This command cannot be used in DMs.`, ephemeral: true });
+  }
+
+  if (isSuperuser(targetId)) {
+    return interaction.reply({ content: `${E.cross} <@${targetId}> is a Superuser and cannot be timed out.`, ephemeral: true });
   }
 
   const durationMs = parseDuration(durationStr);

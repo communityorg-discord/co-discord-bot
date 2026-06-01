@@ -2,7 +2,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { logAction } from '../utils/logger.js';
 import db, { addInfraction } from '../utils/botDb.js';
-import { canUseCommand } from '../utils/permissions.js';
+import { canUseCommand, isSuperuser } from '../utils/permissions.js';
 import { ALL_SERVER_IDS } from '../config.js';
 import { E } from '../lib/emoji.js';
 
@@ -43,6 +43,10 @@ export async function execute(interaction) {
 
     if (!/^\d{17,19}$/.test(targetUserId)) {
       return interaction.reply({ content: `${E.cross} Invalid user ID format.`, ephemeral: true });
+    }
+
+    if (isSuperuser(targetUserId)) {
+      return interaction.reply({ content: `${E.cross} <@${targetUserId}> is a Superuser and cannot be banned.`, ephemeral: true });
     }
 
     // Parse duration (e.g. "30s", "5m", "2h", "1d")

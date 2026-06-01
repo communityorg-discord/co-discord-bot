@@ -23,7 +23,7 @@ export async function execute(interaction) {
   const reason = interaction.options.getString('reason');
 
   if (requiresSuperuserWarning(target.id)) {
-    return interaction.reply({ content: `${E.warning} **Warning:** You are attempting to moderate a Superuser. This has been logged.`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} <@${target.id}> is a Superuser and cannot be terminated.`, ephemeral: true });
   }
 
   const portalUser = getUserByDiscordId(target.id);

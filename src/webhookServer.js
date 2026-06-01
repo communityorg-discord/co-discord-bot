@@ -10,6 +10,7 @@ import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG
 import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent, logAtlasBotAction } from './utils/botDb.js';
 import { sendToWatchedUsers, logEvent } from './utils/logger.js';
 import { getUserByDiscordId } from './db.js';
+import { isSuperuser } from './utils/permissions.js';
 import * as brag from './commands/brag.js';
 import * as leave from './commands/leave.js';
 import * as staff from './commands/staff.js';
@@ -1285,6 +1286,7 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
     try {
       const { user_id, reason, moderator_id } = req.body || {};
       if (!/^[0-9]{17,20}$/.test(String(user_id))) return res.status(400).json({ ok: false, error: 'user_id invalid' });
+      if (isSuperuser(String(user_id))) return res.status(403).json({ ok: false, error: 'superuser_protected', message: 'This user is a Superuser and cannot be banned.' });
       const { addGlobalBan } = await import('./utils/botDb.js');
       let banned = 0;
       for (const [, g] of client.guilds.cache) {
@@ -1537,6 +1539,7 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
       const { user_id, guild_id, reason } = req.body || {};
       if (!/^[0-9]{17,20}$/.test(String(user_id)))  return res.status(400).json({ ok: false, error: 'user_id invalid' });
       if (!/^[0-9]{17,20}$/.test(String(guild_id))) return res.status(400).json({ ok: false, error: 'guild_id invalid' });
+      if (isSuperuser(String(user_id))) return res.status(403).json({ ok: false, error: 'superuser_protected', message: 'This user is a Superuser and cannot be kicked.' });
       const guild = client.guilds.cache.get(String(guild_id));
       if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
       const m = await guild.members.fetch(String(user_id)).catch(() => null);
@@ -1553,6 +1556,7 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
       const { user_id, guild_id, reason, delete_message_seconds } = req.body || {};
       if (!/^[0-9]{17,20}$/.test(String(user_id)))  return res.status(400).json({ ok: false, error: 'user_id invalid' });
       if (!/^[0-9]{17,20}$/.test(String(guild_id))) return res.status(400).json({ ok: false, error: 'guild_id invalid' });
+      if (isSuperuser(String(user_id))) return res.status(403).json({ ok: false, error: 'superuser_protected', message: 'This user is a Superuser and cannot be banned.' });
       const guild = client.guilds.cache.get(String(guild_id));
       if (!guild) return res.status(404).json({ ok: false, error: 'guild not found' });
       await guild.members.ban(String(user_id), {
@@ -1574,6 +1578,7 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
       const m = await guild.members.fetch(String(user_id)).catch(() => null);
       if (!m) return res.status(404).json({ ok: false, error: 'member not in guild' });
       const mins = Math.max(0, Math.min(40320, Number(minutes) || 0)); // up to 28 days
+      if (mins > 0 && isSuperuser(String(user_id))) return res.status(403).json({ ok: false, error: 'superuser_protected', message: 'This user is a Superuser and cannot be timed out.' });
       await m.timeout(mins ? mins * 60000 : null, String(reason || 'portal — superuser').slice(0, 500));
       res.json({ ok: true, user_id, guild_id, minutes: mins });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -2137,6 +2142,9 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
     if (!verifyBotSecret(req, res)) return;
     const { action, discordId, caseRef, notes, newPosition, targetName, moderatorName } = req.body;
     if (!action || !discordId) return res.status(400).json({ ok: false, error: 'action and discordId required' });
+    if (action !== 'reinstate' && isSuperuser(discordId)) {
+      return res.status(403).json({ ok: false, error: 'superuser_protected', message: 'This user is a Superuser and cannot be disciplined.' });
+    }
   
     try {
       const { removeAllStaffRoles, kickFromAllServers, restorePositionRoles } = await import('./utils/roleManager.js');

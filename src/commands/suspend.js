@@ -1,6 +1,6 @@
 // COMMAND_PERMISSION_FALLBACK: auth_level >= 5
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { canUseCommand } from '../utils/permissions.js';
+import { canUseCommand, isSuperuser } from '../utils/permissions.js';
 import { suspendAcrossGuilds } from '../utils/roleManager.js';
 import { addInfraction, addSuspension } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
@@ -52,9 +52,9 @@ export async function execute(interaction) {
 
   await interaction.deferReply();
 
-  // Prevent suspending superusers (auth level 99)
-  if (portalUser && Number(portalUser.auth_level) >= 99) {
-    await interaction.editReply({ content: `${E.cross} Cannot suspend a superuser. Use /terminate instead.`, components: [] });
+  // Prevent suspending superusers (bot superuser list or portal auth level 99)
+  if (isSuperuser(target.id) || (portalUser && Number(portalUser.auth_level) >= 99)) {
+    await interaction.editReply({ content: `${E.cross} <@${target.id}> is a Superuser and cannot be suspended.`, components: [] });
     return;
   }
 

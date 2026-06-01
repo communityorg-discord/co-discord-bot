@@ -31,6 +31,10 @@ export async function execute(interaction) {
     return interaction.reply({ content: `${E.cross} This command cannot be used in DMs.`, ephemeral: true });
   }
 
+  if (isSuperuser(targetId)) {
+    return interaction.reply({ content: `${E.cross} <@${targetId}> is a Superuser and cannot be warned.`, ephemeral: true });
+  }
+
   const portalUser = getUserByDiscordId(targetId);
   const targetName = portalUser?.display_name || target.username;
 

@@ -25,7 +25,7 @@ export async function execute(interaction) {
   const appealable = interaction.options.getString('appealable') !== 'no' ? 1 : 0;
 
   if (requiresSuperuserWarning(target.id)) {
-    return interaction.reply({ content: `${E.warning} You are attempting to globally ban a Superuser. This has been logged.`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} <@${target.id}> is a Superuser and cannot be globally banned.`, ephemeral: true });
   }
 
   const existing = getActiveGlobalBan(target.id);
