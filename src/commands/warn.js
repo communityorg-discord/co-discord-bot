@@ -1,6 +1,6 @@
 // COMMAND_PERMISSION_FALLBACK: auth_level >= 4
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { canUseCommand } from '../utils/permissions.js';
+import { canUseCommand, isSuperuser } from '../utils/permissions.js';
 import { addInfraction, getInfractions } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
@@ -60,10 +60,14 @@ export async function execute(interaction) {
   const warningCount = activeWarnings.length;
 
   let escalation = null;
-  for (const threshold of THRESHOLDS) {
-    if (warningCount >= threshold.count) {
-      escalation = threshold;
-      break;
+  // Superusers are exempt from auto-escalation — they can never be
+  // auto-kicked or auto-banned by the warning thresholds.
+  if (!isSuperuser(targetId)) {
+    for (const threshold of THRESHOLDS) {
+      if (warningCount >= threshold.count) {
+        escalation = threshold;
+        break;
+      }
     }
   }
 
