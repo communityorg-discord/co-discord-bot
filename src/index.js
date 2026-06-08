@@ -821,9 +821,9 @@ client.once('clientReady', async () => {
       const { db: botDatabase, flushActiveSessions } = await import('./utils/botDb.js');
       const weekKey = getBragWeekKey();
 
-      // Fold in any in-flight session time so the leaderboard reflects
-      // the user's "as of right now" total rather than the last time
-      // they ended a session.
+      // Self-heal any missed voice joins, then fold in in-flight session time so
+      // points reflect "as of right now" rather than the last session that ended.
+      seedLiveVoiceSessions(botDatabase, weekKey);
       flushActiveSessions(weekKey);
 
       // Pull total + last_synced_seconds together so we can compute the
@@ -1249,8 +1249,10 @@ client.once('clientReady', async () => {
       const portalDb = (await import('./db.js')).default;
       const weekKey = getBragWeekKey();
 
-      // Close any sessions that crossed a week boundary, then flush so totals are current
+      // Close any sessions that crossed a week boundary, self-heal anyone in
+      // voice the tracker lost (missed join), then flush so totals are current.
       rolloverStaleSessions(weekKey, collectCurrentlyInVoice(client));
+      seedLiveVoiceSessions(cfgDb, weekKey);
       flushActiveSessions(weekKey);
 
       const rows = getVoiceLeaderboard(weekKey);
@@ -3284,6 +3286,40 @@ function collectCurrentlyInVoice(client) {
     }
   }
   return set;
+}
+
+// Self-heal missed voice joins. A discrete voiceStateUpdate 'join' can be
+// dropped (gateway disconnect/resume, a missed event) WITHOUT the bot ever
+// restarting — leaving someone physically in voice with no tracked session, so
+// flushActiveSessions skips them and their time silently stops accruing for
+// hours (this is why a long-sitting user could show 12m instead of 3h). The
+// boot recovery sweep only runs once. This re-anchors a session_start for
+// ANYONE currently in a voice channel who has no open tracked session, and runs
+// every leaderboard tick — so a missed join costs at most one ~5-minute cycle
+// instead of the whole session. Mirrors the boot sweep's seeding.
+function seedLiveVoiceSessions(vtDb, weekKey) {
+  try {
+    const nowIso = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    let seeded = 0;
+    for (const guild of client.guilds.cache.values()) {
+      for (const vs of guild.voiceStates.cache.values()) {
+        if (!vs.channelId || vs.member?.user?.bot) continue;
+        const userId = String(vs.id);
+        if (!voiceSessions.has(userId)) {
+          voiceSessions.set(userId, { channel_id: vs.channelId, channel_name: vs.channel?.name || '', joined_at: Date.now() });
+        }
+        const existing = vtDb.prepare('SELECT id, session_start FROM voice_time_tracking WHERE discord_id = ? AND week_key = ?').get(userId, weekKey);
+        if (!existing) {
+          vtDb.prepare('INSERT INTO voice_time_tracking (discord_id, week_key, total_seconds, session_start, last_synced_seconds) VALUES (?, ?, 0, ?, 0)').run(userId, weekKey, nowIso);
+          seeded++;
+        } else if (!existing.session_start) {
+          vtDb.prepare('UPDATE voice_time_tracking SET session_start = ? WHERE id = ?').run(nowIso, existing.id);
+          seeded++;
+        }
+      }
+    }
+    if (seeded) console.log(`[VC reconcile] re-anchored ${seeded} live voice session(s) the tracker had lost`);
+  } catch (e) { console.error('[VC reconcile]', e.message); }
 }
 
 // ============ VOICE OFFICE RESTRICTIONS ============
