@@ -17,21 +17,24 @@ function isOfficialBypass(discordId) {
 // across the new-verify and resend paths — any wording change had to land
 // in two places (this is what kept the stale BRAG copy alive long after
 // the system was retired).
-const EXCLUDED_WELCOME_INVITE_GUILDS = new Set([
-  // 1272007308704088074 was here historically — bot is no longer in
-  // that guild so the entry was a no-op. Removed in the AUDIT cleanup.
-  '1485422910972760176', // CO | Staff HQ — gated behind verify role, no public invite
-  '1485423163817988186', // CO | System Log Hub — internal logging mirror
-  '1485423682980675729', // CO | Private Server — restricted access
-  '1485423935569920135', // CO | Communications (small/internal mirror)
-  '1485424535405723729', // CO | Appeals Hub — only joined via appeal flow
-]);
+// ALLOWLIST (flipped from an exclude-list 2026-06-10): the bot sits in ~29
+// guilds including every USGRP department server — far too many to expect a
+// new staff member to join. Verified staff are only invited to these six.
+const WELCOME_INVITE_GUILDS = [
+  '1357119461957570570', // CO | Internal Hub
+  '1485422910972760176', // CO | Staff HQ
+  '1366218589367042048', // CO | International Court
+  '1358129722931937280', // CO | Communications (main — NOT the 14854239… internal mirror)
+  '1485423163817988186', // CO | System Log Hub
+  '1458621643537514590', // United States Government Roleplay (USGRP) — main server
+];
 const WELCOME_DESCRIPTION = "Hello and welcome to Community Organisation! We're delighted to have you on board. Here's key info to help you settle in:\n\n**Onboarding**\nPlease ensure your supervisor has your current email. We recommend a Google account email (@gmail.com), as we use Google Drive for documentation and policies.\n\nTo get your CO email set up, please contact a member of the EOB team directly.\n\nThe DMSPC Email (**dmspc@communityorg.co.uk**) is your contact for accessing and updating your personnel file.\n\n**CO Utilities**\nAll staff are required to use the Staff Portal for leave requests, Activity Points tracking, and accessing your staff records.\n\n**Policies**\nBy joining, you agree to follow all Community Organisation policies, available on Google Drive and CO Utilities. If unsure, ask your supervisor. You are also expected to:\n• Check for policy updates regularly\n• Read all official communications\n\nLinked below are invites to all servers you are required to join. **These invites will expire in 7 days.**";
 
 async function gatherWelcomeInvites(client) {
   const inviteLines = [];
-  for (const [, guild] of client.guilds.cache) {
-    if (EXCLUDED_WELCOME_INVITE_GUILDS.has(guild.id)) continue;
+  for (const guildId of WELCOME_INVITE_GUILDS) {
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) continue;
     try {
       const channel = guild.channels.cache.filter(c => c.isTextBased() && c.permissionsFor(guild.members.me)?.has('CreateInstantInvite')).first();
       if (channel) {
