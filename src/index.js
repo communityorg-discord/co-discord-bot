@@ -2035,8 +2035,8 @@ client.on('interactionCreate', async interaction => {
       try {
         const { writeFileSync, existsSync } = await import('node:fs');
         if (!existsSync('/home/vpcommunityorganisation/.cache/claude-bridge/RUNNING')) return interaction.reply({ content: 'Nothing is running right now.', flags: 64 }).catch(() => {});
-        writeFileSync('/home/vpcommunityorganisation/.cache/claude-bridge/STOP', interaction.member?.displayName || interaction.user.globalName || interaction.user.username || 'a founder');
-        return interaction.reply({ content: '🛑 Stopping — the session gets killed within a couple of seconds.', flags: 64 }).catch(() => {});
+        writeFileSync('/home/vpcommunityorganisation/.cache/claude-bridge/STOP', JSON.stringify({ id: interaction.user.id, name: interaction.member?.displayName || interaction.user.globalName || interaction.user.username || 'a founder' }));
+        return interaction.deferUpdate().catch(() => {});
       } catch (e) { return interaction.reply({ content: 'Could not signal the stop: ' + e.message, flags: 64 }).catch(() => {}); }
     }
     // Admin .help category menu — lazy-import the handler (its registry

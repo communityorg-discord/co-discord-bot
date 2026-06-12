@@ -42,6 +42,16 @@ function coToken() {
 const TOKEN = process.env.CR_REPLY_TOKEN || coToken();
 const H = { Authorization: `Bot ${TOKEN}`, 'Content-Type': 'application/json' };
 
+// Branded emoji pack (scripts/gen-claude-emojis.mjs uploads to BOTH apps).
+// Pick the set owned by the app we post as; Unicode stands in if missing.
+let EMOJIS = {};
+try {
+  const maps = JSON.parse(readFileSync(new URL('./claude-emojis.json', import.meta.url), 'utf8'));
+  const appId = Buffer.from(TOKEN.split('.')[0], 'base64').toString('utf8');
+  EMOJIS = maps[appId] || {};
+} catch { /* unicode fallbacks */ }
+const em = (k, fb) => EMOJIS[k] || fb;
+
 async function dapi(method, path, body) {
   for (let i = 0; i < 6; i++) {
     const r = await fetch(API + path, { method, headers: H, body: body ? JSON.stringify(body) : undefined }).catch(() => null);
@@ -89,14 +99,14 @@ function rememberSession(replyId, sessionId) {
 
 // High-level stages, ticked off live as the session works through them.
 const PHASES = {
-  investigate: { emoji: '🔍', doing: 'Reading the code',         done: 'Read the code' },
-  edit:        { emoji: '✏️', doing: 'Editing the code',         done: 'Edited the code' },
-  build:       { emoji: '📦', doing: 'Building',                 done: 'Built it' },
-  deploy:      { emoji: '🚀', doing: 'Deploying',                done: 'Deployed' },
-  commit:      { emoji: '💾', doing: 'Committing to git',        done: 'Committed' },
-  run:         { emoji: '⚙️', doing: 'Running a command',        done: 'Ran a command' },
-  subagent:    { emoji: '🤖', doing: 'Working with a sub-agent', done: 'Used a sub-agent' },
-  think:       { emoji: '💭', doing: 'Thinking it through',      done: 'Thought it through' },
+  investigate: { key: 'read',   emoji: '🔍', doing: 'Reading the code',         done: 'Read the code' },
+  edit:        { key: 'edit',   emoji: '✏️', doing: 'Editing the code',         done: 'Edited the code' },
+  build:       { key: 'build',  emoji: '📦', doing: 'Building',                 done: 'Built it' },
+  deploy:      { key: 'deploy', emoji: '🚀', doing: 'Deploying',                done: 'Deployed' },
+  commit:      { key: 'commit', emoji: '💾', doing: 'Committing to git',        done: 'Committed' },
+  run:         { key: 'run',    emoji: '⚙️', doing: 'Running a command',        done: 'Ran a command' },
+  subagent:    { key: 'agent',  emoji: '🤖', doing: 'Working with a sub-agent', done: 'Used a sub-agent' },
+  think:       { key: 'think',  emoji: '💭', doing: 'Thinking it through',      done: 'Thought it through' },
 };
 function phaseFor(name, input) {
   if (['Read', 'Grep', 'Glob', 'LS'].includes(name)) return 'investigate';
@@ -131,13 +141,14 @@ const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${M
     const list = seen.slice(-8);
     return (list.length ? list : ['investigate']).map((k, i) => {
       const p = PHASES[k] || PHASES.think;
-      return i === list.length - 1 ? `${p.emoji} ${p.doing}…` : `✅ ${p.done}`;
+      return i === list.length - 1 ? `${em(p.key, p.emoji)} ${p.doing}…` : `${em('tick', '✅')} ${p.done}`;
     }).join('\n');
   };
-  const renderDone = () => seen.slice(-8).map(k => `✅ ${(PHASES[k] || PHASES.think).done}`).join('\n');
-  const STOP_ROW = [{ type: 1, components: [{ type: 2, style: 4, label: 'Stop', emoji: { name: '🛑' }, custom_id: 'claudebr:stop' }] }];
+  const renderDone = () => seen.slice(-8).map(k => `${em('tick', '✅')} ${(PHASES[k] || PHASES.think).done}`).join('\n');
+  const stopRef = /<:(\w+):(\d+)>/.exec(em('stop', '') || '');
+  const STOP_ROW = [{ type: 1, components: [{ type: 2, style: 4, label: 'Stop', emoji: stopRef ? { name: stopRef[1], id: stopRef[2] } : { name: '🛑' }, custom_id: 'claudebr:stop' }] }];
   try { unlinkSync(STOP_FILE); } catch { }      // stale stop from a previous run
-  const status = await reply({ embeds: [embed(0x6c7bff, '🔧 Spinning up a session…', 'live · 0:00')], components: STOP_ROW });
+  const status = await reply({ embeds: [embed(0x6c7bff, `${em('boot', '🔧')} Spinning up a session…`, 'live · 0:00')], components: STOP_ROW });
   const statusId = status?.id || null;
   let lastEdit = 0;
   const setStatus = async () => {
@@ -157,9 +168,9 @@ const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${M
   const killer = setTimeout(() => { try { child.kill('SIGKILL'); } catch { } isErr = true; finalText = 'timed out after 20 minutes'; }, TIMEOUT_MS);
   const stopWatch = setInterval(() => {
     try {
-      const who = readFileSync(STOP_FILE, 'utf8').trim();
+      const raw = readFileSync(STOP_FILE, 'utf8').trim();
       unlinkSync(STOP_FILE);
-      stoppedBy = who || 'a founder';
+      try { stoppedBy = JSON.parse(raw); } catch { stoppedBy = { name: raw || 'a founder' }; }
       try { child.kill('SIGKILL'); } catch { }
     } catch { /* no stop requested */ }
   }, 1500);
@@ -186,9 +197,10 @@ const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${M
   if (stoppedBy) {
     await react('🛑');
     const stages = renderDone();
-    const e = embed(0xf59e0b, (stages ? stages + '\n\n' : '') + `🛑 **Stopped by ${stoppedBy}**`, `stopped at ${mmss(Date.now() - startedAt)}`);
-    if (statusId) await editMsg(statusId, { embeds: [e], components: [] });
-    else await reply({ embeds: [e] });
+    const e = embed(0xf59e0b, (stages ? stages + '\n\n' : '') + `${em('stop', '🛑')} **Stopped by ${stoppedBy.name}**`, `Stopped at ${mmss(Date.now() - startedAt)}`);
+    const ping = stoppedBy.id ? `<@${stoppedBy.id}>` : undefined;
+    if (statusId) await editMsg(statusId, { content: ping, embeds: [e], components: [] });
+    else await reply({ content: ping, embeds: [e] });
     if (sessionId) rememberSession(statusId, sessionId);   // reply still continues the session
     releaseRunLock();
     process.exit(0);
@@ -197,7 +209,7 @@ const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${M
   if (isErr || finalText == null) {
     await react('❌');
     const msg = String(finalText || stderr || 'see server logs').slice(0, 1500);
-    if (statusId) await editMsg(statusId, { embeds: [embed(0xef4444, '❌ Couldn\'t finish — ' + msg)], components: [] });
+    if (statusId) await editMsg(statusId, { embeds: [embed(0xef4444, `${em('err', '❌')} Couldn't finish — ` + msg)], components: [] });
     else await reply({ content: '❌ Couldn\'t finish — ' + msg });
   } else {
     await react('✅');
