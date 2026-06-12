@@ -17,6 +17,7 @@ const HOME = process.env.HOME || '/home/vpcommunityorganisation';
 const LOCK_DIR = `${HOME}/.cache/claude-bridge`;
 const CLAIMS = `${LOCK_DIR}/claims`;
 const RUN_LOCK = `${LOCK_DIR}/RUNNING`;
+const STOP_FILE = `${LOCK_DIR}/STOP`;          // written by either bot's Stop button
 const SESS_FILE = `${LOCK_DIR}/sessions.json`;
 const API = 'https://discord.com/api/v10';
 const TIMEOUT_MS = 20 * 60_000;
@@ -134,7 +135,9 @@ const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${M
     }).join('\n');
   };
   const renderDone = () => seen.slice(-8).map(k => `✅ ${(PHASES[k] || PHASES.think).done}`).join('\n');
-  const status = await reply({ embeds: [embed(0x6c7bff, '🔧 Spinning up a session…', 'live · 0:00')] });
+  const STOP_ROW = [{ type: 1, components: [{ type: 2, style: 4, label: 'Stop', emoji: { name: '🛑' }, custom_id: 'claudebr:stop' }] }];
+  try { unlinkSync(STOP_FILE); } catch { }      // stale stop from a previous run
+  const status = await reply({ embeds: [embed(0x6c7bff, '🔧 Spinning up a session…', 'live · 0:00')], components: STOP_ROW });
   const statusId = status?.id || null;
   let lastEdit = 0;
   const setStatus = async () => {
@@ -150,7 +153,16 @@ const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${M
   const child = spawn(CLAUDE, args, { cwd: REPO, env });
 
   let buf = '', finalText = null, sessionId = RESUME, isErr = false, cost = 0, turns = 0, stderr = '';
+  let stoppedBy = null;
   const killer = setTimeout(() => { try { child.kill('SIGKILL'); } catch { } isErr = true; finalText = 'timed out after 20 minutes'; }, TIMEOUT_MS);
+  const stopWatch = setInterval(() => {
+    try {
+      const who = readFileSync(STOP_FILE, 'utf8').trim();
+      unlinkSync(STOP_FILE);
+      stoppedBy = who || 'a founder';
+      try { child.kill('SIGKILL'); } catch { }
+    } catch { /* no stop requested */ }
+  }, 1500);
   child.stdin.write(PROMPT); child.stdin.end();
   child.stderr.on('data', d => stderr += d);
   child.stdout.on('data', d => {
@@ -168,13 +180,24 @@ const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${M
     }
   });
   await new Promise(res => child.on('close', res)).catch(() => { });
-  clearTimeout(killer); clearInterval(typer);
+  clearTimeout(killer); clearInterval(typer); clearInterval(stopWatch);
   await unreact('👀');
+
+  if (stoppedBy) {
+    await react('🛑');
+    const stages = renderDone();
+    const e = embed(0xf59e0b, (stages ? stages + '\n\n' : '') + `🛑 **Stopped by ${stoppedBy}** — the session was killed mid-flight; anything uncommitted stays uncommitted.`, `stopped at ${mmss(Date.now() - startedAt)}`);
+    if (statusId) await editMsg(statusId, { embeds: [e], components: [] });
+    else await reply({ embeds: [e] });
+    if (sessionId) rememberSession(statusId, sessionId);   // reply still continues the session
+    releaseRunLock();
+    process.exit(0);
+  }
 
   if (isErr || finalText == null) {
     await react('❌');
     const msg = String(finalText || stderr || 'see server logs').slice(0, 1500);
-    if (statusId) await editMsg(statusId, { embeds: [embed(0xef4444, '❌ Couldn\'t finish — ' + msg)] });
+    if (statusId) await editMsg(statusId, { embeds: [embed(0xef4444, '❌ Couldn\'t finish — ' + msg)], components: [] });
     else await reply({ content: '❌ Couldn\'t finish — ' + msg });
   } else {
     await react('✅');
@@ -184,7 +207,7 @@ const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${M
     const body = (stages ? stages + '\n\n' : '') + String(finalText);
     const e = embed(0x4ade80, body, `✓ done in ${mmss(Date.now() - startedAt)} · ${turns} turns · $${cost.toFixed(3)} · reply to continue`);
     let replyId = statusId;
-    if (statusId) await editMsg(statusId, { embeds: [e] });
+    if (statusId) await editMsg(statusId, { embeds: [e], components: [] });
     else { const r = await reply({ embeds: [e] }); replyId = r?.id; }
     rememberSession(replyId, sessionId);
   }

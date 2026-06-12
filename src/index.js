@@ -2026,6 +2026,19 @@ client.on('interactionCreate', async interaction => {
   }
 
   if (interaction.isButton()) {
+    // Claude bridge: Stop the running detached session (founders only).
+    // Writes the STOP file the runner polls — works regardless of which
+    // bot spawned the run, and survives bot restarts like the runner does.
+    if (interaction.customId === 'claudebr:stop') {
+      const FOUNDERS = ['723199054514749450', '415922272956710912'];
+      if (!FOUNDERS.includes(interaction.user.id)) return interaction.reply({ content: 'Only the founders can stop Claude.', flags: 64 }).catch(() => {});
+      try {
+        const { writeFileSync, existsSync } = await import('node:fs');
+        if (!existsSync('/home/vpcommunityorganisation/.cache/claude-bridge/RUNNING')) return interaction.reply({ content: 'Nothing is running right now.', flags: 64 }).catch(() => {});
+        writeFileSync('/home/vpcommunityorganisation/.cache/claude-bridge/STOP', interaction.user.username || 'a founder');
+        return interaction.reply({ content: '🛑 Stopping — the session gets killed within a couple of seconds.', flags: 64 }).catch(() => {});
+      } catch (e) { return interaction.reply({ content: 'Could not signal the stop: ' + e.message, flags: 64 }).catch(() => {}); }
+    }
     // Admin .help category menu — lazy-import the handler (its registry
     // import pulls in the DB, only ready after startup). Gated to
     // superusers inside the handler.
