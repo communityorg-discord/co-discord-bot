@@ -186,7 +186,7 @@ const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${M
   if (stoppedBy) {
     await react('🛑');
     const stages = renderDone();
-    const e = embed(0xf59e0b, (stages ? stages + '\n\n' : '') + `🛑 **Stopped by ${stoppedBy}** — the session was killed mid-flight; anything uncommitted stays uncommitted.`, `stopped at ${mmss(Date.now() - startedAt)}`);
+    const e = embed(0xf59e0b, (stages ? stages + '\n\n' : '') + `🛑 **Stopped by ${stoppedBy}**`, `stopped at ${mmss(Date.now() - startedAt)}`);
     if (statusId) await editMsg(statusId, { embeds: [e], components: [] });
     else await reply({ embeds: [e] });
     if (sessionId) rememberSession(statusId, sessionId);   // reply still continues the session
