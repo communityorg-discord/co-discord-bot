@@ -95,10 +95,16 @@ function robot(x) {
     x.fillStyle = CREAM; x.beginPath(); x.arc(64, 29, 5, 0, Math.PI * 2); x.fill();
 }
 function thought(x) {
-    x.fillStyle = CREAM; x.beginPath(); x.ellipse(64, 56, 30, 22, 0, 0, Math.PI * 2); x.fill();
-    x.beginPath(); x.arc(44, 84, 7, 0, Math.PI * 2); x.fill();
-    x.beginPath(); x.arc(34, 96, 4, 0, Math.PI * 2); x.fill();
-    x.fillStyle = CORALD; for (const dx of [-12, 0, 12]) { x.beginPath(); x.arc(64 + dx, 56, 3.6, 0, Math.PI * 2); x.fill(); }
+    // lightbulb — thinking, crisp at small size
+    x.fillStyle = CREAM;
+    x.beginPath(); x.arc(64, 54, 22, 0, Math.PI * 2); x.fill();           // glass
+    x.beginPath(); x.moveTo(50, 66); x.lineTo(78, 66); x.lineTo(72, 80); x.lineTo(56, 80); x.closePath(); x.fill();
+    x.fillStyle = CORALD; x.beginPath(); x.roundRect(55, 82, 18, 6, 2); x.fill();   // base lines
+    x.fillStyle = CREAM; x.beginPath(); x.roundRect(55, 90, 18, 5, 2); x.fill();
+    x.strokeStyle = CREAM; x.lineWidth = 5; x.lineCap = 'round';          // rays
+    x.beginPath(); x.moveTo(64, 22); x.lineTo(64, 30); x.moveTo(34, 36); x.lineTo(41, 42); x.moveTo(94, 36); x.lineTo(87, 42); x.stroke();
+    x.strokeStyle = CORALD; x.lineWidth = 4;                              // filament
+    x.beginPath(); x.moveTo(57, 60); x.lineTo(61, 52); x.lineTo(67, 58); x.lineTo(71, 50); x.stroke();
 }
 function wrench(x) {
     x.save(); x.translate(64, 64); x.rotate(-Math.PI / 4);
