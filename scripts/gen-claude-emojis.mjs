@@ -43,35 +43,41 @@ function magnifier(x) {
     x.fillStyle = 'rgba(245,237,228,0.22)'; x.beginPath(); x.arc(56, 56, 16, 0, Math.PI * 2); x.fill();
 }
 function pencil(x) {
-    x.save(); x.translate(64, 64); x.rotate(Math.PI / 4);
-    x.fillStyle = CREAM; x.fillRect(-9, -34, 18, 46);
-    x.fillStyle = INK; x.fillRect(-9, -34, 18, 8);
-    x.beginPath(); x.moveTo(-9, 12); x.lineTo(0, 30); x.lineTo(9, 12); x.closePath(); x.fillStyle = CREAM; x.fill();
-    x.fillStyle = INK; x.beginPath(); x.moveTo(-3.5, 23); x.lineTo(0, 30); x.lineTo(3.5, 23); x.closePath(); x.fill();
-    x.restore();
+    // bold pen nib drawing a line — high contrast, reads at 20px
+    x.strokeStyle = CREAM; x.lineWidth = 14; x.lineCap = 'round';
+    x.beginPath(); x.moveTo(78, 36); x.lineTo(52, 62); x.stroke();
+    x.fillStyle = CREAM; x.beginPath(); x.moveTo(46, 56); x.lineTo(58, 68); x.lineTo(38, 76); x.closePath(); x.fill();
+    x.strokeStyle = CREAM; x.lineWidth = 6; x.beginPath(); x.moveTo(36, 92); x.lineTo(92, 92); x.stroke();
 }
 function box(x) {
-    x.fillStyle = CREAM; x.beginPath(); x.moveTo(64, 30); x.lineTo(96, 46); x.lineTo(64, 62); x.lineTo(32, 46); x.closePath(); x.fill();
-    x.fillStyle = 'rgba(245,237,228,0.82)'; x.beginPath(); x.moveTo(32, 46); x.lineTo(64, 62); x.lineTo(64, 96); x.lineTo(32, 80); x.closePath(); x.fill();
-    x.fillStyle = 'rgba(245,237,228,0.62)'; x.beginPath(); x.moveTo(96, 46); x.lineTo(64, 62); x.lineTo(64, 96); x.lineTo(96, 80); x.closePath(); x.fill();
-    x.strokeStyle = CORALD; x.lineWidth = 2.5; x.beginPath(); x.moveTo(48, 38); x.lineTo(80, 54); x.stroke();
+    // three stacked blocks — assembly
+    x.fillStyle = CREAM;
+    x.beginPath(); x.roundRect(36, 66, 26, 26, 4); x.fill();
+    x.beginPath(); x.roundRect(66, 66, 26, 26, 4); x.fill();
+    x.beginPath(); x.roundRect(51, 36, 26, 26, 4); x.fill();
+    x.strokeStyle = CORALD; x.lineWidth = 3;
+    x.strokeRect(36, 66, 26, 26); x.strokeRect(66, 66, 26, 26); x.strokeRect(51, 36, 26, 26);
 }
 function rocket(x) {
+    // ship-it: bold arrow launching from a tray
     x.fillStyle = CREAM;
-    x.beginPath(); x.moveTo(64, 26); x.quadraticCurveTo(82, 46, 74, 78); x.lineTo(54, 78); x.quadraticCurveTo(46, 46, 64, 26); x.fill();
-    x.fillStyle = CORALD; x.beginPath(); x.arc(64, 54, 7, 0, Math.PI * 2); x.fill();
-    x.fillStyle = CREAM; x.beginPath(); x.moveTo(54, 70); x.lineTo(40, 86); x.lineTo(54, 84) ; x.closePath(); x.fill();
-    x.beginPath(); x.moveTo(74, 70); x.lineTo(88, 86); x.lineTo(74, 84); x.closePath(); x.fill();
-    x.fillStyle = AMBER; x.beginPath(); x.moveTo(58, 82); x.quadraticCurveTo(64, 100, 70, 82); x.closePath(); x.fill();
+    x.beginPath(); x.moveTo(64, 26); x.lineTo(88, 54); x.lineTo(72, 54); x.lineTo(72, 76); x.lineTo(56, 76); x.lineTo(56, 54); x.lineTo(40, 54); x.closePath(); x.fill();
+    x.strokeStyle = CREAM; x.lineWidth = 8; x.lineCap = 'round';
+    x.beginPath(); x.moveTo(36, 92); x.lineTo(36, 98); x.lineTo(92, 98); x.lineTo(92, 92); x.stroke();
 }
+
 function gitGraph(x) {
-    x.strokeStyle = CREAM; x.lineWidth = 6; x.lineCap = 'round';
-    x.beginPath(); x.moveTo(46, 36); x.lineTo(46, 92); x.stroke();
-    x.beginPath(); x.moveTo(46, 56); x.quadraticCurveTo(78, 56, 82, 80); x.stroke();
+    // floppy disk — saved
     x.fillStyle = CREAM;
-    for (const [cx, cy] of [[46, 36], [46, 92], [82, 84]]) { x.beginPath(); x.arc(cx, cy, 9, 0, Math.PI * 2); x.fill(); x.fillStyle = CREAM; }
-    x.fillStyle = CORALD; for (const [cx, cy] of [[46, 36], [46, 92], [82, 84]]) { x.beginPath(); x.arc(cx, cy, 4, 0, Math.PI * 2); x.fill(); }
+    x.beginPath(); x.moveTo(36, 36); x.lineTo(82, 36); x.lineTo(92, 46); x.lineTo(92, 92); x.lineTo(36, 92); x.closePath(); x.fill();
+    x.fillStyle = CORALD;
+    x.fillRect(48, 36, 30, 18);
+    x.beginPath(); x.roundRect(46, 64, 36, 28, 3); x.fill();
+    x.fillStyle = CREAM; x.fillRect(66, 39, 8, 12);
+    x.strokeStyle = CREAM; x.lineWidth = 3;
+    x.beginPath(); x.moveTo(52, 72); x.lineTo(76, 72); x.moveTo(52, 80); x.lineTo(76, 80); x.stroke();
 }
+
 function gear(x) {
     x.fillStyle = CREAM;
     for (let i = 0; i < 8; i++) {
@@ -102,19 +108,12 @@ function wrench(x) {
     x.restore();
 }
 function stopMark(x) {
-    // octagonal stop sign
-    x.fillStyle = CREAM;
-    x.beginPath();
-    for (let i = 0; i < 8; i++) {
-        const a = Math.PI / 8 + Math.PI * 2 * i / 8;
-        const px = CX + Math.cos(a) * 36, py = CY + Math.sin(a) * 36;
-        i ? x.lineTo(px, py) : x.moveTo(px, py);
-    }
-    x.closePath(); x.fill();
-    x.fillStyle = RED; x.beginPath(); x.roundRect(50, 50, 28, 28, 5); x.fill();
+    // plain bold stop square
+    x.fillStyle = CREAM; x.beginPath(); x.roundRect(42, 42, 44, 44, 8); x.fill();
 }
 function cross(x) { x.strokeStyle = CREAM; x.lineWidth = 13; x.lineCap = 'round'; x.beginPath(); x.moveTo(46, 46); x.lineTo(82, 82); x.moveTo(82, 46); x.lineTo(46, 82); x.stroke(); }
 
+const ONLY = process.env.ONLY ? new Set(process.env.ONLY.split(',').map(t => t.trim())) : null;
 const EMOJI = {
     cl_tick:  (x) => { roundel(x, GREEN, '#155e36'); check(x); },
     cl_stop:  (x) => { roundel(x, RED, '#7f1d1d'); stopMark(x); },
@@ -150,14 +149,16 @@ const render = (name) => { const { c, x } = mk(); EMOJI[name](x); return c.toBuf
 if (process.env.DRY === '1') process.exit(0);
 
 // upload to BOTH apps; merge map keyed by application id
-const out = {};
+let out = {};
+try { out = JSON.parse(readFileSync(new URL('../src/services/claude-emojis.json', import.meta.url), 'utf8')); } catch { }
 for (const app of APPS) {
     const appId = appIdOf(app.token);
     const H = { Authorization: `Bot ${app.token}`, 'Content-Type': 'application/json' };
     const existing = await (await fetch(`https://discord.com/api/v10/applications/${appId}/emojis`, { headers: H })).json();
     const byName = new Map((existing.items || []).map(e => [e.name, e.id]));
-    out[appId] = {};
+    out[appId] = out[appId] || {};
     for (const name of Object.keys(EMOJI)) {
+        if (ONLY && !ONLY.has(name)) continue;
         if (byName.has(name)) await fetch(`https://discord.com/api/v10/applications/${appId}/emojis/${byName.get(name)}`, { method: 'DELETE', headers: H }).catch(() => { });
         const b64 = render(name).toString('base64');
         const r = await fetch(`https://discord.com/api/v10/applications/${appId}/emojis`, {
