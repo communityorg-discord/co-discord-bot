@@ -176,7 +176,19 @@ const ATLAS_DISCORD_USER_ID = '1465559216172568812';
 const ATLAS_GATE_NOTICE_COOLDOWN_MS = 5 * 60_000; // 5m per user
 const atlasGateNoticeCooldown = new Map(); // discord_id → last notice ms
 const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, info, unban, verify, unverify, networkVerify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, ban, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm, serverHealth, syncRoles, whois, leaderboard, myroles, roleInfo, serverinfo, channelInfo, syncAllRoles, findUser, auditLog, botPerms, feedback, embedCmd, whoIsHere, quote, snippet, ping, staffOnline, timezone, randomPick, standup, thanks, kudosLeaderboard, todoCmd, reminders, myKudos, links, breakCmd, idea, panicBotCmd, logsCmd, emergencyCmd];
-for (const cmd of commands) {
+// The CO Staff Network is suspended, so its CO-specific commands are HIDDEN —
+// the command files are kept, they're just not registered with Discord or routed.
+// Moderation, tickets, office, network-verify and general utility stay live.
+const HIDDEN_COMMANDS = new Set([
+  'dm', 'dm-exempt', 'brag', 'leave', 'staff', 'cases', 'case', 'aps', 'helpdesk',
+  'nid', 'suspend', 'unsuspend', 'investigate', 'terminate', 'infractions',
+  'verify', 'unverify', 'authorisation-override', 'inbox', 'assign', 'acting',
+  'onboard', 'eliminate', 'stats', 'sync-roles', 'sync-all-roles', 'whois',
+  'find-user', 'leaderboard', 'myroles', 'staff-online', 'standup', 'thanks',
+  'kudos-leaderboard', 'my-kudos', 'links',
+]);
+const visibleCommands = commands.filter(c => !HIDDEN_COMMANDS.has(c.data.name));
+for (const cmd of visibleCommands) {
   client.commands.set(cmd.data.name, cmd);
 }
 
@@ -277,7 +289,7 @@ client.once('clientReady', async () => {
   try {
     await rest.put(
       Routes.applicationCommands(client.user.id),
-      { body: commands.map(c => c.data.toJSON()) }
+      { body: visibleCommands.map(c => c.data.toJSON()) }
     );
     console.log('[CO Bot] Slash commands registered.');
   } catch (e) {
