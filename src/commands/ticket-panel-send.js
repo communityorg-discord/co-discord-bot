@@ -202,8 +202,9 @@ export async function handleTicketButton(interaction) {
   }
 
   const ticketNumber = incrementTicketCount(panelId);
-  const username = member.user.username.replace(/\s+/g, '-').slice(0, 50);
-  const channelName = `${username}-${ticketNumber}`.toLowerCase();
+  // Name the channel after the ticket TYPE, e.g. "report-ticket-1", "general-ticket-3".
+  const typeSlug = ((panel.name || 'ticket').toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().split(/[\s-]+/)[0]) || 'ticket';
+  const channelName = `${typeSlug}-ticket-${ticketNumber}`.slice(0, 100);
 
   try {
     const ticketChannel = await guild.channels.create({
