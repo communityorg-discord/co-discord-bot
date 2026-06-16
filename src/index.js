@@ -3091,6 +3091,27 @@ const SUPERUSER_INVITE_IDS = [
   '1355367209249148928', // CO | Ownership
   '878775920180228127',  // CO | IAC
 ];
+// USGRP department servers — invites here are allowed from the dept head (server
+// owner/admin) and the FSA team too, not just bots/superusers.
+const DEPT_SERVER_IDS = [
+  '1465118901841952805', // Commerce & Labor
+  '1463748842540503114', // Defense & Veterans Affairs
+  '1465120736057495775', // State
+  '1465119530912055499', // Transportation, Housing & UD
+  '1465118649139462288', // Energy, Agriculture & Interior
+  '1508623585625903184', // Executive Office of the President
+  '1508624531693240390', // FBI
+  '1465120323468001445', // Health, Human Services & Education
+  '1508624116775911456', // Congress (House/Senate)
+  '1508624369281269860', // Federal Judiciary
+  '1463749094819495969', // Justice & Homeland Security
+  '1465120987799617692', // ODNI
+  '1508624278776451143', // Office of Management and Budget
+  '1508623864538861658', // Office of the Vice President
+  '1463749347882569749', // Treasury
+  '1472461017262063758', // White House Office
+  '1508624784026505407', // Civic Services
+];
 
 client.on('inviteCreate', async (invite) => {
   if (!invite.guild) return;
@@ -3102,9 +3123,17 @@ client.on('inviteCreate', async (invite) => {
   if (invite.inviterId === client.user.id) return;
   // Allow aspire-bot (USGRP | Services) — it mints the network-verification invites.
   if (invite.inviterId === '1501640075597975582') return;
+  // On DEPT servers, also allow the dept head (server owner/admin) + the FSA team.
+  if (DEPT_SERVER_IDS.includes(invite.guild.id)) {
+    if (invite.inviterId === invite.guild.ownerId) return; // dept head / server owner
+    const m = await invite.guild.members.fetch(invite.inviterId).catch(() => null);
+    if (m && (m.permissions.has('Administrator') ||
+              m.roles.cache.some(r => r.name === 'USGRP | Federal Server Administration'))) return;
+  }
 
+  const deptMode = DEPT_SERVER_IDS.includes(invite.guild.id);
   try {
-    await invite.delete('Unauthorised — only superusers can create invites for internal servers');
+    await invite.delete('Unauthorised — invites restricted to server leadership / FSA team / superusers');
     console.log(`[Invite Guard] Deleted invite ${invite.code} in ${invite.guild.name} by ${invite.inviter?.tag || invite.inviterId}`);
 
     if (invite.inviter) {
@@ -3112,7 +3141,7 @@ client.on('inviteCreate', async (invite) => {
         embeds: [new EmbedBuilder()
           .setTitle('Invite Deleted')
           .setColor(0xef4444)
-          .setDescription(`${E.cross} Your invite to **${invite.guild.name}** was automatically deleted. Only superusers can create invites for internal CO servers.`)
+          .setDescription(`${E.cross} Your invite to **${invite.guild.name}** was automatically deleted. ${deptMode ? 'Only the department head, the FSA team, or a superuser can create invites for this server.' : 'Only superusers can create invites for internal CO servers.'}`)
           .setFooter({ text: 'Community Organisation' })
           .setTimestamp()
         ]

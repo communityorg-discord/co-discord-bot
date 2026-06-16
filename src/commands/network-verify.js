@@ -147,6 +147,16 @@ export async function handleButton(interaction) {
       reason: `${position} — ${r.servers_applied}/${r.servers_total} servers, ${r.invites} invites`,
       color: 0x22C55E,
     }).catch(() => {});
+    // DM the verified member their invites — from THIS (CO Utilities) bot, since
+    // it owns the command. Links go in the description (4096) not a field (1024),
+    // so a long list (≈19 servers) isn't truncated mid-URL.
+    const lines = (r.invite_links || []).map(i => `[${i.name}](${i.url})`).join('\n');
+    const dm = new EmbedBuilder().setColor(0x5865F2)
+      .setTitle("You've been verified as USGRP Network Staff")
+      .setDescription(`You're verified as **${position}**. Your nickname across the network is **${r.nickname}**.\n\nHere are your server invites — they expire in 7 days. Join each one to receive your roles.\n\n**Server invites**\n${lines || '_No invites available_'}`)
+      .setFooter({ text: 'USGRP · Network Verification' }).setTimestamp();
+    const targetUser = await interaction.client.users.fetch(targetId).catch(() => null);
+    if (targetUser) await targetUser.send({ embeds: [dm] }).catch(() => {});
   }
   // A long apply (≈19 guilds) can make the interaction webhook flaky by the time
   // it returns — fall back to a direct message edit (works now the card isn't
