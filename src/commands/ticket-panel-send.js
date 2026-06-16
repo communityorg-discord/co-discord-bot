@@ -212,7 +212,9 @@ export async function handleTicketButton(interaction) {
       parent: panel.ticket_category_id,
       permissionOverwrites: [
         { id: guild.roles.everyone.id, deny: ['ViewChannel'] },
-        { id: panel.staff_role_id, allow: ['ViewChannel', 'ReadMessageHistory'] },
+        // Grant BOTH the staff role and the ping role access (deduped) so a panel
+        // can route to two roles — e.g. Head + Senior Admin on one ticket type.
+        ...[...new Set([panel.staff_role_id, panel.ping_role_id].filter(Boolean))].map(rid => ({ id: rid, allow: ['ViewChannel', 'ReadMessageHistory'] })),
         { id: userId, allow: ['ViewChannel', 'ReadMessageHistory', 'SendMessages'] },
       ],
       reason: `Ticket created by ${member.user.tag} via ${panel.name} panel`
