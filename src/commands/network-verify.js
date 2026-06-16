@@ -203,25 +203,30 @@ export async function handleButton(interaction) {
   await interaction.editReply({ embeds: [applying], components: [] });
 
   const r = await networkVerifyApi.apply(targetId, position, interaction.user.id, seatNo, name);
-  const appliedNow = r.ok && ((r.servers_applied || 0) > 0 || (r.roles || []).length > 0);
+
+  // Network Staff Hub — every position gets it. aspire-bot (the engine) isn't in
+  // this server, so co-bot (which is) applies the roles + mints the invite here.
+  // Use the FULL position role set (hub_roles), not the per-satellite granted set
+  // (which is empty when the member wasn't already in the satellites).
+  let hub = { invite: null, applied: 0 };
+  if (r.ok) hub = await applyStaffHub(interaction.client, targetId, (r.hub_roles && r.hub_roles.length) ? r.hub_roles : r.roles, r.nickname);
+
+  const roleSet = (r.hub_roles && r.hub_roles.length) ? r.hub_roles : (r.roles || []);
+  const pendingServers = r.ok && (r.servers_applied || 0) < (r.servers_total || 0);
   const final = r.ok
     ? new EmbedBuilder().setColor(0x22C55E).setTitle(`Verified — ${position}${r.seat_no ? ` (seat ${r.seat_no})` : ''}`)
-        .setDescription(`<@${targetId}> is now **${position}**${r.seat_no ? ` · seat ${r.seat_no}` : ''}.${appliedNow ? '' : `\n\nThey aren't in the network servers yet, so I've DM'd their invites — **their roles + nickname apply automatically the moment they join each one.**`}`)
+        .setDescription(`<@${targetId}> is now **${position}**${r.seat_no ? ` · seat ${r.seat_no}` : ''}.${hub.applied ? `\n\nRoles applied in the **Network Staff Hub**.` : ''}${pendingServers ? `\n\nThey aren't in the other network servers yet, so I've DM'd their invites — **their roles + nickname apply automatically the moment they join each one.**` : ''}`)
         .addFields(
           { name: 'Nickname', value: r.nickname || '—', inline: true },
           { name: 'Servers', value: `${r.servers_applied}/${r.servers_total} applied · ${r.invites} invites DM'd`, inline: true },
-          { name: 'Roles granted', value: (r.roles || []).map(x => `\`${x}\``).join(' ').slice(0, 1024) || '_Applied automatically when they join each server via the invites below._' },
+          { name: 'Roles', value: roleSet.map(x => `\`${x}\``).join(' ').slice(0, 1024) || '—' },
         )
-        .setFooter({ text: appliedNow ? 'Roles synced + invites sent + audit posted · USGRP Network Verification' : 'Invites sent — roles apply on join + audit posted · USGRP Network Verification' }).setTimestamp()
+        .setFooter({ text: 'Roles + nickname synced · invites sent · audit posted · USGRP Network Verification' }).setTimestamp()
     : EmbedBuilder.from(interaction.message.embeds[0]).setColor(0xEF4444).setTitle('Apply failed')
         .setDescription(`${E.cross} ${r.error || r.status}`).setFooter({ text: 'USGRP Network Verification' });
 
   if (r.ok) {
-    // Network Staff Hub — every position (down to Junior Mod) gets it. aspire-bot
-    // (the engine) isn't in this server, so co-bot (which is) applies the roles +
-    // mints the invite here.
-    const hub = await applyStaffHub(interaction.client, targetId, r.roles, r.nickname);
-    if (hub.invite) final.addFields({ name: 'Staff Hub', value: `invite sent${hub.applied ? ` · +${hub.applied} roles` : ''}`, inline: true });
+    if (hub.invite) final.addFields({ name: 'Staff Hub', value: `invite sent${hub.applied ? ` · +${hub.applied} roles applied` : ''}`, inline: true });
     // Auto-refresh the #structure org charts now this person is onboarded. The
     // verify engine (aspire-bot) already rewrote structure.json with the new
     // holder, so this just re-renders and EDITS the existing structure messages

@@ -3286,18 +3286,22 @@ client.on('guildMemberAdd', async (member) => {
   try {
     if (member.guild.id !== '1357119461957570570') return; // USGRP | Network Staff Hub
     const res = await networkVerifyApi.record(member.id);
-    const roles = res?.record?.roles || [];
-    if (!roles.length) return;
+    const rec = res?.record;
+    if (!rec) return; // not a network-verified member
+    // Use hub_roles — the FULL position role set — NOT rec.roles (the per-satellite
+    // GRANTED set), which is empty when the member wasn't already in the 19 servers
+    // at verify time. That empty list is exactly why roles weren't applied here.
+    const roles = (rec.hub_roles && rec.hub_roles.length) ? rec.hub_roles : (rec.roles || []);
     await member.guild.roles.fetch();
+    let applied = 0;
     for (const name of roles) {
       const role = member.guild.roles.cache.find(r => r.name === name);
-      if (role && !member.roles.cache.has(role.id)) await member.roles.add(role, 'Network Staff Hub — auto-apply on join').catch(() => {});
+      if (role && !member.roles.cache.has(role.id)) { await member.roles.add(role, 'Network Staff Hub — auto-apply on join').catch(() => {}); applied++; }
     }
     // Apply their network nickname too — otherwise they keep whatever nick they
-    // joined with (e.g. a government title), which is the "name not updated in the
-    // Hub" bug. Best-effort: fails silently if they outrank the bot.
-    if (res.record.nickname) await member.setNickname(res.record.nickname, 'Network Staff Hub — auto-apply on join').catch(() => {});
-    console.log(`[Network Hub] applied ${roles.length} role(s) + nick to ${member.user.tag} on join`);
+    // joined with (e.g. a government title). Done regardless of roles.
+    if (rec.nickname) await member.setNickname(rec.nickname, 'Network Staff Hub — auto-apply on join').catch(() => {});
+    console.log(`[Network Hub] applied ${applied} role(s) + nick to ${member.user.tag} on join`);
   } catch (e) { console.error('[Network Hub] join apply failed:', e.message); }
 });
 
