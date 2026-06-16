@@ -230,7 +230,7 @@ export async function handleTicketButton(interaction) {
       .setColor(0x5865F2)
       .setDescription(panel.intro_message)
       .addFields(
-        { name: 'Opened By', value: `${member.user} (<@${userId}>)`, inline: true },
+        { name: 'Opened By', value: `<@${userId}>`, inline: true },
         { name: 'Ticket #', value: String(ticketNumber), inline: true },
         { name: 'Status', value: `${E.check} Open`, inline: true },
       )
@@ -306,7 +306,7 @@ export async function handleTicketChannelButton(interaction) {
       .setDescription(panel?.intro_message || '')
       .addFields(
         { name: 'Opened By', value: `<@${ticket.user_id}>`, inline: true },
-        { name: 'Claimed By', value: `${interaction.user} (<@${interaction.user.id}>)`, inline: true },
+        { name: 'Claimed By', value: `<@${interaction.user.id}>`, inline: true },
         { name: 'Status', value: `${E.pending} Claimed`, inline: true },
       )
       .setFooter({ text: 'Community Organisation | Ticket System' })

@@ -225,14 +225,14 @@ export async function closeTicketWithTranscript(ticket, ticketChannel, panel, cl
   if (ticketChannel) {
     const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = await import('discord.js');
     const closeRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('ticket_placeholder').setLabel('🔴 Closed').setStyle(ButtonStyle.Danger).setDisabled(true),
-      new ButtonBuilder().setCustomId(`ticket_delete_${ticketChannel.id}`).setLabel('Delete').setStyle(ButtonStyle.Secondary).setEmoji('🗑️'),
+      new ButtonBuilder().setCustomId('ticket_placeholder').setLabel('Closed').setStyle(ButtonStyle.Danger).setDisabled(true),
+      new ButtonBuilder().setCustomId(`ticket_delete_${ticketChannel.id}`).setLabel('Delete').setStyle(ButtonStyle.Secondary),
     );
     const msgs = await ticketChannel.messages.fetch({ limit: 1 });
     if (msgs.size > 0) {
       const lastMsg = msgs.first();
       if (lastMsg.author.bot && lastMsg.embeds.length > 0) {
-        const closedEmbed = EmbedBuilder.from(lastMsg.embeds[0]).setColor(0x6b7280).spliceFields(2, 1, { name: 'Status', value: '🔴 Closed', inline: true });
+        const closedEmbed = EmbedBuilder.from(lastMsg.embeds[0]).setColor(0x6b7280).spliceFields(2, 1, { name: 'Status', value: `${E.cross} Closed`, inline: true });
         await lastMsg.edit({ embeds: [closedEmbed], components: [closeRow] }).catch(() => {});
       }
     }
