@@ -2065,6 +2065,18 @@ client.on('interactionCreate', async interaction => {
         return interaction.deferUpdate().catch(() => {});
       } catch (e) { return interaction.reply({ content: 'Could not signal the stop: ' + e.message, flags: 64 }).catch(() => {}); }
     }
+
+    // Network Staff role-offer DM — the Decline button opens an optional-reason
+    // modal; the submit notifies Dion + Evan (see the isModalSubmit block).
+    if (interaction.customId === 'roleoffer_decline') {
+      const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = await import('discord.js');
+      const modal = new ModalBuilder().setCustomId('roleoffer_decline_modal').setTitle('Decline Role Offer')
+        .addComponents(new ActionRowBuilder().addComponents(
+          new TextInputBuilder().setCustomId('reason').setLabel('Reason (optional)')
+            .setPlaceholder('You can leave this blank.').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(500)));
+      return interaction.showModal(modal).catch(() => {});
+    }
+
     // Admin .help category menu — lazy-import the handler (its registry
     // import pulls in the DB, only ready after startup). Gated to
     // superusers inside the handler.
@@ -2500,6 +2512,21 @@ client.on('interactionCreate', async interaction => {
 
   // Verify/Unverify modal handlers
   if (interaction.isModalSubmit()) {
+    // Network Staff role-offer decline → notify Dion + Evan, with optional reason.
+    if (interaction.customId === 'roleoffer_decline_modal') {
+      let reason = '';
+      try { reason = (interaction.fields.getTextInputValue('reason') || '').trim(); } catch {}
+      const u = interaction.user;
+      const notice = new EmbedBuilder().setColor(0xef4444).setTitle('Role Offer Declined')
+        .setDescription(`❌ <@${u.id}> (**${u.username}**) has **declined** their expression of interest for a role.`)
+        .addFields({ name: 'Reason', value: reason ? reason.slice(0, 1024) : '_No reason given._' })
+        .setFooter({ text: 'USGRP · Network Staff' }).setTimestamp();
+      for (const id of ['723199054514749450', '415922272956710912']) { // Dion, Evan
+        try { const usr = await client.users.fetch(id); await usr.send({ embeds: [notice] }); } catch {}
+      }
+      return interaction.reply({ embeds: [new EmbedBuilder().setColor(0x22c55e).setDescription('Thanks — your decline has been recorded and passed on to the team.')] }).catch(() => {});
+    }
+
     // /network-verify "what's their name?" modal → renders the dry-run preview
     if (interaction.customId?.startsWith('netverify_name~')) return netverifyModal(interaction);
 
