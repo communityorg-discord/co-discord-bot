@@ -370,3 +370,29 @@ export async function handleTicketChannelButton(interaction) {
     });
   }
 }
+
+// Delete button on a CLOSED ticket — removes the channel (the transcript is
+// already saved, so nothing is lost). Staff (auth 5+) can clean up closed
+// tickets; founders bypass via canRunCommand.
+export async function handleTicketDeleteButton(interaction) {
+  if (!interaction.isButton() || !interaction.customId.startsWith('ticket_delete_')) return;
+  const channelId = interaction.customId.replace('ticket_delete_', '');
+
+  const perm = await canRunCommand(interaction.user.id, 5);
+  if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
+
+  const channel = interaction.guild?.channels.cache.get(channelId) || interaction.channel;
+  await interaction.reply({ content: `${E.check} Ticket channel will be deleted in a few seconds. The transcript has already been saved.`, ephemeral: true });
+
+  await logAction(interaction.client, {
+    action: 'Ticket Deleted',
+    moderator: { discordId: interaction.user.id, name: interaction.user.username },
+    color: 0x6b7280,
+    logType: 'ticket.deleted',
+    guildId: interaction.guildId,
+  }).catch(() => {});
+
+  setTimeout(() => {
+    channel?.delete(`Ticket deleted by ${interaction.user.username}`).catch(() => {});
+  }, 3000);
+}

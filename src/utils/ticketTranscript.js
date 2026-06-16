@@ -22,6 +22,43 @@ function escUrl(value) {
   return esc(raw);
 }
 
+// Render Discord-flavoured text (mentions + light markdown) to SAFE HTML. Mentions
+// are resolved BEFORE escaping; everything else is HTML-escaped, then a small set
+// of markdown tokens are turned into tags. Used for message content and embeds.
+function renderText(raw, m) {
+  let s = String(raw ?? '');
+  s = s.replace(/<@!?(\d+)>/g, (_x, id) => { const u = m?.mentions?.users?.get(id) || m?.client?.users?.cache?.get(id); return '@' + (u ? (u.displayName || u.username) : id); });
+  s = s.replace(/<#(\d+)>/g, (_x, id) => { const c = m?.mentions?.channels?.get(id) || m?.client?.channels?.cache?.get(id); return '#' + (c ? c.name : id); });
+  s = s.replace(/<@&(\d+)>/g, (_x, id) => { const r = m?.mentions?.roles?.get(id) || m?.guild?.roles?.cache?.get(id); return '@' + (r ? r.name : id); });
+  s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // light markdown — order matters (bold before italic)
+  s = s.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>')
+       .replace(/(^|[^*])\*([^*\n]+?)\*/g, '$1<em>$2</em>')
+       .replace(/__([^_]+?)__/g, '<u>$1</u>')
+       .replace(/`([^`]+?)`/g, '<code style="background:#1e1f22;padding:1px 4px;border-radius:3px">$1</code>')
+       .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_x, t, u) => `<a href="${escUrl(u)}" style="color:#00aff4;text-decoration:none">${t}</a>`);
+  return s.replace(/\n/g, '<br>');
+}
+
+// Render one Discord embed as a Discord-like card (coloured left bar, author,
+// title, description, fields, image, footer) instead of a "[N embeds]" stub.
+function renderEmbedHTML(embed, m) {
+  const color = typeof embed.color === 'number' ? '#' + embed.color.toString(16).padStart(6, '0') : '#5865f2';
+  let inner = '';
+  if (embed.author?.name) inner += `<div style="font-weight:600;color:#fff;font-size:13px;margin-bottom:4px">${esc(embed.author.name)}</div>`;
+  if (embed.title) inner += `<div style="font-weight:700;color:#fff;margin-bottom:4px">${embed.url ? `<a href="${escUrl(embed.url)}" style="color:#00aff4;text-decoration:none">${renderText(embed.title, m)}</a>` : renderText(embed.title, m)}</div>`;
+  if (embed.description) inner += `<div style="color:#dcddde;margin-bottom:6px">${renderText(embed.description, m)}</div>`;
+  if (embed.fields?.length) {
+    inner += '<div style="margin-bottom:4px">' + embed.fields.map(f =>
+      `<div style="${f.inline ? 'display:inline-block;min-width:140px;margin:0 16px 6px 0;vertical-align:top' : 'margin-bottom:6px'}"><div style="font-weight:700;color:#fff;font-size:13px">${renderText(f.name, m)}</div><div style="color:#dcddde;font-size:13px">${renderText(f.value, m)}</div></div>`
+    ).join('') + '</div>';
+  }
+  if (embed.image?.url) inner += `<img src="${escUrl(embed.image.url)}" style="max-width:400px;border-radius:4px;margin-top:6px;display:block" onerror="this.style.display='none'" />`;
+  if (embed.footer?.text) inner += `<div style="color:#888;font-size:11px;margin-top:6px">${esc(embed.footer.text)}</div>`;
+  const thumb = embed.thumbnail?.url ? `<img src="${escUrl(embed.thumbnail.url)}" style="width:56px;height:56px;border-radius:4px;margin-left:12px;flex-shrink:0;object-fit:cover" onerror="this.style.display='none'" />` : '';
+  return `<div style="display:flex;background:#2b2d31;border-left:4px solid ${color};border-radius:4px;padding:8px 12px;margin-top:6px;max-width:540px"><div style="flex:1;min-width:0">${inner}</div>${thumb}</div>`;
+}
+
 export function generateTranscriptHTML(messages, channel, guild, ticketMeta) {
   const rows = messages.map(m => {
     const time = new Date(m.createdTimestamp).toLocaleString('en-GB', { timeZone: 'UTC' });
@@ -50,9 +87,7 @@ export function generateTranscriptHTML(messages, channel, guild, ticketMeta) {
     if (hasTextContent) {
       content = resolvedContent;
     } else if (m.embeds && m.embeds.length > 0) {
-      const firstEmbed = m.embeds[0];
-      const desc = firstEmbed.description || firstEmbed.title || '[embed]';
-      content = `<em style="color:#666">[Embed] ${esc(desc.slice(0, 120))}</em>`;
+      content = ''; // the full embed card(s) render below
     } else if (m.attachments && m.attachments.size > 0) {
       const attachmentNames = [...m.attachments.values()].map(a => a.name || a.filename).join(', ');
       content = `<em style="color:#666">[Attachment(s)] ${esc(attachmentNames)}</em>`;
@@ -66,7 +101,7 @@ export function generateTranscriptHTML(messages, channel, guild, ticketMeta) {
         : `<a href="${escUrl(a.url)}" style="color:#7289da">${esc(a.name)}</a>`
     ).join('');
     const embeds = m.embeds.length > 0
-      ? `<div style="border-left:3px solid #7289da;padding:4px 8px;margin-top:4px;color:#aaa;font-size:12px">[${m.embeds.length} embed(s)]</div>`
+      ? m.embeds.map(e => renderEmbedHTML(e, m)).join('')
       : '';
 
     return `<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid #2a2a2a">
@@ -77,7 +112,7 @@ export function generateTranscriptHTML(messages, channel, guild, ticketMeta) {
  <span style="font-size:11px;color:#666">${esc(time)} UTC</span>
  ${m.author.bot ? '<span style="font-size:10px;background:#5865f2;color:#fff;padding:1px 5px;border-radius:3px">BOT</span>' : ''}
  </div>
- <div style="color:#dcddde;margin-top:2px;word-break:break-word">${content}</div>
+ ${content ? `<div style="color:#dcddde;margin-top:2px;word-break:break-word">${content}</div>` : ''}
  ${attachments}
  ${embeds}
  </div></div>`;
@@ -191,6 +226,7 @@ export async function closeTicketWithTranscript(ticket, ticketChannel, panel, cl
     const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = await import('discord.js');
     const closeRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('ticket_placeholder').setLabel('🔴 Closed').setStyle(ButtonStyle.Danger).setDisabled(true),
+      new ButtonBuilder().setCustomId(`ticket_delete_${ticketChannel.id}`).setLabel('Delete').setStyle(ButtonStyle.Secondary).setEmoji('🗑️'),
     );
     const msgs = await ticketChannel.messages.fetch({ limit: 1 });
     if (msgs.size > 0) {

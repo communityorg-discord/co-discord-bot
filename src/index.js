@@ -54,7 +54,7 @@ import * as massUnban from './commands/mass-unban.js';
 import * as createTicketPanel from './commands/create-ticket-panel.js';
 import * as ticketPanelSend from './commands/ticket-panel-send.js';
 import * as deleteTicketPanel from './commands/delete-ticket-panel.js';
-import { handleTicketButton, handleTicketChannelButton } from './commands/ticket-panel-send.js';
+import { handleTicketButton, handleTicketChannelButton, handleTicketDeleteButton } from './commands/ticket-panel-send.js';
 import { handleTicketOptionsButton, handleTicketOptionsModal } from './commands/ticket-options.js';
 import * as ticketOptions from './commands/ticket-options.js';
 import * as warn from './commands/warn.js';
@@ -2150,6 +2150,11 @@ client.on('interactionCreate', async interaction => {
     // Ticket channel buttons (claim / close)
     if (interaction.customId.startsWith('ticket_claim_') || interaction.customId.startsWith('ticket_close_')) {
       return handleTicketChannelButton(interaction);
+    }
+
+    // Delete button on a closed ticket
+    if (interaction.customId.startsWith('ticket_delete_')) {
+      return handleTicketDeleteButton(interaction);
     }
 
     // Ticket options buttons
