@@ -1865,4 +1865,14 @@ export function commandPermitsUser(commandName, discordId, roleIds = [], guildId
   return !!roleHit;
 }
 
+// DM relay — a member's bot-DM replies get forwarded to the founders (e.g. to
+// relay a reply to an official message). The target lives in the DB, not in
+// code, so it can be added/removed without a code change.
+db.exec(`CREATE TABLE IF NOT EXISTS dm_relays (user_id TEXT PRIMARY KEY, added_by TEXT, note TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+export function addDmRelay(userId, addedBy, note = null) {
+  db.prepare('INSERT OR REPLACE INTO dm_relays (user_id, added_by, note, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)').run(String(userId), String(addedBy), note);
+}
+export function removeDmRelay(userId) { return db.prepare('DELETE FROM dm_relays WHERE user_id = ?').run(String(userId)).changes; }
+export function isDmRelay(userId) { return !!db.prepare('SELECT 1 FROM dm_relays WHERE user_id = ?').get(String(userId)); }
+
 export { db };

@@ -5,7 +5,7 @@ import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBu
 import { E } from './lib/emoji.js';
 import { config } from 'dotenv';
 import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID } from './config.js';
-import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent, logAtlasBotAction, logMessageEvent } from './utils/botDb.js';
+import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent, logAtlasBotAction, logMessageEvent, isDmRelay } from './utils/botDb.js';
 import { sendToWatchedUsers, logEvent } from './utils/logger.js';
 import { getUserByDiscordId } from './db.js';
 import { canUseCommand } from './utils/permissions.js';
@@ -2804,6 +2804,26 @@ client.on('guildCreate', async (guild) => {
   } catch (e) {
     console.error(`[guildCreate] Error provisioning ${guild.name}:`, e.message);
   }
+});
+
+// DM relay — forward a relayed member's bot-DM replies to the founders, so a
+// reply to an official message (e.g. a role-offer follow-up) lands with them.
+client.on('messageCreate', async (message) => {
+  try {
+    if (message.author?.bot || message.guildId) return;        // DMs only
+    if (!isDmRelay(message.author.id)) return;
+    const content = (message.content || '').trim();
+    const atts = [...(message.attachments?.values?.() || [])].map(a => a.url);
+    if (!content && !atts.length) return;
+    const embed = new EmbedBuilder().setColor(0x0a2540)
+      .setAuthor({ name: `${message.author.username} replied`, iconURL: message.author.displayAvatarURL?.() })
+      .setDescription(content ? content.slice(0, 4000) : '_(no text)_')
+      .setFooter({ text: `From ${message.author.username} · ${message.author.id} · USGRP Network Staff` }).setTimestamp();
+    if (atts.length) embed.addFields({ name: 'Attachments', value: atts.join('\n').slice(0, 1024) });
+    for (const id of ['723199054514749450', '415922272956710912']) { // Dion, Evan
+      try { const u = await client.users.fetch(id); await u.send({ embeds: [embed] }); } catch {}
+    }
+  } catch (e) { console.error('[dm-relay]', e.message); }
 });
 
 // AutoMod message handler + counting + BRAG message tracking
