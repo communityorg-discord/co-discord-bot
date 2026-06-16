@@ -35,7 +35,7 @@ import { handleButton as verifyButton, handleModal as verifyModal, handleSelect 
 import { handleButton as unverifyButton, handleModal as unverifyModal } from './commands/unverify.js';
 import * as verify from './commands/verify.js';
 import * as networkVerify from './commands/network-verify.js';
-import { handleButton as netverifyButton, handleSelect as netverifySelect } from './commands/network-verify.js';
+import { handleButton as netverifyButton, handleSelect as netverifySelect, handleModal as netverifyModal } from './commands/network-verify.js';
 import * as dm from './commands/dm.js';
 import * as dmExempt from './commands/dm-exempt.js';
 import * as purge from './commands/purge.js';
@@ -249,6 +249,23 @@ async function setupEmailNotificationChannels(client) {
 
 client.once('clientReady', async () => {
   console.log(`[CO Bot] Logged in as ${client.user.tag}`);
+
+  // Rotating funny status. Type: 0 Playing · 2 Listening · 3 Watching · 5 Competing.
+  const STATUSES = [
+    { name: 'Dion eat waffles', type: 3 },
+    { name: 'Evan break prod', type: 3 },
+    { name: 'staff complaints', type: 2 },
+    { name: 'the verification queue', type: 3 },
+    { name: 'whack-a-mole with rule-breakers', type: 0 },
+    { name: 'over the whole network', type: 3 },
+    { name: 'paperwork speedruns', type: 5 },
+    { name: '#general at 3am', type: 3 },
+    { name: 'to ticket notifications', type: 2 },
+    { name: 'who pinged @everyone', type: 3 },
+  ];
+  const rollStatus = () => { const s = STATUSES[Math.floor(Math.random() * STATUSES.length)]; client.user.setActivity(s.name, { type: s.type }); };
+  rollStatus();
+  setInterval(rollStatus, 60_000);
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
   // Re-register slash commands on every startup so a plain `pm2 restart`
@@ -2483,6 +2500,9 @@ client.on('interactionCreate', async interaction => {
 
   // Verify/Unverify modal handlers
   if (interaction.isModalSubmit()) {
+    // /network-verify "what's their name?" modal → renders the dry-run preview
+    if (interaction.customId?.startsWith('netverify_name~')) return netverifyModal(interaction);
+
     // AutoMod panel modals
     if (interaction.customId?.startsWith('automod_')) {
       try { const handled = await automodPanelHandler(interaction); if (handled) return; }
@@ -2700,7 +2720,19 @@ client.on('guildMemberAdd', async (member) => {
 client.on('guildMemberRemove', async (member) => {
   try { await automod.checkMemberLeave(member); } catch (e) { console.error('[AutoMod guildMemberRemove]', e.message); }
 
-  // Member-leave log
+  // Was this a kick/ban? If so, DON'T post a "Member Left" log — destructionWatcher
+  // already fires a "👢 Member kicked" / ban alert off the audit log, and posting
+  // both is the double-log Dion was seeing. Only voluntary leaves get logged here.
+  let wasRemoved = false;
+  try {
+    for (const type of [AuditLogEvent.MemberKick, AuditLogEvent.MemberBanAdd]) {
+      const logs = await member.guild.fetchAuditLogs({ type, limit: 3 }).catch(() => null);
+      if (logs && [...logs.entries.values()].some(en => en.target?.id === (member.user?.id || member.id) && Date.now() - en.createdTimestamp < 8000)) { wasRemoved = true; break; }
+    }
+  } catch {}
+  if (wasRemoved) return;
+
+  // Member-leave log (voluntary leaves only)
   try {
     const embed = new EmbedBuilder().setTitle('Member Left').setColor(0xef4444)
       .setDescription(`${E.leave} A member left the server.`)
@@ -3085,10 +3117,11 @@ client.on('messageDelete', async (message) => {
 });
 
 // Internal staff servers — only superusers + bot can create invites
-// Public servers (Communications + International Court) are excluded
+// Public servers (Communications + International Court + the USGRP main) are excluded
 const PUBLIC_SERVERS = [
   '1358129722931937280', // CO | Communications
   '1366218589367042048', // CO | International Court
+  '1458621643537514590', // United States Government Roleplay (USGRP) — public main server
 ];
 const SUPERUSER_INVITE_IDS = [
   '723199054514749450',  // dionm

@@ -25,8 +25,8 @@ export const networkVerifyApi = {
   positions: () => call('GET', '/internal/network-verify-positions'),
   seats: (position) => call('GET', '/internal/network-verify-seats', { query: { position } }),
   record: (user_id) => call('GET', '/internal/network-verify-record', { query: { user_id } }),
-  preview: (user_id, position) => call('GET', '/internal/network-verify-preview', { query: { user_id, position } }),
+  preview: (user_id, position, name = '') => call('GET', '/internal/network-verify-preview', { query: { user_id, position, name } }),
   // Touches up to ~19 guilds (roles + nicknames + invites) — give it room.
-  apply: (user_id, position, approved_by, seat_no = null) =>
-    call('POST', '/internal/network-verify-apply', { body: { user_id, position, approved_by, seat_no }, timeoutMs: 180000 }),
+  apply: (user_id, position, approved_by, seat_no = null, name = null) =>
+    call('POST', '/internal/network-verify-apply', { body: { user_id, position, approved_by, seat_no, name }, timeoutMs: 180000 }),
 };
