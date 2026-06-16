@@ -21,6 +21,7 @@ const ALERT_USER_IDS = ['723199054514749450', '415922272956710912'];
 const SUPPRESS_ACTORS = new Set([
   '723199054514749450',  // dionm — actions you take won't ping you
   '415922272956710912',  // evans
+  '1501640075597975582', // aspire-bot (USGRP | Services) — network-verify role syncs are audited in the verification queue
 ]);
 
 // Discord renders <t:unix:F> as a localized full date and <t:unix:R> as a relative

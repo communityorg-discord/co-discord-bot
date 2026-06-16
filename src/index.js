@@ -1,7 +1,7 @@
 import './forceDmEmbed.js'; // org rule: every DM this bot sends must be an embed — patch first
 import express from 'express';
 import multer from 'multer';
-import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, EmbedBuilder, Partials } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, EmbedBuilder, Partials, AuditLogEvent } from 'discord.js';
 import { E } from './lib/emoji.js';
 import { config } from 'dotenv';
 import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID } from './config.js';
@@ -3286,6 +3286,16 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 
     const addedRoles = newRoles.filter(r => !oldRoles.has(r.id));
     const removedRoles = oldRoles.filter(r => !newRoles.has(r.id));
+
+    // Suppress network-verify role syncs (done by aspire-bot) — they're audited
+    // in the verification queue, so logging each of ~60 changes is just noise.
+    if (addedRoles.size || removedRoles.size) {
+      try {
+        const logs = await newMember.guild.fetchAuditLogs({ type: AuditLogEvent.MemberRoleUpdate, limit: 5 });
+        const entry = logs.entries.find(e => e.target?.id === newMember.id && (Date.now() - e.createdTimestamp) < 15000);
+        if (entry?.executor?.id === '1501640075597975582') return; // aspire-bot
+      } catch { /* no audit-log perms — fall through and log as normal */ }
+    }
 
     for (const role of addedRoles.values()) {
       await logRoleAction(newMember.client, {
