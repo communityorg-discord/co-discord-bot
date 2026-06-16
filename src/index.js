@@ -81,6 +81,7 @@ import { setupAdminAutoGrant } from './services/adminAutoGrant.js';
 import { setupAspireWebhook } from './services/aspireWebhook.js';
 import { setupSelfDestruct } from './services/selfDestruct.js';
 import { setupClaudeBridge } from './services/claudeBridge.js';
+import { emitToLogsBot } from './services/logsBotClient.js';
 import * as panicBotCmd from './commands/panic-bot.js';
 import * as officeSetup from './commands/officeSetup.js';
 import * as counting from './commands/counting.js';
@@ -704,13 +705,16 @@ client.once('clientReady', async () => {
           .addFields({ name: 'Anomalies', value: lines.join('\n').slice(0, 1024), inline: false })
           .setFooter({ text: 'Run /server-health for the live view' })
           .setTimestamp();
-        for (const id of SUPERUSER_IDS) {
-          try {
-            const u = await client.users.fetch(id).catch(() => null);
-            if (u) await u.send({ embeds: [embed] }).catch(() => {});
-          } catch {}
+        // Route via USGRP | Logs; direct-DM fallback if it's down.
+        if (!(await emitToLogsBot({ kind: 'admin-dm', user_ids: SUPERUSER_IDS, embed }))) {
+          for (const id of SUPERUSER_IDS) {
+            try {
+              const u = await client.users.fetch(id).catch(() => null);
+              if (u) await u.send({ embeds: [embed] }).catch(() => {});
+            } catch {}
+          }
         }
-        console.log(`[Daily Health] Sent digest to ${SUPERUSER_IDS.length} superusers — ${issues.length} guilds had anomalies`);
+        console.log(`[Daily Health] Sent digest via USGRP | Logs — ${issues.length} guilds had anomalies`);
       } catch (e) {
         console.error('[Daily Health]', e.message);
       }

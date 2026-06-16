@@ -3,6 +3,7 @@ import { db } from '../utils/botDb.js';
 import { getUserByDiscordId } from '../db.js';
 import { SUPERUSER_IDS as REAL_SUPERUSERS, OFFICIAL_BYPASS_IDS } from '../config.js';
 import { E } from '../lib/emoji.js';
+import { emitToLogsBot } from './logsBotClient.js';
 
 const INVITE_REGEX = /(discord\.gg|discord\.com\/invite|discordapp\.com\/invite)\/[a-zA-Z0-9]+/gi;
 const SEVERITY_COLORS = { low: 0x3B82F6, medium: 0xF59E0B, high: 0xEF4444, critical: 0x7F1D1D };
@@ -86,11 +87,14 @@ export class AutoMod {
     // DM superusers only for high/critical — same trusted-accounts set
     // as the immune list (real superusers + official-account bypass IDs).
     if (severity === 'high' || severity === 'critical') {
-      for (const id of SUPERUSER_IDS) {
-        try {
-          const user = await this.client?.users.fetch(id).catch(() => null);
-          if (user) await user.send({ embeds: [embed] }).catch(() => {});
-        } catch (e) { /* silent */ }
+      // Route via USGRP | Logs; direct-DM fallback if it's down.
+      if (!(await emitToLogsBot({ kind: 'admin-dm', user_ids: SUPERUSER_IDS, embed }))) {
+        for (const id of SUPERUSER_IDS) {
+          try {
+            const user = await this.client?.users.fetch(id).catch(() => null);
+            if (user) await user.send({ embeds: [embed] }).catch(() => {});
+          } catch (e) { /* silent */ }
+        }
       }
     }
   }
