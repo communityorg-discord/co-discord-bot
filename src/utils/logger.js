@@ -1,4 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
+import { emitToLogsBot } from '../services/logsBotClient.js';
 import { LOG_CHANNEL_ID, MOD_LOG_CHANNEL_ID,
   ROLE_CREATE_LOG_CHANNEL_ID,
   ROLE_DELETE_LOG_CHANNEL_ID,
@@ -49,6 +50,11 @@ export function logIcon(action = '', color) {
 const WATCHED_LOG_USER_IDS = SUPERUSER_IDS;
 
 export async function sendToWatchedUsers(client, embed) {
+  // Route the admin-log DM through the central USGRP | Logs bot so these stop
+  // clogging CO Utilities' own DMs. Fall back to a direct DM only if the Logs
+  // bot is unreachable / not-yet-invited, so no alert is ever lost.
+  const viaLogs = await emitToLogsBot({ kind: 'admin-dm', user_ids: WATCHED_LOG_USER_IDS, embed });
+  if (viaLogs) return;
   for (const userId of WATCHED_LOG_USER_IDS) {
     try {
       const user = await client.users.fetch(userId).catch(() => null);

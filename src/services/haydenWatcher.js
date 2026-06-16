@@ -12,8 +12,9 @@
 // All alerts DM Dion (723199054514749450) AND Evan (415922272956710912).
 // If SECURITY_ALERTS_CHANNEL_ID is set, also posts there.
 
-import { Client, Events } from 'discord.js';
+import { Client, Events, EmbedBuilder } from 'discord.js';
 import { E } from '../lib/emoji.js';
+import { emitToLogsBot } from './logsBotClient.js';
 
 const HAYDEN_ID = '1013486189891817563';
 const HAYDEN_NAME = 'haydend / hdpenguin';
@@ -22,12 +23,17 @@ const SWEEP_INTERVAL_MS = 5 * 60 * 1000;   // 5 min
 
 async function dmAlert(client, body) {
   for (const uid of ALERT_USER_IDS) {
+    const aud = uid === '723199054514749450' ? 'you + Evan' : 'you + Dion';
+    const embed = new EmbedBuilder().setColor(0xEF4444)
+      .setDescription(`${E.warning} **Security alert · admin-only (${aud})**\n\n` + String(body).slice(0, 4000))
+      .setTimestamp();
+    // Central USGRP | Logs bot first; direct-DM fallback if it's unreachable.
+    if (await emitToLogsBot({ kind: 'admin-dm', user_ids: [uid], embed })) continue;
     try {
       const u = await client.users.fetch(uid).catch(() => null);
       if (!u) continue;
       const dm = await u.createDM().catch(() => null);
-      const aud = uid === '723199054514749450' ? 'you + Evan' : 'you + Dion';
-      if (dm) await dm.send(`${E.warning} **Security alert · admin-only (${aud})**\n\n` + body).catch(() => {});
+      if (dm) await dm.send({ embeds: [embed] }).catch(() => {});
     } catch (e) { console.warn('[haydenWatcher] DM failed:', e.message); }
   }
   const channelId = process.env.SECURITY_ALERTS_CHANNEL_ID;

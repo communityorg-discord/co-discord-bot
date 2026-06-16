@@ -16,6 +16,7 @@
 
 import { Events, AuditLogEvent, EmbedBuilder } from 'discord.js';
 import { E } from '../lib/emoji.js';
+import { emitToLogsBot } from './logsBotClient.js';
 
 const ALERT_USER_IDS = ['723199054514749450', '415922272956710912'];
 const SUPPRESS_ACTORS = new Set([
@@ -64,12 +65,17 @@ async function alert(client, body) {
     .setDescription(`${E.warning} **Security alert · admin-only (you + Evan)**\n\n` + body.slice(0, 4000))
     .setFooter({ text: 'Security alert · admin-only · Community Organisation' })
     .setTimestamp();
-  for (const uid of ALERT_USER_IDS) {
-    try {
-      const u = await client.users.fetch(uid).catch(() => null);
-      if (!u) continue;
-      await u.send({ embeds: [embed] }).catch(() => {});
-    } catch {}
+  // Route the security-alert DMs through the central USGRP | Logs bot; direct-DM
+  // fallback if it's unreachable / not-yet-invited.
+  const viaLogs = await emitToLogsBot({ kind: 'admin-dm', user_ids: ALERT_USER_IDS, embed });
+  if (!viaLogs) {
+    for (const uid of ALERT_USER_IDS) {
+      try {
+        const u = await client.users.fetch(uid).catch(() => null);
+        if (!u) continue;
+        await u.send({ embeds: [embed] }).catch(() => {});
+      } catch {}
+    }
   }
   const channelId = process.env.SECURITY_ALERTS_CHANNEL_ID;
   if (channelId) {
