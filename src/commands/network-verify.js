@@ -54,10 +54,11 @@ export async function handleSelect(interaction) {
     const seats = await networkVerifyApi.seats(position);
     if (seats.ok && (seats.count || 1) > 1) {
       const taken = new Map((seats.taken || []).filter(t => t.seat_no).map(t => [Number(t.seat_no), t.name]));
+      const posLabel = position.replace(/\s*\|\s*/, ' '); // "FSA | Member" → "FSA Member"
       const opts = [];
       for (let n = 1; n <= seats.count && opts.length < 25; n++) {
         const who = taken.get(n);
-        opts.push({ label: `Seat ${n}${who ? ` — ${who}` : ' — open'}`.slice(0, 100), description: who ? 'Held — re-assigns this seat' : 'Open', value: String(n) });
+        opts.push({ label: `${posLabel} ${n}`.slice(0, 100), description: (who ? `Held by ${who} — re-assigns` : 'Open').slice(0, 100), value: String(n) });
       }
       const menu = new StringSelectMenuBuilder()
         .setCustomId(`netverify_seat${SEP}${targetId}${SEP}${position}`)
