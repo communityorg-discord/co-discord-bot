@@ -1928,6 +1928,11 @@ const VERIFICATION_CHANNEL_ID = '1487631939103100969';
 client.on('interactionCreate', async interaction => {
   try {
   console.log('[Interaction]', interaction.type, interaction.isChatInputCommand() ? interaction.commandName : '');
+  // /office panel — all its buttons, select menus and modals carry 'officep:'.
+  if (interaction.customId?.startsWith('officep:')) {
+    const { handlePanel } = await import('./interactions/officePanel.js');
+    return handlePanel(interaction, client);
+  }
   if (interaction.isChatInputCommand()) {
     // Restrict slash commands to the bot commands channel in Staff HQ (superusers exempt)
     // Allow /verify in the verification channel as well
