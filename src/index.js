@@ -82,6 +82,7 @@ import { setupAspireWebhook } from './services/aspireWebhook.js';
 import { setupSelfDestruct } from './services/selfDestruct.js';
 import { setupClaudeBridge } from './services/claudeBridge.js';
 import { emitToLogsBot } from './services/logsBotClient.js';
+import { networkVerifyApi } from './utils/aspireInternal.js';
 import * as panicBotCmd from './commands/panic-bot.js';
 import * as officeSetup from './commands/officeSetup.js';
 import * as counting from './commands/counting.js';
@@ -3154,6 +3155,25 @@ client.on('inviteCreate', async (invite) => {
   } catch (e) {
     console.error('[Invite Guard] Failed:', e.message);
   }
+});
+
+// Network Staff Hub — when a verified network-staff member JOINS (via the invite
+// /network-verify DM'd them), auto-apply their network roles. aspire-bot (the
+// engine) isn't in this server, so co-bot handles it; the record comes from the
+// engine's DB via the internal API.
+client.on('guildMemberAdd', async (member) => {
+  try {
+    if (member.guild.id !== '1357119461957570570') return; // USGRP | Network Staff Hub
+    const res = await networkVerifyApi.record(member.id);
+    const roles = res?.record?.roles || [];
+    if (!roles.length) return;
+    await member.guild.roles.fetch();
+    for (const name of roles) {
+      const role = member.guild.roles.cache.find(r => r.name === name);
+      if (role && !member.roles.cache.has(role.id)) await member.roles.add(role, 'Network Staff Hub — auto-apply on join').catch(() => {});
+    }
+    console.log(`[Network Hub] applied ${roles.length} role(s) to ${member.user.tag} on join`);
+  } catch (e) { console.error('[Network Hub] join apply failed:', e.message); }
 });
 
 // Message edit log — tracked globally across all servers

@@ -14,6 +14,30 @@ import { E } from '../lib/emoji.js';
 const SEP = '~'; // network position names contain spaces + "|" but never "~"
 const short = (name) => name.replace('USGRP | ', '');
 
+// USGRP | Network Staff Hub — EVERY network-staff member (every position, down to
+// Junior Mod) gets an invite + their network roles here. aspire-bot (the engine)
+// isn't in this server, but THIS (CO Utilities) bot is, so it handles the Hub.
+const STAFF_HUB_ID = '1357119461957570570';
+async function applyStaffHub(client, targetId, roleNames) {
+  const out = { invite: null, applied: 0 };
+  const hub = client.guilds.cache.get(STAFF_HUB_ID);
+  if (!hub) return out;
+  try {
+    await hub.roles.fetch();
+    const member = await hub.members.fetch(targetId).catch(() => null);
+    if (member) {
+      for (const name of (roleNames || [])) {
+        const role = hub.roles.cache.find(x => x.name === name);
+        if (role && !member.roles.cache.has(role.id)) { await member.roles.add(role, 'Network verify — Staff Hub').catch(() => {}); out.applied++; }
+      }
+    }
+    const me = hub.members.me;
+    const ch = hub.channels.cache.find(c => c.isTextBased?.() && c.permissionsFor(me)?.has('CreateInstantInvite'));
+    if (ch) { const inv = await ch.createInvite({ maxAge: 604800, maxUses: 0, unique: true, reason: 'Network verify — Staff Hub' }); out.invite = { name: hub.name, url: inv.url }; }
+  } catch (e) { console.error('[netverify] staff-hub failed:', e?.message); }
+  return out;
+}
+
 export const data = new SlashCommandBuilder()
   .setName('network-verify')
   .setDescription('Verify a USGRP network-staff member and sync their roles across the network')
@@ -140,6 +164,11 @@ export async function handleButton(interaction) {
         .setDescription(`${E.cross} ${r.error || r.status}`).setFooter({ text: 'USGRP Network Verification' });
 
   if (r.ok) {
+    // Network Staff Hub — every position (down to Junior Mod) gets it. aspire-bot
+    // (the engine) isn't in this server, so co-bot (which is) applies the roles +
+    // mints the invite here.
+    const hub = await applyStaffHub(interaction.client, targetId, r.roles);
+    if (hub.invite) final.addFields({ name: 'Staff Hub', value: `invite sent${hub.applied ? ` · +${hub.applied} roles` : ''}`, inline: true });
     await logAction(interaction.client, {
       action: 'Network Staff Verified',
       target: { discordId: targetId },
@@ -150,7 +179,9 @@ export async function handleButton(interaction) {
     // DM the verified member their invites — from THIS (CO Utilities) bot, since
     // it owns the command. Links go in the description (4096) not a field (1024),
     // so a long list (≈19 servers) isn't truncated mid-URL.
-    const lines = (r.invite_links || []).map(i => `[${i.name}](${i.url})`).join('\n');
+    const allInvites = [...(r.invite_links || [])];
+    if (hub.invite) allInvites.push(hub.invite);
+    const lines = allInvites.map(i => `[${i.name}](${i.url})`).join('\n');
     const dm = new EmbedBuilder().setColor(0x5865F2)
       .setTitle("You've been verified as USGRP Network Staff")
       .setDescription(`You're verified as **${position}**. Your nickname across the network is **${r.nickname}**.\n\nHere are your server invites — they expire in 7 days. Join each one to receive your roles.\n\n**Server invites**\n${lines || '_No invites available_'}`)

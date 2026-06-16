@@ -24,6 +24,7 @@ async function call(method, path, { query, body, timeoutMs = 30000 } = {}) {
 export const networkVerifyApi = {
   positions: () => call('GET', '/internal/network-verify-positions'),
   seats: (position) => call('GET', '/internal/network-verify-seats', { query: { position } }),
+  record: (user_id) => call('GET', '/internal/network-verify-record', { query: { user_id } }),
   preview: (user_id, position) => call('GET', '/internal/network-verify-preview', { query: { user_id, position } }),
   // Touches up to ~19 guilds (roles + nicknames + invites) — give it room.
   apply: (user_id, position, approved_by, seat_no = null) =>
