@@ -3232,7 +3232,11 @@ client.on('guildMemberAdd', async (member) => {
       const role = member.guild.roles.cache.find(r => r.name === name);
       if (role && !member.roles.cache.has(role.id)) await member.roles.add(role, 'Network Staff Hub — auto-apply on join').catch(() => {});
     }
-    console.log(`[Network Hub] applied ${roles.length} role(s) to ${member.user.tag} on join`);
+    // Apply their network nickname too — otherwise they keep whatever nick they
+    // joined with (e.g. a government title), which is the "name not updated in the
+    // Hub" bug. Best-effort: fails silently if they outrank the bot.
+    if (res.record.nickname) await member.setNickname(res.record.nickname, 'Network Staff Hub — auto-apply on join').catch(() => {});
+    console.log(`[Network Hub] applied ${roles.length} role(s) + nick to ${member.user.tag} on join`);
   } catch (e) { console.error('[Network Hub] join apply failed:', e.message); }
 });
 

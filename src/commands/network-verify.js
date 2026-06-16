@@ -19,7 +19,7 @@ const short = (name) => name.replace('USGRP | ', '');
 // isn't in this server, but THIS (CO Utilities) bot is, so it handles the Hub.
 const STAFF_HUB_ID = '1357119461957570570';
 const STAFF_HUB_NAME = 'Network Staff Hub';
-async function applyStaffHub(client, targetId, roleNames) {
+async function applyStaffHub(client, targetId, roleNames, nickname) {
   const out = { invite: null, applied: 0 };
   const hub = client.guilds.cache.get(STAFF_HUB_ID);
   if (!hub) return out;
@@ -31,6 +31,9 @@ async function applyStaffHub(client, targetId, roleNames) {
         const role = hub.roles.cache.find(x => x.name === name);
         if (role && !member.roles.cache.has(role.id)) { await member.roles.add(role, 'Network verify — Staff Hub').catch(() => {}); out.applied++; }
       }
+      // Set their network nickname in the Hub too (best-effort — fails silently if
+      // they outrank the bot). Without this they keep their join nick (e.g. a gov title).
+      if (nickname) await member.setNickname(nickname, 'Network verify — Staff Hub').catch(() => {});
     }
     const me = hub.members.me;
     const ch = hub.channels.cache.find(c => c.isTextBased?.() && c.permissionsFor(me)?.has('CreateInstantInvite'));
@@ -216,8 +219,21 @@ export async function handleButton(interaction) {
     // Network Staff Hub — every position (down to Junior Mod) gets it. aspire-bot
     // (the engine) isn't in this server, so co-bot (which is) applies the roles +
     // mints the invite here.
-    const hub = await applyStaffHub(interaction.client, targetId, r.roles);
+    const hub = await applyStaffHub(interaction.client, targetId, r.roles, r.nickname);
     if (hub.invite) final.addFields({ name: 'Staff Hub', value: `invite sent${hub.applied ? ` · +${hub.applied} roles` : ''}`, inline: true });
+    // Auto-refresh the #structure org charts now this person is onboarded. The
+    // verify engine (aspire-bot) already rewrote structure.json with the new
+    // holder, so this just re-renders and EDITS the existing structure messages
+    // in place. Background — never blocks the verification response. Wired into
+    // the bot itself (this command), NOT routed through a Claude session.
+    (async () => {
+      try {
+        const { createRequire } = await import('node:module');
+        const { updateStructure } = createRequire(import.meta.url)('/home/vpcommunityorganisation/clawd/services/hierarchy-admin/scripts/post-network-structure.cjs');
+        const res = await updateStructure({ token: process.env.DISCORD_BOT_TOKEN, channelId: '1516284990168764586' });
+        console.log(`[network-verify] #structure refreshed: ${JSON.stringify(res)}`);
+      } catch (e) { console.error('[network-verify] structure refresh failed:', e?.message); }
+    })();
     await logAction(interaction.client, {
       action: 'Network Staff Verified',
       target: { discordId: targetId },
