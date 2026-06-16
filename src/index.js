@@ -5,7 +5,7 @@ import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBu
 import { E } from './lib/emoji.js';
 import { config } from 'dotenv';
 import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID } from './config.js';
-import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent, logAtlasBotAction, logMessageEvent, isDmRelay } from './utils/botDb.js';
+import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent, logAtlasBotAction, logMessageEvent, isDmRelay, getActiveUltimatums, getUltimatum, setUltimatumStatus, setUltimatumNextReminder } from './utils/botDb.js';
 import { sendToWatchedUsers, logEvent } from './utils/logger.js';
 import { getUserByDiscordId } from './db.js';
 import { canUseCommand } from './utils/permissions.js';
@@ -158,6 +158,7 @@ setupDestructionWatcher(client);
 setupAdminAutoGrant(client);
 setupAspireWebhook(client);
 setupClaudeBridge(client);   // founders: reply "Claude …" to fix things from Discord
+setupUltimatumWatcher(client); // hourly reminder DMs + deadline kick for dm_ultimatums
 
 // Module-scope tracking sets — shared by the 'ready' handler that
 // reads/syncs them and the top-level voiceStateUpdate / messageCreate
@@ -2866,11 +2867,83 @@ client.on('messageCreate', async (message) => {
       .setDescription(content ? content.slice(0, 4000) : '_(no text)_')
       .setFooter({ text: `From ${message.author.username} · ${message.author.id} · USGRP Network Staff` }).setTimestamp();
     if (atts.length) embed.addFields({ name: 'Attachments', value: atts.join('\n').slice(0, 1024) });
+    // If this person is under an active ultimatum, a reply CANCELS it — stop the
+    // reminders, don't carry out the consequence, and flag it for the founders.
+    let ultNote = null;
+    try {
+      const u = getUltimatum(message.author.id);
+      if (u && u.status === 'active') { setUltimatumStatus(message.author.id, 'replied'); ultNote = `✅ They replied — the hourly reminders and the auto-${u.consequence} have been cancelled.`; }
+    } catch (e) { console.error('[ultimatum] cancel-on-reply', e.message); }
+    if (ultNote) embed.addFields({ name: 'Ultimatum', value: ultNote });
     for (const id of ['723199054514749450', '415922272956710912']) { // Dion, Evan
       try { const u = await client.users.fetch(id); await u.send({ embeds: [embed] }); } catch {}
     }
   } catch (e) { console.error('[dm-relay]', e.message); }
 });
+
+// ── Ultimatum watcher ────────────────────────────────────────────────────────
+// Minute tick: for each active ultimatum, either send the next hourly reminder
+// or — once the deadline passes with no reply — carry out the consequence (kick
+// from every server the bot shares with them) and report to the founders.
+const FOUNDER_IDS = ['723199054514749450', '415922272956710912']; // Dion, Evan
+async function notifyFounders(client, embed) {
+  for (const id of FOUNDER_IDS) { try { const u = await client.users.fetch(id); await u.send({ embeds: [embed] }); } catch {} }
+}
+async function kickFromAllGuilds(client, userId, reason) {
+  const kicked = [], failed = [];
+  for (const g of client.guilds.cache.values()) {
+    let member;
+    try { member = await g.members.fetch(userId); } catch { continue; } // not in this guild
+    if (!member) continue;
+    if (!member.kickable) { failed.push(`${g.name} (no permission / outranks bot)`); continue; }
+    try { await member.kick(reason); kicked.push(g.name); }
+    catch (e) { failed.push(`${g.name}: ${e.message}`); }
+    await new Promise(r => setTimeout(r, 350));
+  }
+  return { kicked, failed };
+}
+let _ultimatumBusy = false;
+async function processUltimatums(client) {
+  if (_ultimatumBusy) return;
+  _ultimatumBusy = true;
+  try {
+    const now = Date.now();
+    for (const u of getActiveUltimatums()) {
+      const deadline = Date.parse(u.deadline_at);
+      if (Number.isFinite(deadline) && now >= deadline) {
+        // Deadline passed with no reply → carry out the consequence.
+        setUltimatumStatus(u.user_id, u.consequence === 'kick' ? 'kicked' : 'done'); // mark first so a slow kick can't double-fire
+        if (u.consequence === 'kick') {
+          const res = await kickFromAllGuilds(client, u.user_id, 'No response by the deadline — removed per Network Staff leadership.');
+          const e = new EmbedBuilder().setColor(0xB91C1C)
+            .setAuthor({ name: 'Ultimatum — deadline reached' })
+            .setDescription(`<@${u.user_id}> (\`${u.user_id}\`) did not reply by the deadline, so they've been **kicked** from the network's servers.`)
+            .addFields(
+              { name: `Kicked from (${res.kicked.length})`, value: (res.kicked.join('\n') || '—').slice(0, 1024) },
+              ...(res.failed.length ? [{ name: `Couldn't kick from (${res.failed.length})`, value: res.failed.join('\n').slice(0, 1024) }] : []),
+            )
+            .setFooter({ text: 'USGRP · Network Staff' }).setTimestamp();
+          await notifyFounders(client, e);
+        }
+        continue;
+      }
+      const nextAt = u.next_reminder_at ? Date.parse(u.next_reminder_at) : null;
+      if (nextAt && now >= nextAt) {
+        try {
+          const user = await client.users.fetch(u.user_id);
+          await user.send({ embeds: [new EmbedBuilder().setColor(0x0a2540).setAuthor({ name: 'USGRP | Network Staff' }).setDescription(u.reminder_text).setFooter({ text: 'USGRP · Network Staff' })] });
+        } catch (e) { console.error('[ultimatum] reminder send', u.user_id, e.message); }
+        setUltimatumNextReminder(u.user_id, new Date(now + Number(u.interval_ms)).toISOString());
+      }
+    }
+  } catch (e) { console.error('[ultimatum] tick', e.message); }
+  finally { _ultimatumBusy = false; }
+}
+function setupUltimatumWatcher(client) {
+  const tick = () => processUltimatums(client).catch(e => console.error('[ultimatum]', e.message));
+  setInterval(tick, 60_000);
+  setTimeout(tick, 5_000); // first pass shortly after startup
+}
 
 // AutoMod message handler + counting + BRAG message tracking
 client.on('messageCreate', async (message) => {

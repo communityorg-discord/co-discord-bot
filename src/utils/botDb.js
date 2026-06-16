@@ -1875,4 +1875,35 @@ export function addDmRelay(userId, addedBy, note = null) {
 export function removeDmRelay(userId) { return db.prepare('DELETE FROM dm_relays WHERE user_id = ?').run(String(userId)).changes; }
 export function isDmRelay(userId) { return !!db.prepare('SELECT 1 FROM dm_relays WHERE user_id = ?').get(String(userId)); }
 
+// ── DM ultimatums ────────────────────────────────────────────────────────────
+// A standing "reply or face a consequence" against a user: a reminder DM is sent
+// every `interval_ms` until either they reply (status -> replied, cancelled) or
+// `deadline_at` passes (the `consequence`, e.g. kick, is carried out). State lives
+// in the DB so it survives bot restarts; a minute-tick watcher in index.js drives
+// it, and the DM-relay handler cancels it the moment the user replies.
+db.exec(`CREATE TABLE IF NOT EXISTS dm_ultimatums (
+  user_id          TEXT PRIMARY KEY,
+  deadline_at      TEXT NOT NULL,
+  next_reminder_at TEXT,
+  interval_ms      INTEGER NOT NULL,
+  reminder_text    TEXT NOT NULL,
+  consequence      TEXT NOT NULL DEFAULT 'kick',
+  added_by         TEXT,
+  status           TEXT NOT NULL DEFAULT 'active',
+  created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+export function upsertUltimatum({ userId, deadlineAt, nextReminderAt = null, intervalMs, reminderText, consequence = 'kick', addedBy = null }) {
+  db.prepare(`INSERT OR REPLACE INTO dm_ultimatums
+      (user_id, deadline_at, next_reminder_at, interval_ms, reminder_text, consequence, added_by, status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'active',
+      COALESCE((SELECT created_at FROM dm_ultimatums WHERE user_id = ?), CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)`)
+    .run(String(userId), String(deadlineAt), nextReminderAt ? String(nextReminderAt) : null,
+      Number(intervalMs), String(reminderText), String(consequence), addedBy ? String(addedBy) : null, String(userId));
+}
+export function getActiveUltimatums() { return db.prepare(`SELECT * FROM dm_ultimatums WHERE status = 'active'`).all(); }
+export function getUltimatum(userId) { return db.prepare(`SELECT * FROM dm_ultimatums WHERE user_id = ?`).get(String(userId)); }
+export function setUltimatumStatus(userId, status) { return db.prepare(`UPDATE dm_ultimatums SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`).run(String(status), String(userId)).changes; }
+export function setUltimatumNextReminder(userId, nextReminderAt) { return db.prepare(`UPDATE dm_ultimatums SET next_reminder_at = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`).run(nextReminderAt ? String(nextReminderAt) : null, String(userId)).changes; }
+
 export { db };
