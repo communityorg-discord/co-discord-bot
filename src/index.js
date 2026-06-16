@@ -2910,9 +2910,13 @@ const FOUNDER_IDS = ['723199054514749450', '415922272956710912']; // Dion, Evan
 async function notifyFounders(client, embed) {
   for (const id of FOUNDER_IDS) { try { const u = await client.users.fetch(id); await u.send({ embeds: [embed] }); } catch {} }
 }
+// The main USGRP roleplay server is the public hub everyone's in — never auto-kick
+// anyone from there; the ultimatum only removes them from the staff/network servers.
+const KICK_EXCLUDE_GUILDS = new Set(['1458621643537514590']); // United States Government Roleplay (USGRP)
 async function kickFromAllGuilds(client, userId, reason) {
-  const kicked = [], failed = [];
+  const kicked = [], failed = [], skipped = [];
   for (const g of client.guilds.cache.values()) {
+    if (KICK_EXCLUDE_GUILDS.has(g.id)) { skipped.push(g.name); continue; } // protected — never auto-kick here
     let member;
     try { member = await g.members.fetch(userId); } catch { continue; } // not in this guild
     if (!member) continue;
@@ -2921,7 +2925,7 @@ async function kickFromAllGuilds(client, userId, reason) {
     catch (e) { failed.push(`${g.name}: ${e.message}`); }
     await new Promise(r => setTimeout(r, 350));
   }
-  return { kicked, failed };
+  return { kicked, failed, skipped };
 }
 let _ultimatumBusy = false;
 async function processUltimatums(client) {
@@ -2941,6 +2945,7 @@ async function processUltimatums(client) {
             .setDescription(`<@${u.user_id}> (\`${u.user_id}\`) did not reply by the deadline, so they've been **kicked** from the network's servers.`)
             .addFields(
               { name: `Kicked from (${res.kicked.length})`, value: (res.kicked.join('\n') || '—').slice(0, 1024) },
+              ...(res.skipped?.length ? [{ name: `Left in place (${res.skipped.length})`, value: res.skipped.join('\n').slice(0, 1024) }] : []),
               ...(res.failed.length ? [{ name: `Couldn't kick from (${res.failed.length})`, value: res.failed.join('\n').slice(0, 1024) }] : []),
             )
             .setFooter({ text: 'USGRP · Network Staff' }).setTimestamp();
