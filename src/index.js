@@ -84,6 +84,8 @@ import { setupClaudeBridge } from './services/claudeBridge.js';
 import { emitToLogsBot } from './services/logsBotClient.js';
 import { networkVerifyApi } from './utils/aspireInternal.js';
 import * as panicBotCmd from './commands/panic-bot.js';
+import * as panelCmd from './commands/panel.js';
+import * as coPanel from './interactions/coPanel.js';
 import * as officeSetup from './commands/officeSetup.js';
 import * as counting from './commands/counting.js';
 import * as forceVerify from './commands/forceVerify.js';
@@ -175,7 +177,7 @@ const welcomeTracker     = new Map(); // discord_id → count this week
 const ATLAS_DISCORD_USER_ID = '1465559216172568812';
 const ATLAS_GATE_NOTICE_COOLDOWN_MS = 5 * 60_000; // 5m per user
 const atlasGateNoticeCooldown = new Map(); // discord_id → last notice ms
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, info, unban, verify, unverify, networkVerify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, ban, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm, serverHealth, syncRoles, whois, leaderboard, myroles, roleInfo, serverinfo, channelInfo, syncAllRoles, findUser, auditLog, botPerms, feedback, embedCmd, whoIsHere, quote, snippet, ping, staffOnline, timezone, randomPick, standup, thanks, kudosLeaderboard, todoCmd, reminders, myKudos, links, breakCmd, idea, panicBotCmd, logsCmd, emergencyCmd];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, info, unban, verify, unverify, networkVerify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, ban, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm, serverHealth, syncRoles, whois, leaderboard, myroles, roleInfo, serverinfo, channelInfo, syncAllRoles, findUser, auditLog, botPerms, feedback, embedCmd, whoIsHere, quote, snippet, ping, staffOnline, timezone, randomPick, standup, thanks, kudosLeaderboard, todoCmd, reminders, myKudos, links, breakCmd, idea, panicBotCmd, logsCmd, emergencyCmd, panelCmd];
 // The CO Staff Network is suspended, so its CO-specific commands are HIDDEN —
 // the command files are kept, they're just not registered with Discord or routed.
 // Moderation, tickets, office, network-verify and general utility stay live.
@@ -187,10 +189,26 @@ const HIDDEN_COMMANDS = new Set([
   'find-user', 'leaderboard', 'myroles', 'staff-online', 'standup', 'thanks',
   'kudos-leaderboard', 'my-kudos', 'links',
 ]);
-const visibleCommands = commands.filter(c => !HIDDEN_COMMANDS.has(c.data.name));
+// Less-used commands pulled OUT of the slash-command picker and reached via the
+// /panel hub instead (gov-bot style). Their modules stay loaded and their
+// button/select/modal handlers still route by customId — they're just not
+// registered as slash commands, so the picker stays lean. Moderation + network
+// commands deliberately stay DIRECT (not in here).
+const PANEL_COMMANDS = new Set([
+  'ticket-panel-send', 'ticket-panel-delete', 'ticket-options',
+  'logs', 'logspanel', 'orglogs', 'privatelogs', 'audit-log', 'automod', 'server-health', 'bot-perms', 'counting',
+  'poll', 'embed', 'quote', 'snippet', 'remind', 'reminders', 'todo', 'random-pick', 'timezone', 'break', 'feedback', 'idea', 'schedule-dm',
+  'bot', 'info', 'ping', 'user', 'serverinfo', 'channel-info', 'role-info', 'who-is-here',
+  'record', 'office', 'emergency', 'panic-bot',
+]);
+const visibleCommands = commands.filter(c => !HIDDEN_COMMANDS.has(c.data.name) && !PANEL_COMMANDS.has(c.data.name));
 for (const cmd of visibleCommands) {
   client.commands.set(cmd.data.name, cmd);
 }
+// Registry the /panel hub launches from (the deregistered-but-loaded commands).
+const panelRegistry = new Map();
+for (const c of commands) { if (PANEL_COMMANDS.has(c.data.name)) panelRegistry.set(c.data.name, c); }
+coPanel.initPanel(panelRegistry);
 
 async function setupEmailNotificationChannels(client) {
   try {
@@ -2069,6 +2087,8 @@ client.on('interactionCreate', async interaction => {
   }
 
   if (interaction.isButton()) {
+    // CO Utilities hub (/panel) — section buttons that launch commands
+    if (interaction.customId?.startsWith('copanel:')) { try { if (await coPanel.handleButton(interaction)) return; } catch (e) { console.error('[coPanel button]', e.message); } return; }
     // Claude bridge: Stop the running detached session (founders only).
     // Writes the STOP file the runner polls — works regardless of which
     // bot spawned the run, and survives bot restarts like the runner does.
@@ -2438,6 +2458,8 @@ client.on('interactionCreate', async interaction => {
 
   // String select menu handlers
   if (interaction.isStringSelectMenu()) {
+    // CO Utilities hub (/panel) — "Go to…" nav + subcommand pickers
+    if (interaction.customId?.startsWith('copanel:')) { try { if (await coPanel.handleSelect(interaction)) return; } catch (e) { console.error('[coPanel select]', e.message); } return; }
     // AutoMod panel select menus
     if (interaction.customId?.startsWith('automod_')) {
       try { const handled = await automodPanelHandler(interaction); if (handled) return; }
@@ -2529,6 +2551,8 @@ client.on('interactionCreate', async interaction => {
 
   // Verify/Unverify modal handlers
   if (interaction.isModalSubmit()) {
+    // CO Utilities hub (/panel) — command-launch modals
+    if (interaction.customId?.startsWith('copanel:')) { try { if (await coPanel.handleModal(interaction)) return; } catch (e) { console.error('[coPanel modal]', e.message); } return; }
     // Network Staff role-offer decline → notify Dion + Evan, with optional reason.
     if (interaction.customId === 'roleoffer_decline_modal') {
       let reason = '';
