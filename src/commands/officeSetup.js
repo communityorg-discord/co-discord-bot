@@ -3,261 +3,108 @@ import { SlashCommandBuilder, EmbedBuilder, ChannelType } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import {
   upsertOffice, deleteOffice, getOffice, listOffices,
-  setAllowlist, addAllowed, removeAllowed, getAllowlist,
-  setRequestFeed, getRequestFeed,
-  upsertWaitingRoom, deleteWaitingRoom, listWaitingRooms,
+  upsertWaitingRoom, firstWaitingRoom, listWaitingRooms,
+  grantKey, revokeKey, listKeys, canAccessOffice,
 } from '../services/officeManager.js';
 import { logAction } from '../utils/logger.js';
 import { E } from '../lib/emoji.js';
 
+// Offices use ROLE + HIERARCHY access: each office is owned by a role and has a
+// rank (lower number = higher / more senior). A member can join an office if
+// they hold its owner role, hold a higher-ranked office role (so seniors reach
+// junior offices), have a temporary key, or are a superuser. Anyone else who
+// joins is moved to the waiting room.
 export const data = new SlashCommandBuilder()
   .setName('office')
-  .setDescription('Manage voice-channel access control (Superuser only)')
-  .addSubcommand(sub => sub
-    .setName('configure')
-    .setDescription('Set or replace the allowlist for a voice channel (becomes managed)')
-    .addChannelOption(opt => opt.setName('channel').setDescription('Voice channel to manage').setRequired(true).addChannelTypes(ChannelType.GuildVoice, ChannelType.GuildStageVoice))
-    .addStringOption(opt => opt.setName('users').setDescription('Mentions or IDs separated by spaces. Leave empty to clear allowlist.').setRequired(false))
-  )
-  .addSubcommand(sub => sub
-    .setName('add')
-    .setDescription('Add a user to a managed channel\'s allowlist')
-    .addChannelOption(opt => opt.setName('channel').setDescription('Managed voice channel').setRequired(true).addChannelTypes(ChannelType.GuildVoice, ChannelType.GuildStageVoice))
-    .addUserOption(opt => opt.setName('user').setDescription('User to add').setRequired(true))
-  )
-  .addSubcommand(sub => sub
-    .setName('remove')
-    .setDescription('Remove a user from a managed channel\'s allowlist')
-    .addChannelOption(opt => opt.setName('channel').setDescription('Managed voice channel').setRequired(true).addChannelTypes(ChannelType.GuildVoice, ChannelType.GuildStageVoice))
-    .addUserOption(opt => opt.setName('user').setDescription('User to remove').setRequired(true))
-  )
-  .addSubcommand(sub => sub
-    .setName('unmanage')
-    .setDescription('Stop managing a voice channel (clears allowlist)')
-    .addChannelOption(opt => opt.setName('channel').setDescription('Voice channel to unmanage').setRequired(true).addChannelTypes(ChannelType.GuildVoice, ChannelType.GuildStageVoice))
-  )
-  .addSubcommand(sub => sub
-    .setName('list')
-    .setDescription('List all managed voice channels and their allowlists')
-  )
-  .addSubcommand(sub => sub
-    .setName('feed')
-    .setDescription('Set the text channel where access requests get posted')
-    .addChannelOption(opt => opt.setName('channel').setDescription('Text channel for access requests').setRequired(true).addChannelTypes(ChannelType.GuildText))
-  )
-  .addSubcommand(sub => sub
-    .setName('waiting')
-    .setDescription('Register a voice channel as a waiting room (joining auto-posts an access request)')
-    .addChannelOption(opt => opt.setName('channel').setDescription('Voice channel to use as waiting room').setRequired(true).addChannelTypes(ChannelType.GuildVoice, ChannelType.GuildStageVoice))
-  )
-  .addSubcommand(sub => sub
-    .setName('unwaiting')
-    .setDescription('Stop treating a voice channel as a waiting room')
-    .addChannelOption(opt => opt.setName('channel').setDescription('Waiting room channel').setRequired(true).addChannelTypes(ChannelType.GuildVoice, ChannelType.GuildStageVoice))
-  );
+  .setDescription('Manage office voice channels (role-based access, keys, waiting room) — Superuser only')
+  .addSubcommand(s => s.setName('set').setDescription('Set up / update an office: owner role + hierarchy rank')
+    .addChannelOption(o => o.setName('channel').setDescription('Office voice channel').setRequired(true).addChannelTypes(ChannelType.GuildVoice, ChannelType.GuildStageVoice))
+    .addRoleOption(o => o.setName('owner_role').setDescription('Role that owns this office').setRequired(true))
+    .addIntegerOption(o => o.setName('rank').setDescription('Seniority — lower = higher (0 = top). Seniors can access junior offices.').setRequired(true).setMinValue(0).setMaxValue(100)))
+  .addSubcommand(s => s.setName('waiting').setDescription('Set the waiting room (unauthorised joiners are moved here)')
+    .addChannelOption(o => o.setName('channel').setDescription('Waiting room voice channel').setRequired(true).addChannelTypes(ChannelType.GuildVoice, ChannelType.GuildStageVoice)))
+  .addSubcommand(s => s.setName('key').setDescription('Give someone temporary access to an office')
+    .addUserOption(o => o.setName('user').setDescription('Who gets the key').setRequired(true))
+    .addChannelOption(o => o.setName('channel').setDescription('Office voice channel').setRequired(true).addChannelTypes(ChannelType.GuildVoice, ChannelType.GuildStageVoice))
+    .addIntegerOption(o => o.setName('minutes').setDescription('How long the key lasts, in minutes').setRequired(true).setMinValue(1).setMaxValue(20160)))
+  .addSubcommand(s => s.setName('revoke').setDescription('Revoke someone\'s temporary key for an office')
+    .addUserOption(o => o.setName('user').setDescription('Whose key to revoke').setRequired(true))
+    .addChannelOption(o => o.setName('channel').setDescription('Office voice channel').setRequired(true).addChannelTypes(ChannelType.GuildVoice, ChannelType.GuildStageVoice)))
+  .addSubcommand(s => s.setName('list').setDescription('List the configured offices, their roles, ranks and the waiting room'))
+  .addSubcommand(s => s.setName('remove').setDescription('Stop managing an office')
+    .addChannelOption(o => o.setName('channel').setDescription('Office voice channel').setRequired(true).addChannelTypes(ChannelType.GuildVoice, ChannelType.GuildStageVoice)));
 
-function parseUserMentions(input) {
-  if (!input) return [];
-  const ids = new Set();
-  for (const tok of input.split(/\s+/)) {
-    const m = tok.match(/(\d{17,20})/);
-    if (m) ids.add(m[1]);
-  }
-  return [...ids];
-}
-
-async function kickNonAllowlisted(guild, channelId) {
+// Move anyone in the office who isn't authorised into the waiting room.
+async function sweep(guild, channelId) {
   const vc = guild.channels.cache.get(channelId);
-  if (!vc) return;
-  for (const [, member] of vc.members) {
-    if (member.user.bot) continue;
-    const { isAllowed } = await import('../services/officeManager.js');
-    if (!isAllowed(channelId, member.id)) {
-      await member.voice.disconnect(`[Office] ${member.user.tag} (${member.id}) not on allowlist for #${guild.channels.cache.get(channelId)?.name || channelId} (post-configure sweep)`).catch(() => {});
+  const office = getOffice(channelId);
+  const wr = firstWaitingRoom(guild.id);
+  if (!vc?.members || !office) return;
+  for (const [, m] of vc.members) {
+    if (m.user.bot) continue;
+    if (!canAccessOffice(m, office)) {
+      if (wr && wr.channel_id !== channelId) await m.voice.setChannel(wr.channel_id).catch(() => {});
+      else await m.voice.disconnect('[Office] not authorised (sweep)').catch(() => {});
     }
   }
 }
 
 export async function execute(interaction) {
   const sub = interaction.options.getSubcommand(false);
-  const checkName = sub ? `office:${sub}` : 'office';
-  const perm = await canUseCommand(checkName, interaction);
-  if (!perm.allowed) {
-    return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
-  }
-
+  const perm = await canUseCommand(sub ? `office:${sub}` : 'office', interaction);
+  if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   const guild = interaction.guild;
   if (!guild) return interaction.reply({ content: `${E.cross} Use this in a server.`, ephemeral: true });
+  await interaction.deferReply({ ephemeral: true });
 
-  if (sub === 'configure') {
-    await interaction.deferReply({ ephemeral: true });
+  if (sub === 'set') {
     const channel = interaction.options.getChannel('channel');
-    const usersInput = interaction.options.getString('users') || '';
-    const ids = parseUserMentions(usersInput);
-
-    upsertOffice(guild.id, channel.id, channel.name);
-    setAllowlist(channel.id, ids, interaction.user.id);
-    await kickNonAllowlisted(guild, channel.id);
-
-    const list = ids.length > 0 ? ids.map(i => `<@${i}>`).join(', ') : '*(empty — only superusers can join)*';
-    await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Office configured')
-        .setDescription(`${E.check} <#${channel.id}> is now managed.`)
-        .addFields(
-          { name: 'Channel', value: `<#${channel.id}>`, inline: true },
-          { name: 'Allowlist size', value: String(ids.length), inline: true },
-          { name: 'Allowlist', value: list, inline: false },
-        )
-        .setFooter({ text: 'Anyone not on the allowlist gets kicked and DMd a request button.' })]
-    });
-
-    await logAction(interaction.client, {
-      action: 'Office Configured',
-      moderator: { discordId: interaction.user.id, name: interaction.user.tag },
-      target: { discordId: channel.id, name: channel.name },
-      reason: `Allowlist set: ${ids.length} user(s)`,
-      color: 0x22C55E, logType: 'moderation.office', guildId: guild.id
-    });
-    return;
-  }
-
-  if (sub === 'add' || sub === 'remove') {
-    await interaction.deferReply({ ephemeral: true });
-    const channel = interaction.options.getChannel('channel');
-    const user = interaction.options.getUser('user');
-
-    const office = getOffice(channel.id);
-    if (!office) {
-      return interaction.editReply({ content: `${E.cross} <#${channel.id}> isn't managed. Run \`/office configure\` first.` });
-    }
-
-    if (sub === 'add') {
-      addAllowed(channel.id, user.id, interaction.user.id);
-    } else {
-      removeAllowed(channel.id, user.id);
-    }
-    if (sub === 'remove') await kickNonAllowlisted(guild, channel.id);
-
-    const list = getAllowlist(channel.id);
-    await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(sub === 'add' ? 0x22C55E : 0xF59E0B)
-        .setTitle(`${sub === 'add' ? 'Added' : 'Removed'} ${user.tag}`)
-        .setDescription(`${sub === 'add' ? E.check : E.warning} Updated the allowlist for <#${channel.id}>.`)
-        .addFields(
-          { name: 'Channel', value: `<#${channel.id}>`, inline: true },
-          { name: 'Allowlist size', value: String(list.length), inline: true },
-          { name: 'Allowlist', value: list.length ? list.map(i => `<@${i}>`).join(', ') : '*(empty)*', inline: false },
-        )]
-    });
-
-    await logAction(interaction.client, {
-      action: sub === 'add' ? 'Office Allowlist Add' : 'Office Allowlist Remove',
-      moderator: { discordId: interaction.user.id, name: interaction.user.tag },
-      target: { discordId: user.id, name: user.tag },
-      reason: `${sub === 'add' ? 'Added to' : 'Removed from'} ${channel.name} allowlist`,
-      color: sub === 'add' ? 0x22C55E : 0xF59E0B, logType: 'moderation.office', guildId: guild.id
-    });
-    return;
-  }
-
-  if (sub === 'unmanage') {
-    await interaction.deferReply({ ephemeral: true });
-    const channel = interaction.options.getChannel('channel');
-    const office = getOffice(channel.id);
-    if (!office) return interaction.editReply({ content: `${E.cross} <#${channel.id}> isn't managed.` });
-
-    deleteOffice(channel.id);
-
-    await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(0xF59E0B).setTitle('Unmanaged')
-        .setDescription(`${E.warning} <#${channel.id}> is no longer managed.`)]
-    });
-
-    await logAction(interaction.client, {
-      action: 'Office Unmanaged',
-      moderator: { discordId: interaction.user.id, name: interaction.user.tag },
-      target: { discordId: channel.id, name: channel.name },
-      reason: 'Channel removed from office management',
-      color: 0xF59E0B, logType: 'moderation.office', guildId: guild.id
-    });
-    return;
-  }
-
-  if (sub === 'list') {
-    await interaction.deferReply({ ephemeral: true });
-    const offices = listOffices(guild.id);
-    const feed = getRequestFeed(guild.id);
-    const wrs = listWaitingRooms(guild.id);
-    const officeLines = offices.length > 0
-      ? offices.map(o => {
-          const al = getAllowlist(o.channel_id);
-          return `<#${o.channel_id}> — ${al.length} allowed${al.length ? ': ' + al.map(i => `<@${i}>`).join(', ') : ''}`;
-        }).join('\n')
-      : '*No managed channels.*';
-    const wrLines = wrs.length > 0 ? wrs.map(w => `<#${w.channel_id}>`).join('\n') : '*None — run `/office waiting`*';
-    await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Managed Offices')
-        .setDescription(`${E.info} Voice-channel access control for this server.`)
-        .addFields(
-          { name: 'Managed channels', value: officeLines, inline: false },
-          { name: 'Waiting rooms', value: wrLines, inline: false },
-          { name: 'Request feed', value: feed ? `<#${feed}>` : '*Not set — run `/office feed`*', inline: false },
-        )]
-    });
-    return;
-  }
-
-  if (sub === 'feed') {
-    await interaction.deferReply({ ephemeral: true });
-    const channel = interaction.options.getChannel('channel');
-    setRequestFeed(guild.id, channel.id);
-    await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Request feed set')
-        .setDescription(`${E.check} Office access requests will be posted in <#${channel.id}>.`)]
-    });
-    await logAction(interaction.client, {
-      action: 'Office Request Feed Set',
-      moderator: { discordId: interaction.user.id, name: interaction.user.tag },
-      target: { discordId: channel.id, name: channel.name },
-      reason: 'Set as request feed channel',
-      color: 0x22C55E, logType: 'moderation.office', guildId: guild.id
-    });
-    return;
+    const role = interaction.options.getRole('owner_role');
+    const rank = interaction.options.getInteger('rank');
+    upsertOffice(guild.id, channel.id, channel.name, role.id, rank);
+    await sweep(guild, channel.id);
+    await logAction(interaction.client, { action: 'Office Configured', moderator: { discordId: interaction.user.id, name: interaction.user.tag }, target: { discordId: channel.id, name: channel.name }, reason: `Owner ${role.name}, rank ${rank}`, color: 0x22C55E, logType: 'moderation.office', guildId: guild.id });
+    return interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Office set up').setDescription(`${E.check} <#${channel.id}> is now owned by <@&${role.id}> at rank **${rank}**.`).addFields({ name: 'Who can join', value: `That role, anyone of a higher rank, key-holders, and superusers. Everyone else is moved to the waiting room.` })] });
   }
 
   if (sub === 'waiting') {
-    await interaction.deferReply({ ephemeral: true });
     const channel = interaction.options.getChannel('channel');
     upsertWaitingRoom(guild.id, channel.id, channel.name);
-    await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Waiting room registered')
-        .setDescription(`${E.check} <#${channel.id}> is now a waiting room. Anyone joining will trigger an access request in the feed channel.`)]
-    });
-    await logAction(interaction.client, {
-      action: 'Office Waiting Room Set',
-      moderator: { discordId: interaction.user.id, name: interaction.user.tag },
-      target: { discordId: channel.id, name: channel.name },
-      reason: 'Channel registered as office waiting room',
-      color: 0x22C55E, logType: 'moderation.office', guildId: guild.id
-    });
-    return;
+    return interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Waiting room set').setDescription(`${E.check} <#${channel.id}> is the waiting room. Unauthorised joiners are moved here, and members with access are offered their office(s).`)] });
   }
 
-  if (sub === 'unwaiting') {
-    await interaction.deferReply({ ephemeral: true });
+  if (sub === 'key') {
+    const user = interaction.options.getUser('user');
     const channel = interaction.options.getChannel('channel');
-    deleteWaitingRoom(channel.id);
-    await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(0xF59E0B).setTitle('Waiting room removed')
-        .setDescription(`${E.warning} <#${channel.id}> is no longer a waiting room.`)]
-    });
-    await logAction(interaction.client, {
-      action: 'Office Waiting Room Removed',
-      moderator: { discordId: interaction.user.id, name: interaction.user.tag },
-      target: { discordId: channel.id, name: channel.name },
-      reason: 'Waiting room unregistered',
-      color: 0xF59E0B, logType: 'moderation.office', guildId: guild.id
-    });
-    return;
+    const minutes = interaction.options.getInteger('minutes');
+    if (!getOffice(channel.id)) return interaction.editReply({ content: `${E.cross} <#${channel.id}> isn't a managed office. Run \`/office set\` first.` });
+    const expires = Date.now() + minutes * 60_000;
+    grantKey(channel.id, user.id, expires, interaction.user.id);
+    await logAction(interaction.client, { action: 'Office Key Granted', moderator: { discordId: interaction.user.id, name: interaction.user.tag }, target: { discordId: user.id, name: user.tag }, reason: `${minutes} min key for ${channel.name}`, color: 0x5865F2, logType: 'moderation.office', guildId: guild.id });
+    await user.send({ embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Office key granted').setDescription(`${E.check} You've been given access to **${channel.name}** until <t:${Math.floor(expires / 1000)}:f> (<t:${Math.floor(expires / 1000)}:R>).`)] }).catch(() => {});
+    return interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x22C55E).setTitle('Key granted').setDescription(`${E.check} <@${user.id}> can access <#${channel.id}> until <t:${Math.floor(expires / 1000)}:R>.`)] });
+  }
+
+  if (sub === 'revoke') {
+    const user = interaction.options.getUser('user');
+    const channel = interaction.options.getChannel('channel');
+    revokeKey(channel.id, user.id);
+    return interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xF59E0B).setTitle('Key revoked').setDescription(`${E.warning} <@${user.id}>'s key for <#${channel.id}> has been revoked.`)] });
+  }
+
+  if (sub === 'remove') {
+    const channel = interaction.options.getChannel('channel');
+    deleteOffice(channel.id);
+    return interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xF59E0B).setTitle('Office removed').setDescription(`${E.warning} <#${channel.id}> is no longer a managed office.`)] });
+  }
+
+  if (sub === 'list') {
+    const offices = listOffices(guild.id);
+    const wrs = listWaitingRooms(guild.id);
+    const lines = offices.length ? offices.map(o => {
+      const keys = listKeys(o.channel_id).length;
+      return `**rank ${o.rank ?? 100}** · <#${o.channel_id}> → ${o.owner_role_id ? `<@&${o.owner_role_id}>` : '*(no role)*'}${keys ? ` · ${keys} key(s)` : ''}`;
+    }).join('\n') : '*No offices configured. Use `/office set`.*';
+    return interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Offices').setDescription(lines).addFields({ name: 'Waiting room', value: wrs.length ? wrs.map(w => `<#${w.channel_id}>`).join(', ') : '*none — set with `/office waiting`*' }).setFooter({ text: 'Lower rank = more senior. Seniors can access junior offices.' })] });
   }
 }
