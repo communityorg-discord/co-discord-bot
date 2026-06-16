@@ -45,19 +45,48 @@ export async function execute(interaction) {
 }
 
 export async function handleSelect(interaction) {
-  if (!interaction.customId.startsWith(`netverify_pos${SEP}`)) return;
-  await interaction.deferUpdate();
-  const targetId = interaction.customId.split(SEP)[1];
-  const position = interaction.values[0];
+  const id = interaction.customId;
+  // Step 1: position chosen → if the seat has multiple slots, ask which one.
+  if (id.startsWith(`netverify_pos${SEP}`)) {
+    await interaction.deferUpdate();
+    const targetId = id.split(SEP)[1];
+    const position = interaction.values[0];
+    const seats = await networkVerifyApi.seats(position);
+    if (seats.ok && (seats.count || 1) > 1) {
+      const taken = new Map((seats.taken || []).filter(t => t.seat_no).map(t => [Number(t.seat_no), t.name]));
+      const opts = [];
+      for (let n = 1; n <= seats.count && opts.length < 25; n++) {
+        const who = taken.get(n);
+        opts.push({ label: `Seat ${n}${who ? ` — ${who}` : ' — open'}`.slice(0, 100), description: who ? 'Held — re-assigns this seat' : 'Open', value: String(n) });
+      }
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId(`netverify_seat${SEP}${targetId}${SEP}${position}`)
+        .setPlaceholder('Which seat?')
+        .addOptions(opts);
+      const e = new EmbedBuilder().setColor(0x5865F2).setTitle('Network Staff Verification')
+        .setDescription(`**<@${targetId}>** → **${position}**\nThis seat has **${seats.count} slots** — pick which one to fill.`)
+        .setFooter({ text: 'USGRP · Network Verification' });
+      return interaction.editReply({ embeds: [e], components: [new ActionRowBuilder().addComponents(menu)] });
+    }
+    return renderPreview(interaction, targetId, position, null);
+  }
+  // Step 1b: seat chosen → preview.
+  if (id.startsWith(`netverify_seat${SEP}`)) {
+    await interaction.deferUpdate();
+    const parts = id.split(SEP);
+    return renderPreview(interaction, parts[1], parts.slice(2).join(SEP), Number(interaction.values[0]) || null);
+  }
+}
 
+async function renderPreview(interaction, targetId, position, seatNo) {
   const pre = await networkVerifyApi.preview(targetId, position);
   if (!pre.ok) return interaction.editReply({ content: `${E.cross} Preview failed: ${pre.error || pre.status}`, embeds: [], components: [] });
 
   const satLabel = pre.group === 'FSA'
     ? '(same as main — FSA gets full roles everywhere)'
     : (pre.roles_satellite || []).map(r => `\`${r}\``).join(' ');
-  const e = new EmbedBuilder().setColor(0xF59E0B).setTitle(`Dry run — ${position}`)
-    .setDescription(`**<@${targetId}>** → **${position}**\nNothing is applied until you approve.`)
+  const e = new EmbedBuilder().setColor(0xF59E0B).setTitle(`Dry run — ${position}${seatNo ? ` (seat ${seatNo})` : ''}`)
+    .setDescription(`**<@${targetId}>** → **${position}**${seatNo ? ` · **seat ${seatNo}**` : ''}\nNothing is applied until you approve.`)
     .addFields(
       { name: 'Global nickname', value: pre.nickname || '—', inline: true },
       { name: 'Servers', value: `${pre.server_count}`, inline: true },
@@ -68,7 +97,7 @@ export async function handleSelect(interaction) {
     )
     .setFooter({ text: 'Approve to apply roles + nickname + send 7-day invites · USGRP Network Verification' });
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`netverify_apply${SEP}${targetId}${SEP}${position}`).setLabel('Approve & sync').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`netverify_apply${SEP}${targetId}${SEP}${seatNo || 0}${SEP}${position}`).setLabel('Approve & sync').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId(`netverify_decline${SEP}${targetId}`).setLabel('Decline').setStyle(ButtonStyle.Danger),
   );
   return interaction.editReply({ embeds: [e], components: [row] });
@@ -89,21 +118,22 @@ export async function handleButton(interaction) {
   await interaction.deferUpdate();
   const parts = interaction.customId.split(SEP);
   const targetId = parts[1];
-  const position = parts.slice(2).join(SEP);
+  const seatNo = Number(parts[2]) || null;
+  const position = parts.slice(3).join(SEP);
 
   const applying = EmbedBuilder.from(interaction.message.embeds[0]).setColor(0x5865F2)
     .setTitle(`Applying — ${position}…`).setFooter({ text: 'Syncing roles across the network…' });
   await interaction.editReply({ embeds: [applying], components: [] });
 
-  const r = await networkVerifyApi.apply(targetId, position, interaction.user.id);
+  const r = await networkVerifyApi.apply(targetId, position, interaction.user.id, seatNo);
   if (!r.ok) {
     const e = EmbedBuilder.from(interaction.message.embeds[0]).setColor(0xEF4444).setTitle('Apply failed')
       .setDescription(`${E.cross} ${r.error || r.status}`).setFooter({ text: 'USGRP Network Verification' });
     return interaction.editReply({ embeds: [e], components: [] });
   }
 
-  const done = new EmbedBuilder().setColor(0x22C55E).setTitle(`Verified — ${position}`)
-    .setDescription(`<@${targetId}> is now **${position}**.`)
+  const done = new EmbedBuilder().setColor(0x22C55E).setTitle(`Verified — ${position}${r.seat_no ? ` (seat ${r.seat_no})` : ''}`)
+    .setDescription(`<@${targetId}> is now **${position}**${r.seat_no ? ` · seat ${r.seat_no}` : ''}.`)
     .addFields(
       { name: 'Nickname', value: r.nickname || '—', inline: true },
       { name: 'Servers', value: `${r.servers_applied}/${r.servers_total} applied · ${r.invites} invites DM'd`, inline: true },
