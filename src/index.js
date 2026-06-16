@@ -1,7 +1,7 @@
 import './forceDmEmbed.js'; // org rule: every DM this bot sends must be an embed — patch first
 import express from 'express';
 import multer from 'multer';
-import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, EmbedBuilder, Partials, AuditLogEvent } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Partials, AuditLogEvent } from 'discord.js';
 import { E } from './lib/emoji.js';
 import { config } from 'dotenv';
 import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID } from './config.js';
@@ -2127,6 +2127,20 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
     if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
     if (interaction.customId.startsWith('netverify_')) return netverifyButton(interaction);
+    // Ultimatum Clear / Keep buttons on a relayed reply — founders decide whether
+    // a reply is good enough; a reply alone no longer auto-cancels the ultimatum.
+    if (interaction.customId.startsWith('ult:')) {
+      const FOUNDERS = ['723199054514749450', '415922272956710912'];
+      if (!FOUNDERS.includes(interaction.user.id)) return interaction.reply({ content: 'Founders only.', flags: 64 }).catch(() => {});
+      const [, act, userId] = interaction.customId.split(':');
+      const u = getUltimatum(userId);
+      if (!u || u.status !== 'active') return interaction.update({ content: `This ultimatum is no longer on the clock (${u?.status || 'gone'}).`, embeds: interaction.message.embeds, components: [] }).catch(() => {});
+      if (act === 'clear') {
+        setUltimatumStatus(userId, 'cleared');
+        return interaction.update({ content: `✅ Cleared by ${interaction.user.username} — the reminders and auto-kick for <@${userId}> are now off.`, embeds: interaction.message.embeds, components: [] }).catch(() => {});
+      }
+      return interaction.update({ content: `⏳ Kept on the clock by ${interaction.user.username} — the hourly reminders and the deadline kick still stand for <@${userId}>.`, embeds: interaction.message.embeds, components: [] }).catch(() => {});
+    }
     // Logspanel back button handlers
     if (interaction.customId?.startsWith('logspanel_back')) {
       try { return logspanel.handleSelect(interaction); }
@@ -2867,16 +2881,23 @@ client.on('messageCreate', async (message) => {
       .setDescription(content ? content.slice(0, 4000) : '_(no text)_')
       .setFooter({ text: `From ${message.author.username} · ${message.author.id} · USGRP Network Staff` }).setTimestamp();
     if (atts.length) embed.addFields({ name: 'Attachments', value: atts.join('\n').slice(0, 1024) });
-    // If this person is under an active ultimatum, a reply CANCELS it — stop the
-    // reminders, don't carry out the consequence, and flag it for the founders.
-    let ultNote = null;
+    // If this person is under an active ultimatum, a reply NO LONGER auto-cancels
+    // it (a one-word "hi" shouldn't get them off the hook). It stays on the clock;
+    // the founders decide with the Clear / Keep buttons below.
+    let components = [];
     try {
       const u = getUltimatum(message.author.id);
-      if (u && u.status === 'active') { setUltimatumStatus(message.author.id, 'replied'); ultNote = `✅ They replied — the hourly reminders and the auto-${u.consequence} have been cancelled.`; }
-    } catch (e) { console.error('[ultimatum] cancel-on-reply', e.message); }
-    if (ultNote) embed.addFields({ name: 'Ultimatum', value: ultNote });
+      if (u && u.status === 'active') {
+        const ts = Math.floor(Date.parse(u.deadline_at) / 1000);
+        embed.setColor(0xB45309).addFields({ name: '⚠️ Under an active ultimatum', value: `Still on the clock — auto-${u.consequence}${Number.isFinite(ts) ? ` at <t:${ts}:t>` : ''} unless you clear it. A reply alone doesn't cancel it; decide below.` });
+        components = [new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`ult:clear:${message.author.id}`).setLabel('Clear ultimatum').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`ult:keep:${message.author.id}`).setLabel('Keep on the clock').setStyle(ButtonStyle.Secondary),
+        )];
+      }
+    } catch (e) { console.error('[ultimatum] relay flag', e.message); }
     for (const id of ['723199054514749450', '415922272956710912']) { // Dion, Evan
-      try { const u = await client.users.fetch(id); await u.send({ embeds: [embed] }); } catch {}
+      try { const u = await client.users.fetch(id); await u.send({ embeds: [embed], components }); } catch {}
     }
   } catch (e) { console.error('[dm-relay]', e.message); }
 });
