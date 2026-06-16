@@ -203,15 +203,16 @@ export async function handleButton(interaction) {
   await interaction.editReply({ embeds: [applying], components: [] });
 
   const r = await networkVerifyApi.apply(targetId, position, interaction.user.id, seatNo, name);
+  const appliedNow = r.ok && ((r.servers_applied || 0) > 0 || (r.roles || []).length > 0);
   const final = r.ok
     ? new EmbedBuilder().setColor(0x22C55E).setTitle(`Verified — ${position}${r.seat_no ? ` (seat ${r.seat_no})` : ''}`)
-        .setDescription(`<@${targetId}> is now **${position}**${r.seat_no ? ` · seat ${r.seat_no}` : ''}.`)
+        .setDescription(`<@${targetId}> is now **${position}**${r.seat_no ? ` · seat ${r.seat_no}` : ''}.${appliedNow ? '' : `\n\nThey aren't in the network servers yet, so I've DM'd their invites — **their roles + nickname apply automatically the moment they join each one.**`}`)
         .addFields(
           { name: 'Nickname', value: r.nickname || '—', inline: true },
           { name: 'Servers', value: `${r.servers_applied}/${r.servers_total} applied · ${r.invites} invites DM'd`, inline: true },
-          { name: 'Roles granted', value: (r.roles || []).map(x => `\`${x}\``).join(' ').slice(0, 1024) || '—' },
+          { name: 'Roles granted', value: (r.roles || []).map(x => `\`${x}\``).join(' ').slice(0, 1024) || '_Applied automatically when they join each server via the invites below._' },
         )
-        .setFooter({ text: 'Roles synced + invites sent + audit posted · USGRP Network Verification' }).setTimestamp()
+        .setFooter({ text: appliedNow ? 'Roles synced + invites sent + audit posted · USGRP Network Verification' : 'Invites sent — roles apply on join + audit posted · USGRP Network Verification' }).setTimestamp()
     : EmbedBuilder.from(interaction.message.embeds[0]).setColor(0xEF4444).setTitle('Apply failed')
         .setDescription(`${E.cross} ${r.error || r.status}`).setFooter({ text: 'USGRP Network Verification' });
 
