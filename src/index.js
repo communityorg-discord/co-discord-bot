@@ -3100,6 +3100,8 @@ client.on('inviteCreate', async (invite) => {
   if (SUPERUSER_INVITE_IDS.includes(invite.inviterId)) return;
   // Allow the bot itself
   if (invite.inviterId === client.user.id) return;
+  // Allow aspire-bot (USGRP | Services) — it mints the network-verification invites.
+  if (invite.inviterId === '1501640075597975582') return;
 
   try {
     await invite.delete('Unauthorised — only superusers can create invites for internal servers');

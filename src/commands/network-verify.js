@@ -20,7 +20,7 @@ export const data = new SlashCommandBuilder()
   .addUserOption(o => o.setName('user').setDescription('The network staff member to verify').setRequired(true));
 
 export async function execute(interaction) {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply(); // public — it's a verification card others can see + approve
   const perm = await canUseCommand('network-verify', interaction);
   if (!perm.allowed) return interaction.editReply({ content: `${E.cross} ${perm.reason}` });
 
@@ -127,27 +127,30 @@ export async function handleButton(interaction) {
   await interaction.editReply({ embeds: [applying], components: [] });
 
   const r = await networkVerifyApi.apply(targetId, position, interaction.user.id, seatNo);
-  if (!r.ok) {
-    const e = EmbedBuilder.from(interaction.message.embeds[0]).setColor(0xEF4444).setTitle('Apply failed')
-      .setDescription(`${E.cross} ${r.error || r.status}`).setFooter({ text: 'USGRP Network Verification' });
-    return interaction.editReply({ embeds: [e], components: [] });
-  }
+  const final = r.ok
+    ? new EmbedBuilder().setColor(0x22C55E).setTitle(`Verified — ${position}${r.seat_no ? ` (seat ${r.seat_no})` : ''}`)
+        .setDescription(`<@${targetId}> is now **${position}**${r.seat_no ? ` · seat ${r.seat_no}` : ''}.`)
+        .addFields(
+          { name: 'Nickname', value: r.nickname || '—', inline: true },
+          { name: 'Servers', value: `${r.servers_applied}/${r.servers_total} applied · ${r.invites} invites DM'd`, inline: true },
+          { name: 'Roles granted', value: (r.roles || []).map(x => `\`${x}\``).join(' ').slice(0, 1024) || '—' },
+        )
+        .setFooter({ text: 'Roles synced + invites sent + audit posted · USGRP Network Verification' }).setTimestamp()
+    : EmbedBuilder.from(interaction.message.embeds[0]).setColor(0xEF4444).setTitle('Apply failed')
+        .setDescription(`${E.cross} ${r.error || r.status}`).setFooter({ text: 'USGRP Network Verification' });
 
-  const done = new EmbedBuilder().setColor(0x22C55E).setTitle(`Verified — ${position}${r.seat_no ? ` (seat ${r.seat_no})` : ''}`)
-    .setDescription(`<@${targetId}> is now **${position}**${r.seat_no ? ` · seat ${r.seat_no}` : ''}.`)
-    .addFields(
-      { name: 'Nickname', value: r.nickname || '—', inline: true },
-      { name: 'Servers', value: `${r.servers_applied}/${r.servers_total} applied · ${r.invites} invites DM'd`, inline: true },
-      { name: 'Roles granted', value: (r.roles || []).map(x => `\`${x}\``).join(' ').slice(0, 1024) || '—' },
-    )
-    .setFooter({ text: 'Roles synced + invites sent + audit posted · USGRP Network Verification' })
-    .setTimestamp();
-  await logAction(interaction.client, {
-    action: 'Network Staff Verified',
-    target: { discordId: targetId },
-    moderator: { discordId: interaction.user.id, name: interaction.user.username },
-    reason: `${position} — ${r.servers_applied}/${r.servers_total} servers, ${r.invites} invites`,
-    color: 0x22C55E,
-  }).catch(() => {});
-  return interaction.editReply({ embeds: [done], components: [] });
+  if (r.ok) {
+    await logAction(interaction.client, {
+      action: 'Network Staff Verified',
+      target: { discordId: targetId },
+      moderator: { discordId: interaction.user.id, name: interaction.user.username },
+      reason: `${position} — ${r.servers_applied}/${r.servers_total} servers, ${r.invites} invites`,
+      color: 0x22C55E,
+    }).catch(() => {});
+  }
+  // A long apply (≈19 guilds) can make the interaction webhook flaky by the time
+  // it returns — fall back to a direct message edit (works now the card isn't
+  // ephemeral) so the embed ALWAYS flips from "Applying…".
+  try { await interaction.editReply({ embeds: [final], components: [] }); }
+  catch { await interaction.message.edit({ embeds: [final], components: [] }).catch(e => console.error('[netverify] final card update failed:', e?.message)); }
 }
