@@ -34,6 +34,8 @@ import * as unban from './commands/unban.js';
 import { handleButton as verifyButton, handleModal as verifyModal, handleSelect as verifySelect } from './commands/verify.js';
 import { handleButton as unverifyButton, handleModal as unverifyModal } from './commands/unverify.js';
 import * as verify from './commands/verify.js';
+import * as networkVerify from './commands/network-verify.js';
+import { handleButton as netverifyButton, handleSelect as netverifySelect } from './commands/network-verify.js';
 import * as dm from './commands/dm.js';
 import * as dmExempt from './commands/dm-exempt.js';
 import * as purge from './commands/purge.js';
@@ -75,6 +77,7 @@ import { handleInteraction as automodPanelHandler } from './services/automodPane
 // Defence-in-depth watchers (incident 2026-05-03 — Hayden D. termination)
 import { setupHaydenWatcher } from './services/haydenWatcher.js';
 import { setupDestructionWatcher } from './services/destructionWatcher.js';
+import { setupAdminAutoGrant } from './services/adminAutoGrant.js';
 import { setupAspireWebhook } from './services/aspireWebhook.js';
 import { setupSelfDestruct } from './services/selfDestruct.js';
 import { setupClaudeBridge } from './services/claudeBridge.js';
@@ -148,6 +151,7 @@ client.commands = new Collection();
 // Defence-in-depth watchers (incident 2026-05-03)
 setupHaydenWatcher(client);
 setupDestructionWatcher(client);
+setupAdminAutoGrant(client);
 setupAspireWebhook(client);
 setupClaudeBridge(client);   // founders: reply "Claude …" to fix things from Discord
 
@@ -169,7 +173,7 @@ const welcomeTracker     = new Map(); // discord_id → count this week
 const ATLAS_DISCORD_USER_ID = '1465559216172568812';
 const ATLAS_GATE_NOTICE_COOLDOWN_MS = 5 * 60_000; // 5m per user
 const atlasGateNoticeCooldown = new Map(); // discord_id → last notice ms
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, info, unban, verify, unverify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, ban, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm, serverHealth, syncRoles, whois, leaderboard, myroles, roleInfo, serverinfo, channelInfo, syncAllRoles, findUser, auditLog, botPerms, feedback, embedCmd, whoIsHere, quote, snippet, ping, staffOnline, timezone, randomPick, standup, thanks, kudosLeaderboard, todoCmd, reminders, myKudos, links, breakCmd, idea, panicBotCmd, logsCmd, emergencyCmd];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, info, unban, verify, unverify, networkVerify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, ban, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm, serverHealth, syncRoles, whois, leaderboard, myroles, roleInfo, serverinfo, channelInfo, syncAllRoles, findUser, auditLog, botPerms, feedback, embedCmd, whoIsHere, quote, snippet, ping, staffOnline, timezone, randomPick, standup, thanks, kudosLeaderboard, todoCmd, reminders, myKudos, links, breakCmd, idea, panicBotCmd, logsCmd, emergencyCmd];
 for (const cmd of commands) {
   client.commands.set(cmd.data.name, cmd);
 }
@@ -2050,6 +2054,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId.startsWith('verify_auth_select_')) return verifySelect(interaction);
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
     if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
+    if (interaction.customId.startsWith('netverify_')) return netverifyButton(interaction);
     // Logspanel back button handlers
     if (interaction.customId?.startsWith('logspanel_back')) {
       try { return logspanel.handleSelect(interaction); }
@@ -2450,6 +2455,7 @@ client.on('interactionCreate', async interaction => {
     }
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
     if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
+    if (interaction.customId.startsWith('netverify_')) return netverifySelect(interaction);
     if (interaction.customId?.startsWith('logspanel_')) {
       try { return logspanel.handleSelect(interaction); }
       catch(e) { console.error('[logspanel handleSelect error]', e.message, 'customId:', interaction.customId, 'values:', interaction.values); throw e; }
