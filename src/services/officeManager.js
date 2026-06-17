@@ -107,11 +107,18 @@ export async function enforceJoin(client, voiceState) {
   if (hasPass(channelId, member.id)) { clearPass(channelId, member.id); return; } // one-shot approval
 
   const wr = firstWaitingRoom(guild.id);
+  let moved = false;
   if (wr && wr.channel_id !== channelId) {
-    await member.voice.setChannel(wr.channel_id).catch(async () => { await member.voice.disconnect().catch(() => {}); });
+    await member.voice.setChannel(wr.channel_id).then(() => { moved = true; }).catch(async () => { await member.voice.disconnect().catch(() => {}); });
   } else {
     await member.voice.disconnect(`[Office] not authorised for ${office.channel_name}`).catch(() => {});
   }
+  // Tell them why they were moved (best-effort DM — never blocks enforcement).
+  const wrName = moved ? (guild.channels.cache.get(wr.channel_id)?.name || 'waiting room') : null;
+  member.send({ embeds: [new EmbedBuilder().setColor(0xF59E0B).setTitle('Office access')
+    .setDescription(moved
+      ? `${E.warning} You don't have access to **${office.channel_name || 'that office'}**, so you've been moved to the **${wrName}**. Wait there and an office owner can bring you in.`
+      : `${E.warning} You don't have access to **${office.channel_name || 'that office'}**, so you've been disconnected.`)] }).catch(() => {});
   await logAction(client, { action: 'Office — moved to waiting room', moderator: { discordId: 'SYSTEM', name: 'Office System' }, target: { discordId: member.id, name: member.user.tag }, reason: `Not authorised for ${office.channel_name || channelId}`, color: 0xF59E0B, logType: 'moderation.office', guildId: guild.id }).catch(() => {});
 }
 
@@ -220,7 +227,9 @@ async function postOfficeCard(target, requestId, requesterId, office, pingIds) {
 }
 
 async function postWaitingRequest(client, guild, wrVc, requestId, requester, offices) {
-  const target = wrVc || (getRequestFeed(guild.id) && guild.channels.cache.get(getRequestFeed(guild.id)));
+  // Prefer the configured request TEXT channel; fall back to the waiting-room chat.
+  const rf = getRequestFeed(guild.id);
+  const target = (rf && guild.channels.cache.get(rf)) || wrVc;
   if (!target?.send) return;
 
   // Only the offices actually IN USE — i.e. an owner who could approve is sitting

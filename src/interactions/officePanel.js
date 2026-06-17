@@ -9,7 +9,7 @@ import {
 import {
   listOffices, firstWaitingRoom, listWaitingRooms, getOffice, upsertOffice, deleteOffice,
   upsertWaitingRoom, grantKey, revokeKey, getAllowlist, addAllowed, removeAllowed,
-  canAccessOffice, isSuper,
+  canAccessOffice, isSuper, setRequestFeed, getRequestFeed,
 } from '../services/officeManager.js';
 import { E } from '../lib/emoji.js';
 
@@ -18,19 +18,24 @@ const draft = uid => { if (!DRAFTS.has(uid)) DRAFTS.set(uid, {}); return DRAFTS.
 const reset = uid => DRAFTS.set(uid, {});
 const backBtn = () => new ButtonBuilder().setCustomId('officep:home').setLabel('Back').setStyle(ButtonStyle.Secondary).setEmoji(E.arrow_left);
 const vcSelect = (cid, ph) => new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId(cid).setChannelTypes(ChannelType.GuildVoice, ChannelType.GuildStageVoice).setPlaceholder(ph));
+const textSelect = (cid, ph) => new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId(cid).setChannelTypes(ChannelType.GuildText).setPlaceholder(ph));
 
 export function buildHome(guild, note = null) {
-  const offices = listOffices(guild.id), wr = firstWaitingRoom(guild.id);
+  const offices = listOffices(guild.id), wr = firstWaitingRoom(guild.id), rf = getRequestFeed(guild.id);
   const list = offices.length
     ? offices.map(o => `\`rank ${o.rank ?? 100}\` <#${o.channel_id}> → ${o.owner_role_id ? `<@&${o.owner_role_id}>` : '*allowlist only*'}`).join('\n')
     : '*No offices configured yet — choose "Set up an office".*';
   const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('🏢 Office Manager')
     .setDescription(`${note ? note + '\n\n' : ''}Control who can access each office voice channel.\n\n${list}`)
-    .addFields({ name: 'Waiting room', value: wr ? `<#${wr.channel_id}>` : '*not set*', inline: true })
+    .addFields(
+      { name: 'Waiting room', value: wr ? `<#${wr.channel_id}>` : '*not set*', inline: true },
+      { name: 'Request channel', value: rf ? `<#${rf}>` : '*waiting-room chat*', inline: true },
+    )
     .setFooter({ text: 'Lower rank = more senior. Seniors can reach junior offices. Superusers bypass all VCs.' });
   const nav = new StringSelectMenuBuilder().setCustomId('officep:nav').setPlaceholder('Choose what to do…').addOptions(
     { label: 'Set up an office', value: 'setoffice', emoji: '🏢', description: 'Pick a VC, owner role and rank' },
     { label: 'Set the waiting room', value: 'waiting', emoji: '🚪', description: 'Where unauthorised joiners go' },
+    { label: 'Set the request channel', value: 'reqchannel', emoji: '📨', description: 'Text channel where access requests post' },
     { label: 'Grant a key', value: 'key', emoji: '🔑', description: 'Temporary access for someone' },
     { label: 'Revoke a key', value: 'revoke', emoji: '🗝️', description: "Take back someone's key" },
     { label: 'Edit office allowlist', value: 'allow', emoji: '👤', description: 'Per-person access (e.g. Ownership)' },
@@ -110,6 +115,7 @@ function viewFor(action, guild, uid) {
   reset(uid); draft(uid).action = action;
   if (action === 'setoffice') return setOfficeView(guild, uid);
   if (action === 'waiting') return { embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🚪 Set the waiting room').setDescription('Pick the voice channel to use as the waiting room.')], components: [vcSelect('officep:ch:waiting', 'Pick the waiting-room channel'), new ActionRowBuilder().addComponents(backBtn())] };
+  if (action === 'reqchannel') return { embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('📨 Set the request channel').setDescription('Pick the **text channel** where office access requests should be posted (and the owners pinged). Leave it unset to use the waiting-room chat.')], components: [textSelect('officep:ch:reqchannel', 'Pick the request text channel'), new ActionRowBuilder().addComponents(backBtn())] };
   if (action === 'key') return keyView(guild, uid);
   if (action === 'revoke') return revokeView(guild, uid);
   if (action === 'allow') return allowView(guild, uid);
@@ -154,6 +160,9 @@ export async function handlePanel(interaction, client) {
 
     // Waiting room
     if (id === 'officep:ch:waiting') { const ch = guild.channels.cache.get(v); upsertWaitingRoom(guild.id, v, ch?.name || 'Waiting Room'); return interaction.update(buildHome(guild, `${E.check} Waiting room set to <#${v}>.`)); }
+
+    // Request channel — where access requests post (falls back to waiting-room chat).
+    if (id === 'officep:ch:reqchannel') { setRequestFeed(guild.id, v); return interaction.update(buildHome(guild, `${E.check} Office access requests will now post in <#${v}>.`)); }
 
     // Key
     if (id === 'officep:ch:key') { if (!getOffice(v)) return interaction.reply({ content: `${E.cross} That isn't a managed office — set it up first.`, flags: 64 }); draft(uid).channel = v; return interaction.update(keyView(guild, uid)); }
