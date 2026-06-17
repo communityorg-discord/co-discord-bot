@@ -101,8 +101,9 @@ export async function adminMenuPayload(interaction, target) {
     const canStaff = isNetAdmin(sender) || isFsaAdminRank(sender) || isSuper;
 
     // Live status. mand[] / dept[] collect the ones they're NOT in (for the
-    // pickers + force-send); the joined ones are summarised compactly so a fully
-    // onboarded member doesn't render as a wall of identical green ticks.
+    // pickers + force-send); the joined departments are listed one-per-line (a
+    // bulleted list, not a `·`-separated clump) — one custom tick per line would
+    // blow Discord's 1024-char field limit, so the tick + count head the list.
     const mandRows = [], mand = [];
     for (const s of tm.mandatory.filter(s => canStaff || s.kind !== 'staff')) {
         const inIt = await isInGuild(interaction.client, s.guildId, target.id);
@@ -137,7 +138,7 @@ export async function adminMenuPayload(interaction, target) {
     if (deptTotal) {
         const parts = [];
         if (deptOutRows.length) parts.push(deptOutRows.join('\n'));
-        if (deptInNames.length) parts.push(`${OK} **In ${deptInNames.length}${deptOutRows.length ? ' other' : ''}:** ${deptInNames.join(' · ')}`);
+        if (deptInNames.length) parts.push(`${OK} **In ${deptInNames.length}${deptOutRows.length ? ' other' : ''}:**\n${deptInNames.map(n => `- ${n}`).join('\n')}`);
         embed.addFields({ name: 'Department access', value: trunc(parts.join('\n\n')) || '—' });
     }
     embed.setFooter({ text: missing ? 'Force-send DMs every missing invite · individual picks let you set a reason/time limit' : 'Refresh re-checks their live membership' });
