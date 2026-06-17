@@ -6,7 +6,7 @@
 //           because …" or "terminate them — repeated misconduct".
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
-import { resolveMember, isInGuild } from '../serverAccess/core.js';
+import { resolveMember, isInGuild, guildOf } from '../serverAccess/core.js';
 import { SERVER_BY_KEY, accessLevel } from '../serverAccess/matrix.js';
 import { grantAndInvite, requestExtension } from '../serverAccess/actions.js';
 import { parseAccessIntent, aiAvailable } from '../serverAccess/ai.js';
@@ -47,7 +47,11 @@ async function selfMenu(interaction) {
     const grantedKeys = new Set(store.activeGrantsFor(member.userId).filter(g => g.kind === 'request').map(g => g.server_key));
     const deptCandidates = member.request.filter(s => s.kind === 'department' && !grantedKeys.has(s.key));
     const deptNotIn = [];
-    for (const s of deptCandidates) if (!(await isInGuild(interaction.client, s.guildId, member.userId))) deptNotIn.push(s);
+    // Only offer a department server the bot is actually in — you can't be
+    // invited to a server that doesn't exist in the bot's reach, so it must not
+    // count as "requestable" (otherwise the request UI lingers when you're
+    // genuinely in everything joinable).
+    for (const s of deptCandidates) if (guildOf(interaction.client, s.guildId) && !(await isInGuild(interaction.client, s.guildId, member.userId))) deptNotIn.push(s);
 
     const embed = await buildStatus(interaction, member, { compact: true, mandStatus, deptNotIn });
     const components = [];
@@ -105,6 +109,7 @@ export async function adminMenuPayload(interaction, target) {
         if (!inIt) mand.push(s);
     }
     for (const s of tm.request.filter(s => s.kind === 'department')) {
+        if (!guildOf(interaction.client, s.guildId)) continue;   // bot not in it — can't invite there
         const inIt = await isInGuild(interaction.client, s.guildId, target.id);
         deptRows.push(`${inIt ? OK : X} ${nm(s)}${inIt ? '' : ' — *not joined*'}`);
         if (!inIt) dept.push(s);
@@ -189,7 +194,7 @@ async function buildStatus(interaction, member, { compact = false, mandStatus = 
     if (!deptNotIn) {
         const grantedKeys = new Set(grants.map(g => g.server_key));
         const cand = member.request.filter(s => s.kind === 'department' && !grantedKeys.has(s.key));
-        deptNotIn = []; for (const s of cand) if (!(await isInGuild(client, s.guildId, member.userId))) deptNotIn.push(s);
+        deptNotIn = []; for (const s of cand) if (guildOf(client, s.guildId) && !(await isInGuild(client, s.guildId, member.userId))) deptNotIn.push(s);
     }
     const lines = [`${E.star} **Servers you must be in**`];
     for (const { s, inIt } of mandStatus) lines.push(`${inIt ? OK : X} ${nm(s)}${inIt ? '' : ' — *not joined*'}`);
@@ -208,9 +213,13 @@ async function buildStatus(interaction, member, { compact = false, mandStatus = 
             lines.push(deptNotIn.slice(0, 12).map(nm).join(' · ') + (deptNotIn.length > 12 ? ` · +${deptNotIn.length - 12} more` : ''));
         }
     }
+    // In every server you're entitled to and nothing left to request — say so
+    // plainly, so the panel reads as "all set" rather than offering nothing.
+    const allSet = mandStatus.every(m => m.inIt) && !deptNotIn.length;
+    if (allSet) lines.push(`\n${OK} **You're in every server you need — there's nothing else to join.**`);
     return new EmbedBuilder().setColor(NAVY).setAuthor({ name: 'USGRP · Network Administration' })
         .setTitle('Your Server Access').setDescription(lines.join('\n').slice(0, 4000))
-        .setFooter({ text: 'Use the menus below, or /access and tell me what you need' }).setTimestamp();
+        .setFooter({ text: allSet ? "You're all set." : 'Use the menus below, or /access and tell me what you need' }).setTimestamp();
 }
 
 export async function confirmInvite(interaction, member, server, reason, durationDays) {
