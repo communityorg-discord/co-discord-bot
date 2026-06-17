@@ -71,6 +71,9 @@ function sectionView(key) {
     row.components.push(new ButtonBuilder().setCustomId(`copanel:run:${name}`).setLabel(title(name).slice(0, 80)).setStyle(ButtonStyle.Secondary));
   }
   if (row.components.length) rows.push(row);
+  // Explicit Back to the overview (the "Go to…" dropdown stays for jumping around).
+  if (rows.length < 5) rows.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('copanel:home').setLabel('Back').setStyle(ButtonStyle.Secondary).setEmoji(E.arrow_left)));
   return { embeds: [e], components: rows.slice(0, 5) };
 }
 
@@ -190,6 +193,7 @@ export async function handleSelect(interaction) {
 
 export async function handleButton(interaction) {
   const id = interaction.customId || '';
+  if (id === 'copanel:home') { await interaction.update(buildHome()); return true; }
   if (!id.startsWith('copanel:run:')) return id.startsWith('copanel:');
   const name = id.slice('copanel:run:'.length);
   const cmd = REGISTRY.get(name);
