@@ -2,25 +2,41 @@
 // "Claude fix this" Discord bridge. Spawned DETACHED by either bot's bridge so
 // it OUTLIVES a bot restart: a fix that restarts co-discord-bot/aspire-bot can
 // no longer kill the run mid-flight (the old footgun). It talks to Discord
-// purely over REST with the CO bot's token, streams live progress into a status
-// message, and posts the final summary itself.
+// purely over REST, streams live progress into a status message, and posts the
+// final summary itself.
+//
+// CONCURRENCY: instead of one global lock (one session at a time), there is a
+// POOL of bot identities — CO | Utilities, USGRP | Services, USGRP | GOVT,
+// USGRP | Logs. Each run claims the first FREE identity and posts AS that bot,
+// so up to N "Claude" sessions can run at once. A run that finds every worker
+// busy says so and bails. Locks are PID-stamped AND time-bounded, so a crashed
+// run can never wedge a slot forever (any lock older than a max run self-heals).
+//
+// SESSION CONTINUITY: the session follows the CONVERSATION, not the bot. A reply
+// to a Claude card resumes that exact session (CR_RESUME, set by the listener);
+// a plain follow-up resumes the channel's last session (channels.json), guarded
+// by a per-channel lock + a freshness TTL + a fresh-retry if the id is stale.
 //
 // Invoked as: node claudeRun.mjs   with env:
 //   CR_CHANNEL, CR_MSG (the trigger message), CR_PROMPT_B64 (base64 prompt),
-//   CR_RESUME (optional session id to continue).
+//   CR_RESUME (optional session id to continue), CR_REPLY_TOKEN (DM: the
+//   owning bot's token — DMs are private to one bot so the pool can't apply).
 import { spawn } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync, openSync, writeSync, closeSync, unlinkSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, openSync, writeSync, closeSync, unlinkSync, existsSync, readdirSync, statSync, rmSync } from 'node:fs';
 
 const REPO = '/home/vpcommunityorganisation/clawd/services';
 const CLAUDE = '/home/vpcommunityorganisation/.npm-global/bin/claude';
 const HOME = process.env.HOME || '/home/vpcommunityorganisation';
 const LOCK_DIR = `${HOME}/.cache/claude-bridge`;
 const CLAIMS = `${LOCK_DIR}/claims`;
-const RUN_LOCK = `${LOCK_DIR}/RUNNING`;
-const STOP_FILE = `${LOCK_DIR}/STOP`;          // written by either bot's Stop button
+const RUN_MARKER = `${LOCK_DIR}/RUNNING`;        // legacy "something is running" flag the Stop button checks
+const STOP_FILE = `${LOCK_DIR}/STOP`;            // written by either bot's Stop button
 const SESS_FILE = `${LOCK_DIR}/sessions.json`;
+const CHAN_FILE = `${LOCK_DIR}/channels.json`;
 const API = 'https://discord.com/api/v10';
 const TIMEOUT_MS = 20 * 60_000;
+const LOCK_TTL_MS = TIMEOUT_MS + 90_000;         // a lock older than this MUST be dead → reclaim (self-heal)
+const CHAN_RESUME_TTL_MS = 45 * 60_000;          // only resume a channel session this fresh
 
 const CHANNEL = process.env.CR_CHANNEL;
 const MSG = process.env.CR_MSG;
@@ -28,30 +44,103 @@ const PROMPT = Buffer.from(process.env.CR_PROMPT_B64 || '', 'base64').toString('
 const RESUME = process.env.CR_RESUME || null;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// Reply as the CO bot by default (one consistent "Claude" identity) — read its
-// token off disk. EXCEPTION: a DM channel is private to whichever bot owns it, so
-// the spawning bot passes CR_REPLY_TOKEN (its own token) for DMs; we honour that
-// so the reply can actually land in that bot's DM channel.
-function coToken() {
+// Read a bot token straight off its .env (the var name differs per bot).
+function readTok(file, varName) {
   try {
-    const env = readFileSync(`${REPO}/co-discord-bot/.env`, 'utf8');
-    const m = env.match(/^\s*DISCORD_BOT_TOKEN\s*=\s*(.+)$/m);
+    const env = readFileSync(`${REPO}/${file}`, 'utf8');
+    const m = env.match(new RegExp(`^\\s*${varName}\\s*=\\s*(.+)$`, 'm'));
     return m ? m[1].trim().replace(/^["']|["']$/g, '') : null;
   } catch { return null; }
 }
-const TOKEN = process.env.CR_REPLY_TOKEN || coToken();
-const H = { Authorization: `Bot ${TOKEN}`, 'Content-Type': 'application/json' };
+// The worker pool, in preference order — a single run uses CO | Utilities (the
+// familiar "Claude" identity); extra concurrent runs spill onto the others.
+const POOL_DEF = [
+  { name: 'CO | Utilities',  file: 'co-discord-bot/.env', var: 'DISCORD_BOT_TOKEN' },
+  { name: 'USGRP | Services', file: 'aspire-bot/.env',     var: 'ASPIRE_DISCORD_BOT_TOKEN' },
+  { name: 'USGRP | GOVT',    file: 'usgrp-gov-bot/.env',  var: 'USGRP_GOV_BOT_TOKEN' },
+  { name: 'USGRP | Logs',    file: 'usgrp-logs-bot/.env', var: 'DISCORD_TOKEN' },
+];
+function buildPool() {
+  // A DM channel is private to the bot that received it — the pool can't apply;
+  // we MUST post as that bot. One slot, keyed 'dm'.
+  if (process.env.CR_REPLY_TOKEN) return [{ name: 'Claude', token: process.env.CR_REPLY_TOKEN, id: 'dm' }];
+  return POOL_DEF
+    .map((p, i) => ({ name: p.name, token: readTok(p.file, p.var), id: String(i) }))
+    .filter(p => p.token);
+}
 
-// Branded emoji pack (scripts/gen-claude-emojis.mjs uploads to BOTH apps).
-// Pick the set owned by the app we post as; Unicode stands in if missing.
-let EMOJIS = {};
-try {
-  const maps = JSON.parse(readFileSync(new URL('./claude-emojis.json', import.meta.url), 'utf8'));
-  const appId = Buffer.from(TOKEN.split('.')[0], 'base64').toString('utf8');
-  EMOJIS = maps[appId] || {};
-} catch { /* unicode fallbacks */ }
+// ── Host locks (PID-stamped + time-bounded; work across BOTH bots) ───────
+function claimMessage(id) { try { mkdirSync(CLAIMS, { recursive: true }); mkdirSync(`${CLAIMS}/${id}`); return true; } catch { return false; } }
+function pruneClaims() {   // claims/<msg> dirs accrete forever otherwise
+  try { const now = Date.now(); for (const d of readdirSync(CLAIMS)) { try { if (now - statSync(`${CLAIMS}/${d}`).mtimeMs > 86_400_000) rmSync(`${CLAIMS}/${d}`, { recursive: true, force: true }); } catch { } } } catch { }
+}
+// Atomic create; if it exists, reclaim only when its owner PID is dead OR the
+// lock is older than any possible run (PID-reuse can't wedge a slot forever).
+function takeLock(name) {
+  mkdirSync(LOCK_DIR, { recursive: true });
+  const f = `${LOCK_DIR}/${name}`;
+  for (let i = 0; i < 3; i++) {
+    try { const fd = openSync(f, 'wx'); writeSync(fd, String(process.pid)); closeSync(fd); return true; }
+    catch {
+      let stale = false;
+      try {
+        if (Date.now() - statSync(f).mtimeMs > LOCK_TTL_MS) stale = true;     // too old to be live → dead
+        else { const pid = parseInt(readFileSync(f, 'utf8'), 10); if (!pid) stale = false; else { try { process.kill(pid, 0); } catch { stale = true; } } }
+      } catch { stale = true; }
+      if (!stale) return false;
+      try { unlinkSync(f); } catch { }
+    }
+  }
+  return false;
+}
+const dropLock = (name) => { try { unlinkSync(`${LOCK_DIR}/${name}`); } catch { } };
+function acquireSlot(pool) {
+  for (const p of pool) if (takeLock(`RUNNING.${p.id}`)) { try { writeFileSync(RUN_MARKER, String(process.pid)); } catch { } return p; }
+  return null;
+}
+function releaseSlot(id) {
+  dropLock(`RUNNING.${id}`);
+  // When no worker slot remains active, clear the legacy marker + any stale STOP.
+  try {
+    const anyLeft = readdirSync(LOCK_DIR).some(f => /^RUNNING\.(dm|\d+)$/.test(f));
+    if (!anyLeft) { dropLock('RUNNING'); dropLock('STOP'); }
+  } catch { }
+}
+const lockChannel = (ch) => takeLock(`RUNNING.chan.${ch}`);
+const releaseChannel = (ch) => dropLock(`RUNNING.chan.${ch}`);
+
+function rememberSession(replyId, sessionId) {
+  if (!replyId || !sessionId) return;
+  let map = {}; try { map = JSON.parse(readFileSync(SESS_FILE, 'utf8')); } catch { }
+  map[replyId] = sessionId;
+  const keys = Object.keys(map); if (keys.length > 300) delete map[keys[0]];
+  try { writeFileSync(SESS_FILE, JSON.stringify(map)); } catch { }
+}
+// Channel-scoped session memory (the conversation's session, bot-agnostic).
+function channelSession(ch) {
+  try { const e = JSON.parse(readFileSync(CHAN_FILE, 'utf8'))[ch]; if (e?.session && Date.now() - (e.at || 0) < CHAN_RESUME_TTL_MS) return e.session; } catch { }
+  return null;
+}
+function recordChannelSession(ch, sessionId) {
+  if (!ch || !sessionId) return;
+  let m = {}; try { m = JSON.parse(readFileSync(CHAN_FILE, 'utf8')); } catch { }
+  m[ch] = { session: sessionId, at: Date.now() };
+  const keys = Object.keys(m); if (keys.length > 500) delete m[keys[0]];
+  try { writeFileSync(CHAN_FILE, JSON.stringify(m)); } catch { }
+}
+
+// ── Discord REST (token + emoji pack are set once a slot is claimed) ──────
+let TOKEN = null, H = null, EMOJIS = {};
 const em = (k, fb) => EMOJIS[k] || fb;
-
+function useIdentity(token) {
+  TOKEN = token;
+  H = { Authorization: `Bot ${TOKEN}`, 'Content-Type': 'application/json' };
+  try {
+    const maps = JSON.parse(readFileSync(new URL('./claude-emojis.json', import.meta.url), 'utf8'));
+    const appId = Buffer.from(TOKEN.split('.')[0], 'base64').toString('utf8');
+    EMOJIS = maps[appId] || {};
+  } catch { EMOJIS = {}; }
+}
 async function dapi(method, path, body) {
   for (let i = 0; i < 6; i++) {
     const r = await fetch(API + path, { method, headers: H, body: body ? JSON.stringify(body) : undefined }).catch(() => null);
@@ -65,39 +154,11 @@ const react = (e) => dapi('PUT', `/channels/${CHANNEL}/messages/${MSG}/reactions
 const unreact = (e) => dapi('DELETE', `/channels/${CHANNEL}/messages/${MSG}/reactions/${encodeURIComponent(e)}/@me`);
 const typing = () => dapi('POST', `/channels/${CHANNEL}/typing`);
 async function reply(payload) {
-  const r = await dapi('POST', `/channels/${CHANNEL}/messages`, { ...payload, message_reference: { message_id: MSG, fail_if_not_exists: false }, allowed_mentions: { replied_user: false } });
+  const r = await dapi('POST', `/channels/${CHANNEL}/messages`, { ...payload, message_reference: { message_id: MSG, fail_if_not_exists: false }, allowed_mentions: payload.allowed_mentions || { replied_user: false } });
   return (r && r.ok) ? r.json() : null;
 }
 const editMsg = (id, payload) => dapi('PATCH', `/channels/${CHANNEL}/messages/${id}`, payload);
 
-// ── Host-level locks (work across BOTH bots) ──────────────────────────
-function claimMessage(id) { try { mkdirSync(CLAIMS, { recursive: true }); mkdirSync(`${CLAIMS}/${id}`); return true; } catch { return false; } }
-// PID-stamped lock file. If the lock exists but its owner PID is dead (e.g. a
-// run got killed by a bot restart before releasing), it's stale → clear + take
-// it. No more 20-min stuck locks blocking every new run.
-function acquireRunLock() {
-  mkdirSync(LOCK_DIR, { recursive: true });
-  for (let i = 0; i < 3; i++) {
-    try { const fd = openSync(RUN_LOCK, 'wx'); writeSync(fd, String(process.pid)); closeSync(fd); return true; }
-    catch {
-      let alive = false;
-      try { const pid = parseInt(readFileSync(RUN_LOCK, 'utf8'), 10); if (pid) { process.kill(pid, 0); alive = true; } } catch { alive = false; }
-      if (alive) return false;            // held by a live run
-      try { unlinkSync(RUN_LOCK); } catch { }   // stale → clear and retry
-    }
-  }
-  return false;
-}
-const releaseRunLock = () => { try { unlinkSync(RUN_LOCK); } catch { } };
-function rememberSession(replyId, sessionId) {
-  if (!replyId || !sessionId) return;
-  let map = {}; try { map = JSON.parse(readFileSync(SESS_FILE, 'utf8')); } catch { }
-  map[replyId] = sessionId;
-  const keys = Object.keys(map); if (keys.length > 300) delete map[keys[0]];
-  try { writeFileSync(SESS_FILE, JSON.stringify(map)); } catch { }
-}
-
-// High-level stages, ticked off live as the session works through them.
 const PHASES = {
   investigate: { key: 'read',   emoji: '🔍', doing: 'Reading the code',         done: 'Read the code' },
   edit:        { key: 'edit',   emoji: '✏️', doing: 'Editing the code',         done: 'Edited the code' },
@@ -125,18 +186,26 @@ function phaseFor(name, input) {
 const embed = (color, desc, footer) => ({ color, author: { name: 'Claude' }, description: String(desc).slice(0, 4000), footer: footer ? { text: footer } : undefined, timestamp: new Date().toISOString() });
 const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
+// Released exactly once, from every exit path (success / error / stop / throw).
+let ACTIVE_SLOT = null, ACTIVE_CHAN = null;
+function cleanup() {
+  if (ACTIVE_SLOT != null) { releaseSlot(ACTIVE_SLOT); ACTIVE_SLOT = null; }
+  if (ACTIVE_CHAN != null) { releaseChannel(ACTIVE_CHAN); ACTIVE_CHAN = null; }
+}
+
 (async () => {
-  if (!TOKEN || !CHANNEL || !MSG) { console.error('[claudeRun] missing token/channel/msg'); process.exit(1); }
+  if (!CHANNEL || !MSG) { console.error('[claudeRun] missing channel/msg'); process.exit(1); }
+  pruneClaims();
   // Dedup: if the other bot's runner already claimed this exact message, bail.
   if (!claimMessage(MSG)) return;
-  if (!acquireRunLock()) { await react('⏳'); await reply({ content: "I'm mid-fix on another request — give me a moment and try again." }); return; }
+  const pool = buildPool();
+  if (!pool.length) { console.error('[claudeRun] no bot tokens available'); process.exit(1); }
 
-  await react('👀');
-  await typing();
-  const typer = setInterval(() => typing(), 8000);
   const startedAt = Date.now();
   const seen = [];                              // ordered phase keys (consecutive-deduped)
   const pushPhase = (k) => { if (seen[seen.length - 1] !== k) seen.push(k); };
+  let WORKER = null, statusId = null, lastEdit = 0;
+  const foot = (label) => `${label} · ${WORKER} · ${mmss(Date.now() - startedAt)}`;
   const renderProgress = () => {
     const list = seen.slice(-8);
     return (list.length ? list : ['investigate']).map((k, i) => {
@@ -145,84 +214,139 @@ const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${M
     }).join('\n');
   };
   const renderDone = () => seen.slice(-8).map(k => `${em('tick', '✅')} ${(PHASES[k] || PHASES.think).done}`).join('\n');
-  const stopRef = /<:(\w+):(\d+)>/.exec(em('stop', '') || '');
-  const STOP_ROW = [{ type: 1, components: [{ type: 2, style: 4, label: 'Stop', emoji: stopRef ? { name: stopRef[1], id: stopRef[2] } : { name: '🛑' }, custom_id: 'claudebr:stop' }] }];
-  try { unlinkSync(STOP_FILE); } catch { }      // stale stop from a previous run
-  const status = await reply({ embeds: [embed(0x6c7bff, `${em('boot', '🔧')} Spinning up a session…`, 'live · 0:00')], components: STOP_ROW });
-  const statusId = status?.id || null;
-  let lastEdit = 0;
   const setStatus = async () => {
-    if (!statusId) return;
-    if (Date.now() - lastEdit < 3000) return;
+    if (!statusId || Date.now() - lastEdit < 3000) return;
     lastEdit = Date.now();
-    await editMsg(statusId, { embeds: [embed(0x6c7bff, renderProgress(), `live · ${mmss(Date.now() - startedAt)}`)] }).catch(() => { });
+    await editMsg(statusId, { embeds: [embed(0x6c7bff, renderProgress(), foot('live'))] }).catch(() => { });
   };
 
-  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--dangerously-skip-permissions'];
-  if (RESUME) args.push('--resume', RESUME);
-  const env = { ...process.env, HOME, PATH: `${process.env.PATH || ''}:${HOME}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin` };
-  const child = spawn(CLAUDE, args, { cwd: REPO, env });
-
-  let buf = '', finalText = null, sessionId = RESUME, isErr = false, cost = 0, turns = 0, stderr = '';
-  let stoppedBy = null;
-  const killer = setTimeout(() => { try { child.kill('SIGKILL'); } catch { } isErr = true; finalText = 'timed out after 20 minutes'; }, TIMEOUT_MS);
-  const stopWatch = setInterval(() => {
-    try {
-      const raw = readFileSync(STOP_FILE, 'utf8').trim();
-      unlinkSync(STOP_FILE);
-      try { stoppedBy = JSON.parse(raw); } catch { stoppedBy = { name: raw || 'a founder' }; }
-      try { child.kill('SIGKILL'); } catch { }
-    } catch { /* no stop requested */ }
-  }, 1500);
-  child.stdin.write(PROMPT); child.stdin.end();
-  child.stderr.on('data', d => stderr += d);
-  child.stdout.on('data', d => {
-    buf += d; let nl;
-    while ((nl = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
-      if (!line.trim()) continue;
-      let ev; try { ev = JSON.parse(line); } catch { continue; }
-      if (ev.type === 'system' && ev.subtype === 'init') { sessionId = ev.session_id || sessionId; pushPhase('investigate'); setStatus(); }
-      else if (ev.type === 'assistant' && ev.message?.content) {
-        const toolBlocks = ev.message.content.filter(b => b.type === 'tool_use');
-        if (toolBlocks.length) { const tb = toolBlocks[toolBlocks.length - 1]; pushPhase(phaseFor(tb.name, tb.input)); setStatus(); }
-        else if (ev.message.content.some(b => b.type === 'text' && b.text)) { pushPhase('think'); setStatus(); }
-      } else if (ev.type === 'result') { finalText = ev.result; sessionId = ev.session_id || sessionId; isErr = !!ev.is_error; cost = ev.total_cost_usd || 0; turns = ev.num_turns || 0; }
-    }
-  });
-  await new Promise(res => child.on('close', res)).catch(() => { });
-  clearTimeout(killer); clearInterval(typer); clearInterval(stopWatch);
-  await unreact('👀');
-
-  if (stoppedBy) {
-    await react('🛑');
-    const stages = renderDone();
-    const e = embed(0xf59e0b, (stages ? stages + '\n\n' : '') + `${em('stop', '🛑')} **Stopped by ${stoppedBy.name}**`, `Stopped at ${mmss(Date.now() - startedAt)}`);
-    const ping = stoppedBy.id ? `<@${stoppedBy.id}>` : undefined;
-    if (statusId) await editMsg(statusId, { content: ping, embeds: [e], components: [] });
-    else await reply({ content: ping, embeds: [e] });
-    if (sessionId) rememberSession(statusId, sessionId);   // reply still continues the session
-    releaseRunLock();
+  // Claim a free worker AND successfully post the status as that bot. If a
+  // worker can't reach this channel, free it and advance to the next one.
+  const remaining = [...pool];
+  while (remaining.length) {
+    const s = acquireSlot(remaining);
+    if (!s) break;                              // every remaining worker is busy
+    remaining.splice(remaining.findIndex(p => p.id === s.id), 1);
+    useIdentity(s.token);
+    WORKER = s.name;
+    const stopRef = /<:(\w+):(\d+)>/.exec(em('stop', '') || '');
+    var STOP_ROW = [{ type: 1, components: [{ type: 2, style: 4, label: 'Stop all', emoji: stopRef ? { name: stopRef[1], id: stopRef[2] } : { name: '🛑' }, custom_id: 'claudebr:stop' }] }];
+    const st = await reply({ embeds: [embed(0x6c7bff, `${em('boot', '🔧')} Spinning up a session…`, foot('live'))], components: STOP_ROW });
+    if (st?.id) { ACTIVE_SLOT = s.id; statusId = st.id; break; }
+    releaseSlot(s.id);                          // couldn't post here → try the next worker
+  }
+  if (ACTIVE_SLOT == null) {
+    const t = pool[0].token;
+    const HH = { Authorization: `Bot ${t}`, 'Content-Type': 'application/json' };
+    await fetch(`${API}/channels/${CHANNEL}/messages`, { method: 'POST', headers: HH, body: JSON.stringify({ content: `All ${pool.length} Claude workers are busy right now — give it a moment and reply again.`, message_reference: { message_id: MSG, fail_if_not_exists: false }, allowed_mentions: { replied_user: false } }) }).catch(() => { });
     process.exit(0);
   }
 
-  if (isErr || finalText == null) {
+  // Who asked — so we can @ them when it's done.
+  let requesterId = null;
+  try { const r = await dapi('GET', `/channels/${CHANNEL}/messages/${MSG}`); if (r && r.ok) { const m = await r.json(); requesterId = m.author?.id || null; } } catch { }
+
+  await react('👀');
+  await typing();
+  const typer = setInterval(() => typing(), 8000);
+
+  // One headless Claude attempt. Streams progress into the status message and
+  // resolves to the run's outcome. The first terminal cause (normal close /
+  // timeout / Stop) wins atomically.
+  async function runOnce(resumeId) {
+    const args = ['-p', '--output-format', 'stream-json', '--verbose', '--dangerously-skip-permissions'];
+    if (resumeId) args.push('--resume', resumeId);
+    const env = { ...process.env, HOME, PATH: `${process.env.PATH || ''}:${HOME}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin` };
+    const child = spawn(CLAUDE, args, { cwd: REPO, env });
+    let buf = '', finalText = null, sessionId = resumeId, isErr = false, cost = 0, turns = 0, stderr = '', stoppedBy = null, terminated = false;
+    const term = (reason) => {
+      if (terminated) return; terminated = true;
+      if (reason.stop) stoppedBy = reason.stop;
+      if (reason.timeout) { isErr = true; finalText = 'timed out after 20 minutes'; }
+      try { child.kill('SIGKILL'); } catch { }
+    };
+    const killer = setTimeout(() => term({ timeout: true }), TIMEOUT_MS);
+    // Stop button → kill sessions that were running when it was clicked (we
+    // honour a STOP only if it's newer than our start; a fresh run ignores an
+    // old one). releaseSlot clears STOP once the last session ends.
+    const stopWatch = setInterval(() => {
+      try {
+        if (!existsSync(STOP_FILE) || statSync(STOP_FILE).mtimeMs < startedAt) return;
+        let by; try { by = JSON.parse(readFileSync(STOP_FILE, 'utf8').trim()); } catch { by = { name: 'a founder' }; }
+        term({ stop: by });
+      } catch { }
+    }, 1500);
+    child.stdin.write(PROMPT); child.stdin.end();
+    child.stderr.on('data', d => stderr += d);
+    child.stdout.on('data', d => {
+      buf += d; let nl;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
+        if (!line.trim()) continue;
+        let ev; try { ev = JSON.parse(line); } catch { continue; }
+        if (ev.type === 'system' && ev.subtype === 'init') { sessionId = ev.session_id || sessionId; pushPhase('investigate'); setStatus(); }
+        else if (ev.type === 'assistant' && ev.message?.content) {
+          const toolBlocks = ev.message.content.filter(b => b.type === 'tool_use');
+          if (toolBlocks.length) { const tb = toolBlocks[toolBlocks.length - 1]; pushPhase(phaseFor(tb.name, tb.input)); setStatus(); }
+          else if (ev.message.content.some(b => b.type === 'text' && b.text)) { pushPhase('think'); setStatus(); }
+        } else if (ev.type === 'result' && !terminated) { finalText = ev.result; sessionId = ev.session_id || sessionId; isErr = !!ev.is_error; cost = ev.total_cost_usd || 0; turns = ev.num_turns || 0; }
+      }
+    });
+    await new Promise(res => child.on('close', res)).catch(() => { });
+    clearTimeout(killer); clearInterval(stopWatch);
+    return { finalText, sessionId, isErr, cost, turns, stderr, stoppedBy };
+  }
+
+  // Resume order: an explicit reply (CR_RESUME) is precise and wins. Otherwise
+  // fall back to the channel's last session — but only under a per-channel lock
+  // so two same-channel runs can't fork one transcript; if it's locked, or the
+  // session turns out stale, we start fresh.
+  let resume = RESUME, usedChannelResume = false;
+  if (!resume) {
+    const cs = channelSession(CHANNEL);
+    if (cs && lockChannel(CHANNEL)) { resume = cs; usedChannelResume = true; ACTIVE_CHAN = CHANNEL; }
+  }
+
+  let R = await runOnce(resume);
+  // Stale/expired channel session → the request would silently fail. Retry once
+  // as a fresh session so the founder's ask still gets done.
+  if (R.isErr && usedChannelResume && !R.stoppedBy) { pushPhase('think'); await setStatus(); R = await runOnce(null); }
+
+  clearInterval(typer);
+  await unreact('👀');
+
+  const pingDone = async (line) => {
+    if (!requesterId) return null;
+    const r = await reply({ content: `${line} <@${requesterId}>`, allowed_mentions: { users: [requesterId], replied_user: false } });
+    return r?.id || null;
+  };
+
+  if (R.stoppedBy) {
+    await react('🛑');
+    const stages = renderDone();
+    const e = embed(0xf59e0b, (stages ? stages + '\n\n' : '') + `${em('stop', '🛑')} **Stopped by ${R.stoppedBy.name}**`, foot('stopped'));
+    if (statusId) await editMsg(statusId, { embeds: [e], components: [] });
+    const pingId = await pingDone(`${em('stop', '🛑')} Stopped.`);
+    if (R.sessionId) { rememberSession(statusId, R.sessionId); rememberSession(pingId, R.sessionId); }
+  } else if (R.isErr || R.finalText == null) {
     await react('❌');
-    const msg = String(finalText || stderr || 'see server logs').slice(0, 1500);
-    if (statusId) await editMsg(statusId, { embeds: [embed(0xef4444, `${em('err', '❌')} Couldn't finish — ` + msg)], components: [] });
-    else await reply({ content: '❌ Couldn\'t finish — ' + msg });
+    const msg = String(R.finalText || R.stderr || 'see server logs').slice(0, 1500);
+    if (statusId) await editMsg(statusId, { embeds: [embed(0xef4444, `${em('err', '❌')} Couldn't finish — ` + msg, foot('failed'))], components: [] });
+    const pingId = await pingDone(`${em('err', '❌')} That one didn't finish —`);
+    if (R.sessionId) { rememberSession(statusId, R.sessionId); rememberSession(pingId, R.sessionId); }
   } else {
     await react('✅');
-    // Final card: the completed stage checklist, then the summary — so you see
-    // the whole journey + the result.
     const stages = renderDone();
-    const body = (stages ? stages + '\n\n' : '') + String(finalText);
-    const e = embed(0x4ade80, body, `✓ done in ${mmss(Date.now() - startedAt)} · ${turns} turns · $${cost.toFixed(3)} · reply to continue`);
+    const body = (stages ? stages + '\n\n' : '') + String(R.finalText);
+    const e = embed(0x4ade80, body, `✓ done in ${mmss(Date.now() - startedAt)} · ${WORKER} · ${R.turns} turns · $${R.cost.toFixed(3)} · reply to continue`);
     let replyId = statusId;
     if (statusId) await editMsg(statusId, { embeds: [e], components: [] });
     else { const r = await reply({ embeds: [e] }); replyId = r?.id; }
-    rememberSession(replyId, sessionId);
+    const pingId = await pingDone(`${em('tick', '✅')} Done in ${mmss(Date.now() - startedAt)} — reply to continue.`);
+    rememberSession(replyId, R.sessionId);
+    rememberSession(pingId, R.sessionId);
+    recordChannelSession(CHANNEL, R.sessionId);   // only on success — never poison the channel with a failed id
   }
-  releaseRunLock();
+  cleanup();
   process.exit(0);
-})().catch(e => { console.error('[claudeRun]', e?.message); releaseRunLock(); process.exit(1); });
+})().catch(e => { console.error('[claudeRun]', e?.message); try { cleanup(); } catch { } process.exit(1); });

@@ -17,9 +17,14 @@ const tokenFrom = (file, key) => {
     const m = readFileSync(file, 'utf8').match(new RegExp(`^\\s*${key}\\s*=\\s*(.+)$`, 'm'));
     return m ? m[1].trim().replace(/^["']|["']$/g, '') : null;
 };
+// All four bridge worker bots — each posts the progress card as itself, and a
+// Discord application emoji can only be used by the app that owns it, so every
+// worker needs its own copy of the pack.
 const APPS = [
     { name: 'co-discord-bot', token: tokenFrom(`${SERVICES}/co-discord-bot/.env`, 'DISCORD_BOT_TOKEN') },
     { name: 'aspire-bot', token: tokenFrom(`${SERVICES}/aspire-bot/.env`, 'ASPIRE_DISCORD_BOT_TOKEN') },
+    { name: 'usgrp-gov-bot', token: tokenFrom(`${SERVICES}/usgrp-gov-bot/.env`, 'USGRP_GOV_BOT_TOKEN') },
+    { name: 'usgrp-logs-bot', token: tokenFrom(`${SERVICES}/usgrp-logs-bot/.env`, 'DISCORD_TOKEN') },
 ].filter(a => a.token);
 const appIdOf = (token) => Buffer.from(token.split('.')[0], 'base64').toString('utf8');
 
