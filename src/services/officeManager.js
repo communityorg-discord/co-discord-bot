@@ -21,6 +21,11 @@ export function grantPass(c, u) { PASSES.add(pk(c, u)); }
 export function clearPass(c, u) { PASSES.delete(pk(c, u)); }
 export function hasPass(c, u) { return PASSES.has(pk(c, u)); }
 
+// Temp per-member Connect overwrites the bot adds to bring a guest into a
+// permission-locked office (e.g. a citizen pulled from the waiting room).
+// Removed when they leave the office (handleOfficeLeave).
+const GUEST_GRANTS = new Set();
+
 // ── DB helpers ──────────────────────────────────────────────────────────────
 export function getOffice(channelId) { return db.prepare('SELECT * FROM managed_offices WHERE channel_id = ?').get(channelId); }
 export function listOffices(guildId) { return db.prepare('SELECT * FROM managed_offices WHERE guild_id = ? ORDER BY rank, channel_name').all(guildId); }
@@ -85,7 +90,10 @@ export function canAccessOffice(member, office) {
   const best = memberBestRank(member, office.guild_id);
   if (best !== null && best <= (office.rank ?? 100)) return true;          // higher rank → access lower offices
   if (hasValidKey(office.channel_id, member.id)) return true;             // temporary key
-  if (isOnAllowlist(office.channel_id, member.id)) return true;           // manual per-user allow
+  // Allowlist entries can be a user id OR a role id, so an office can grant a
+  // whole role standing access (e.g. VP + Chief of Staff to the Oval Office).
+  const allow = getAllowlist(office.channel_id);
+  if (allow.includes(member.id) || member.roles?.cache?.some(r => allow.includes(r.id))) return true;
   return false;
 }
 
@@ -125,7 +133,28 @@ async function moveInto(member, office, reason) {
   grantPass(office.channel_id, member.id);
   setTimeout(() => clearPass(office.channel_id, member.id), APPROVE_WINDOW_MS);
   const vc = member.guild.channels.cache.get(office.channel_id);
-  if (vc && member.voice.channelId) await member.voice.setChannel(vc).catch(e => console.error('[Office] move failed:', e.message));
+  if (!vc) return;
+  // A guest with no standing access (e.g. a citizen brought from the waiting
+  // room) can't be moved into a Connect-locked office without a grant — give
+  // them a personal Connect/View overwrite, cleaned up when they leave.
+  if (!canAccessOffice(member, office)) {
+    try {
+      await vc.permissionOverwrites.edit(member.id, { ViewChannel: true, Connect: true }, { reason: 'Office: guest brought in' });
+      GUEST_GRANTS.add(pk(office.channel_id, member.id));
+    } catch (e) { console.error('[Office] guest grant failed:', e.message); }
+  }
+  if (member.voice.channelId) await member.voice.setChannel(vc).catch(e => console.error('[Office] move failed:', e.message));
+}
+
+// When a guest leaves an office we let into, strip the temporary Connect grant.
+export async function handleOfficeLeave(client, oldState) {
+  const member = oldState.member, chId = oldState.channelId;
+  if (!member || !chId) return;
+  const key = pk(chId, member.id);
+  if (!GUEST_GRANTS.has(key)) return;
+  GUEST_GRANTS.delete(key);
+  const vc = oldState.guild?.channels?.cache?.get(chId);
+  if (vc) await vc.permissionOverwrites.delete(member.id, 'Office: guest left').catch(() => {});
 }
 
 export async function handleWaitingRoomJoin(client, voiceState) {

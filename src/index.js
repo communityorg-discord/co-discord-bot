@@ -127,7 +127,7 @@ import * as myKudos from './commands/my-kudos.js';
 import * as links from './commands/links.js';
 import * as breakCmd from './commands/break.js';
 import * as idea from './commands/idea.js';
-import { handleButton as officeButton, enforceJoin as officeEnforceJoin, getOffice as officeGetOffice, getWaitingRoom as officeGetWaitingRoom, handleWaitingRoomJoin as officeHandleWRJoin, handleWaitingRoomLeave as officeHandleWRLeave } from './services/officeManager.js';
+import { handleButton as officeButton, enforceJoin as officeEnforceJoin, getOffice as officeGetOffice, getWaitingRoom as officeGetWaitingRoom, handleWaitingRoomJoin as officeHandleWRJoin, handleWaitingRoomLeave as officeHandleWRLeave, handleOfficeLeave as officeHandleOfficeLeave } from './services/officeManager.js';
 
 config();
 import { logRoleAction } from './utils/logger.js';
@@ -3746,11 +3746,13 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     console.error('[VoiceTrack] Error:', e.message);
   }
 
-  // Office: handle leaves from waiting rooms (cancel pending requests)
+  // Office: handle leaves from waiting rooms (cancel pending requests) and from
+  // offices (strip any temporary guest Connect grant).
   try {
     if (oldState.channelId && oldState.channelId !== newState.channelId && !oldState.member?.user?.bot) {
       const wrLeft = officeGetWaitingRoom(oldState.channelId);
       if (wrLeft) await officeHandleWRLeave(client, oldState);
+      else if (officeGetOffice(oldState.channelId)) await officeHandleOfficeLeave(client, oldState);
     }
   } catch (e) {
     console.error('[voiceStateUpdate office wr-leave error]', e.message);
