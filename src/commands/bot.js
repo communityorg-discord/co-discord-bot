@@ -36,6 +36,7 @@ function fmtUptime(seconds) {
 const MAINTAINERS = [
   '723199054514749450', // dionm — Deputy Secretary-General
   '415922272956710912', // evans — Secretary-General
+  '1355367209249148928', // CO | Ownership — Dion+Evan shared test account
 ];
 
 export const data = new SlashCommandBuilder()

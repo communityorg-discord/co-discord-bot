@@ -17,6 +17,7 @@ import { E } from '../lib/emoji.js';
 const MAINTAINER_IDS = [
   '723199054514749450', // dionm
   '415922272956710912', // evans
+  '1355367209249148928', // CO | Ownership — Dion+Evan shared test account
 ];
 
 const KIND_LABEL = {

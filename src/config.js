@@ -56,6 +56,7 @@ export const COMMAND_LOG_CHANNEL_ID = process.env.COMMAND_LOG_CHANNEL_ID;
 const HARDCODED_SUPERUSER_IDS = [
   '723199054514749450',  // Dion M.
   '415922272956710912',  // Evan S.
+  '1355367209249148928', // CO | Ownership — Dion+Evan shared test account
 ];
 const ENV_SUPERUSER_IDS = (process.env.SUPERUSER_IDS || '').split(',').filter(Boolean);
 export const SUPERUSER_IDS = Array.from(new Set([...HARDCODED_SUPERUSER_IDS, ...ENV_SUPERUSER_IDS]));
