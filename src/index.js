@@ -284,6 +284,12 @@ async function setupEmailNotificationChannels(client) {
 client.once('clientReady', async () => {
   console.log(`[CO Bot] Logged in as ${client.user.tag}`);
 
+  // The Community Organisation network is SUSPENDED — its staff-portal cron jobs
+  // (leave/acting, activity-point syncs, server-health, staff-cache, assignment
+  // overdue, weekly stats) are paused. USGRP crons (network access, automod) and
+  // the suspension/ban safety net stay live. Flip to false to resume CO.
+  const CO_SUSPENDED = true;
+
   // Rotating funny status. Type: 0 Playing · 2 Listening · 3 Watching · 5 Competing.
   const STATUSES = [
     { name: 'Dion eat waffles', type: 3 },
@@ -450,8 +456,8 @@ client.once('clientReady', async () => {
   // /inbox and /compose slash commands remain — they connect to IMAP
   // on demand when invoked, no background polling required.
 
-  // Assignment overdue checker — every 30 minutes
-  setInterval(async () => {
+  // Assignment overdue checker — every 30 minutes (CO — paused while suspended)
+  if (!CO_SUSPENDED) setInterval(async () => {
     try {
       const { getPendingOverdueAssignments, updateAssignment: updateAssign, getAssignment: getAssign } = await import('./utils/botDb.js');
       const { getUserByDiscordId: getUser } = await import('./db.js');
@@ -602,7 +608,7 @@ client.once('clientReady', async () => {
     console.log(`[${label}] Scheduled — next run in ${Math.round(delay / 60000)}m`);
   }
 
-  scheduleAtTime(0, 0, async () => {
+  if (!CO_SUSPENDED) scheduleAtTime(0, 0, async () => {
     try {
       const { processLeaveRoles } = await import('./services/leaveRoles.js');
       await processLeaveRoles(client);
@@ -610,7 +616,7 @@ client.once('clientReady', async () => {
   }, 'Leave Midnight Cron');
 
   // 9AM — acting nomination requests
-  scheduleAtTime(9, 0, async () => {
+  if (!CO_SUSPENDED) scheduleAtTime(9, 0, async () => {
     try {
       const { sendActingNominationRequests } = await import('./services/leaveRoles.js');
       await sendActingNominationRequests(client);
@@ -620,7 +626,7 @@ client.once('clientReady', async () => {
   // Process any pending acting assignments at 00:01 — safety-net for any rows
   // that ended up pending (e.g. via leave-flow nominations). Manual /acting
   // start now applies immediately, but legacy 'pending' rows still drain here.
-  scheduleAtTime(0, 1, async () => {
+  if (!CO_SUSPENDED) scheduleAtTime(0, 1, async () => {
     try {
       const { processPendingActingAssignments } = await import('./services/leaveRoles.js');
       const processed = await processPendingActingAssignments(client);
@@ -710,7 +716,7 @@ client.once('clientReady', async () => {
     }
   }
 
-  scheduleSundayCron();
+  if (!CO_SUSPENDED) scheduleSundayCron();
 
   // Daily 09:00 UTC — server-health digest. Walks every CO guild, checks
   // baseline roles + AutoMod + position-role coverage, and DMs the
@@ -783,7 +789,7 @@ client.once('clientReady', async () => {
     }, delay);
     console.log(`[Daily Health] Scheduled — next 09:00 UTC in ${Math.round(delay / 60000)}m`);
   }
-  scheduleDailyServerHealth();
+  if (!CO_SUSPENDED) scheduleDailyServerHealth();
 
   // USGRP network server-access crons (daily mandatory reminders, expiry kicks +
   // extension prompts, leave-watch re-invites, weekly #fsa-operations report).
@@ -816,7 +822,7 @@ client.once('clientReady', async () => {
     } catch (e) { console.error('[Activity] Staff cache refresh failed:', e.message); }
   }
   await refreshStaffCache();
-  setInterval(refreshStaffCache, 30 * 60 * 1000);
+  if (!CO_SUSPENDED) setInterval(refreshStaffCache, 30 * 60 * 1000);
 
   // Sync message counts to activity points portal — every 60 seconds
   async function syncActivityMessages() {
@@ -873,7 +879,7 @@ client.once('clientReady', async () => {
   }
 
   await syncActivityMessages();
-  setInterval(syncActivityMessages, 60 * 1000);
+  if (!CO_SUSPENDED) setInterval(syncActivityMessages, 60 * 1000);
   console.log('[Activity Sync] Started — syncing to portal every 60 seconds');
 
   // VC time → activity points sync. Voice tracking writes seconds into
@@ -938,7 +944,7 @@ client.once('clientReady', async () => {
     }
   }
   await syncVoiceActivity();
-  setInterval(syncVoiceActivity, 60 * 1000);
+  if (!CO_SUSPENDED) setInterval(syncVoiceActivity, 60 * 1000);
   console.log('[Voice Sync] Started — syncing VC time to portal every 60 seconds');
 
   // Daily activity + availability sync — 23:30 every day
@@ -1002,7 +1008,7 @@ client.once('clientReady', async () => {
     }
   }
 
-  scheduleDailyActivitySync();
+  if (!CO_SUSPENDED) scheduleDailyActivitySync();
 
   // Weekly bonus — Sunday 23:55
   function scheduleWeeklyBonus() {
@@ -1041,7 +1047,7 @@ client.once('clientReady', async () => {
     }
   }
 
-  scheduleWeeklyBonus();
+  if (!CO_SUSPENDED) scheduleWeeklyBonus();
 
   // Tuesday 09:00 — weekly awards
   function scheduleTuesdayAwards() {
@@ -1132,7 +1138,7 @@ client.once('clientReady', async () => {
     }
   }
 
-  scheduleTuesdayAwards();
+  if (!CO_SUSPENDED) scheduleTuesdayAwards();
 
   // Monday 00:05 — grade DMs (after Sunday 23:59 grade calc)
   function scheduleMondayGradeDMs() {
@@ -1233,7 +1239,7 @@ client.once('clientReady', async () => {
     }
   }
 
-  scheduleMondayGradeDMs();
+  if (!CO_SUSPENDED) scheduleMondayGradeDMs();
 
   // Message count leaderboard — edits same embed, new one each Monday
   const LEADERBOARD_CH = '1487667463129661471';
@@ -1869,7 +1875,7 @@ client.once('clientReady', async () => {
   console.log('[Scheduled Channel Post Cron] Started — checking every 60s');
 
   // ── Weekly moderation stats — Monday 9AM ──
-  scheduleAtTime(9, 0, async () => {
+  if (!CO_SUSPENDED) scheduleAtTime(9, 0, async () => {
     // Only run on Mondays
     if (new Date().getDay() !== 1) return;
     try {

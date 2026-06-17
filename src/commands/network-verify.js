@@ -35,9 +35,8 @@ async function applyStaffHub(client, targetId, roleNames, nickname) {
       // they outrank the bot). Without this they keep their join nick (e.g. a gov title).
       if (nickname) await member.setNickname(nickname, 'Network verify — Staff Hub').catch(() => {});
     }
-    const me = hub.members.me;
-    const ch = hub.channels.cache.find(c => c.isTextBased?.() && c.permissionsFor(me)?.has('CreateInstantInvite'));
-    if (ch) { const inv = await ch.createInvite({ maxAge: 604800, maxUses: 0, unique: true, reason: 'Network verify — Staff Hub' }); out.invite = { name: hub.name, url: inv.url }; }
+    // The Staff Hub invite is created with the other mandatory-server invites
+    // below (one-time use, 30-min, tracked) — not here.
   } catch (e) { console.error('[netverify] staff-hub failed:', e?.message); }
   return out;
 }
@@ -211,14 +210,35 @@ export async function handleButton(interaction) {
   let hub = { invite: null, applied: 0 };
   if (r.ok) hub = await applyStaffHub(interaction.client, targetId, (r.hub_roles && r.hub_roles.length) ? r.hub_roles : r.roles, r.nickname);
 
+  // Create invites ONLY to the servers this person is required to be in — via the
+  // access system, so they're one-time use, 30-min, and tracked. Department
+  // servers are on request through /access.
+  const mandatoryInvites = [];
+  if (r.ok) {
+    try {
+      const { bucketsFor, serversFor } = await import('../serverAccess/matrix.js');
+      const { createInvite, isInGuild } = await import('../serverAccess/core.js');
+      const accessStore = await import('../serverAccess/store.js');
+      const b = bucketsFor({ position: r.position, roles: r.roles || [], hub_roles: r.hub_roles || [] });
+      const mandatory = b ? serversFor(b.buckets).mandatory : [];
+      for (const s of mandatory) {
+        if (await isInGuild(interaction.client, s.guildId, targetId)) continue; // already in
+        const inv = await createInvite(interaction.client, s);
+        if (!inv.ok) continue;
+        accessStore.logInvite({ discord_id: targetId, guild_id: s.guildId, server_key: s.key, kind: 'mandatory', reason: 'verification', by_id: interaction.user.id, code: inv.code, link_expires_at: inv.linkExpiresAt });
+        mandatoryInvites.push({ name: s.name.replace(/^USGRP \| /, ''), url: inv.url });
+      }
+    } catch (e) { console.error('[netverify] mandatory invites failed:', e?.message); }
+  }
+
   const roleSet = (r.hub_roles && r.hub_roles.length) ? r.hub_roles : (r.roles || []);
-  const pendingServers = r.ok && (r.servers_applied || 0) < (r.servers_total || 0);
+  const pendingServers = mandatoryInvites.length > 0;
   const final = r.ok
     ? new EmbedBuilder().setColor(0x22C55E).setTitle(`Verified — ${position}${r.seat_no ? ` (seat ${r.seat_no})` : ''}`)
         .setDescription(`<@${targetId}> is now **${position}**${r.seat_no ? ` · seat ${r.seat_no}` : ''}.${hub.applied ? `\n\nRoles applied in the **Network Staff Hub**.` : ''}${pendingServers ? `\n\nThey aren't in the other network servers yet, so I've DM'd their invites — **their roles + nickname apply automatically the moment they join each one.**` : ''}`)
         .addFields(
           { name: 'Nickname', value: r.nickname || '—', inline: true },
-          { name: 'Servers', value: `${r.servers_applied}/${r.servers_total} applied · ${r.invites} invites DM'd`, inline: true },
+          { name: 'Servers', value: `${r.servers_applied}/${r.servers_total} roles applied · ${mandatoryInvites.length} required-server invite(s) DM'd`, inline: true },
           { name: 'Roles', value: roleSet.map(x => `\`${x}\``).join(' ').slice(0, 1024) || '—' },
         )
         .setFooter({ text: 'Roles + nickname synced · invites sent · audit posted · USGRP Network Verification' }).setTimestamp()
@@ -247,15 +267,12 @@ export async function handleButton(interaction) {
       reason: `${position} — ${r.servers_applied}/${r.servers_total} servers, ${r.invites} invites`,
       color: 0x22C55E,
     }).catch(() => {});
-    // DM the verified member their invites — from THIS (CO Utilities) bot, since
-    // it owns the command. Links go in the description (4096) not a field (1024),
-    // so a long list (≈19 servers) isn't truncated mid-URL.
-    const allInvites = [...(r.invite_links || [])];
-    if (hub.invite) allInvites.push(hub.invite);
-    const lines = allInvites.map(i => `[${i.name}](${i.url})`).join('\n');
+    // DM the verified member their REQUIRED-server invites — from THIS (CO
+    // Utilities) bot. One-time use, 30-min links, tracked by the access system.
+    const lines = mandatoryInvites.map(i => `[${i.name}](${i.url})`).join('\n');
     const dm = new EmbedBuilder().setColor(0x5865F2)
       .setTitle("You've been verified as USGRP Network Staff")
-      .setDescription(`You're verified as **${position}**. Your nickname across the network is **${r.nickname}**.\n\nHere are your server invites — they expire in 7 days. Join each one to receive your roles.\n\n**Server invites**\n${lines || '_No invites available_'}`)
+      .setDescription(`You're verified as **${position}**. Your nickname across the network is **${r.nickname}**.\n\nHere are invites to the servers you're **required** to be in. ⏳ Each invite is **one-time use** and **expires in 30 minutes**, so please join soon — your roles apply automatically when you join.\n\n**Server invites**\n${lines || '_You\'re already in all of your required servers._'}\n\n💡 Need a new link, or access to a department server? Just run **/access**.`)
       .setFooter({ text: 'USGRP · Network Verification' }).setTimestamp();
     const targetUser = await interaction.client.users.fetch(targetId).catch(() => null);
     if (targetUser) await targetUser.send({ embeds: [dm] }).catch(() => {});
