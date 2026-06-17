@@ -96,6 +96,9 @@ import { handleVoteButton as pollVoteButton } from './commands/poll.js';
 import * as scheduleDm from './commands/schedule-dm.js';
 import * as serverHealth from './commands/server-health.js';
 import * as syncRoles from './commands/sync-roles.js';
+import * as accessCmd from './commands/access.js';
+import * as accessEvents from './serverAccess/events.js';
+import { startAccessCrons } from './serverAccess/cron.js';
 import * as whois from './commands/whois.js';
 import * as leaderboard from './commands/leaderboard.js';
 import * as myroles from './commands/myroles.js';
@@ -178,7 +181,7 @@ const welcomeTracker     = new Map(); // discord_id → count this week
 const ATLAS_DISCORD_USER_ID = '1465559216172568812';
 const ATLAS_GATE_NOTICE_COOLDOWN_MS = 5 * 60_000; // 5m per user
 const atlasGateNoticeCooldown = new Map(); // discord_id → last notice ms
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, info, unban, verify, unverify, networkVerify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, ban, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm, serverHealth, syncRoles, whois, leaderboard, myroles, roleInfo, serverinfo, channelInfo, syncAllRoles, findUser, auditLog, botPerms, feedback, embedCmd, whoIsHere, quote, snippet, ping, staffOnline, timezone, randomPick, standup, thanks, kudosLeaderboard, todoCmd, reminders, myKudos, links, breakCmd, idea, panicBotCmd, logsCmd, emergencyCmd, panelCmd];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, info, unban, verify, unverify, networkVerify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, ban, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm, serverHealth, syncRoles, accessCmd, whois, leaderboard, myroles, roleInfo, serverinfo, channelInfo, syncAllRoles, findUser, auditLog, botPerms, feedback, embedCmd, whoIsHere, quote, snippet, ping, staffOnline, timezone, randomPick, standup, thanks, kudosLeaderboard, todoCmd, reminders, myKudos, links, breakCmd, idea, panicBotCmd, logsCmd, emergencyCmd, panelCmd];
 // The CO Staff Network is suspended, so its CO-specific commands are HIDDEN —
 // the command files are kept, they're just not registered with Discord or routed.
 // Moderation, tickets, office, network-verify and general utility stay live.
@@ -781,6 +784,10 @@ client.once('clientReady', async () => {
     console.log(`[Daily Health] Scheduled — next 09:00 UTC in ${Math.round(delay / 60000)}m`);
   }
   scheduleDailyServerHealth();
+
+  // USGRP network server-access crons (daily mandatory reminders, expiry kicks +
+  // extension prompts, leave-watch re-invites, weekly #fsa-operations report).
+  try { startAccessCrons(client); } catch (e) { console.error('[access crons]', e.message); }
 
   // ========== ACTIVITY POINTS SYNC (replaces BRAG sync) ==========
   const ACTIVITY_LOG_CH = '1487643487460659280';
@@ -2072,6 +2079,12 @@ client.on('interactionCreate', async interaction => {
     catch (e) { console.error('[snippet autocomplete]', e.message); return interaction.respond([]).catch(() => {}); }
   }
 
+  // Autocomplete for /access send (server picker)
+  if (interaction.isAutocomplete() && interaction.commandName === 'access') {
+    try { return await accessCmd.autocomplete(interaction); }
+    catch (e) { console.error('[access autocomplete]', e.message); return interaction.respond([]).catch(() => {}); }
+  }
+
   // Autocomplete for ticket-panel-send and ticket-panel-delete
   if (interaction.isAutocomplete() && (interaction.commandName === 'ticket-panel-send' || interaction.commandName === 'ticket-panel-delete')) {
     const { getAllTicketPanels } = await import('./utils/botDb.js');
@@ -2090,6 +2103,8 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isButton()) {
     // CO Utilities hub (/panel) — section buttons that launch commands
     if (interaction.customId?.startsWith('copanel:')) { try { if (await coPanel.handleButton(interaction)) return; } catch (e) { console.error('[coPanel button]', e.message); } return; }
+    // USGRP network server-access buttons (invite confirm, reason, terminate, extend)
+    if (interaction.customId?.startsWith('acc:')) { try { if (await accessEvents.handleButton(interaction)) return; } catch (e) { console.error('[access button]', e.message); } return; }
     // Claude bridge: Stop the running detached session (founders only).
     // Writes the STOP file the runner polls — works regardless of which
     // bot spawned the run, and survives bot restarts like the runner does.
@@ -2573,6 +2588,8 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isModalSubmit()) {
     // CO Utilities hub (/panel) — command-launch modals
     if (interaction.customId?.startsWith('copanel:')) { try { if (await coPanel.handleModal(interaction)) return; } catch (e) { console.error('[coPanel modal]', e.message); } return; }
+    // USGRP network access — invite reason modal
+    if (interaction.customId?.startsWith('acc:reasonmodal:')) { try { if (await accessEvents.handleModal(interaction)) return; } catch (e) { console.error('[access modal]', e.message); } return; }
     // Network Staff role-offer decline → notify Dion + Evan, with optional reason.
     if (interaction.customId === 'roleoffer_decline_modal') {
       let reason = '';
@@ -2761,6 +2778,7 @@ client.on('interactionCreate', async interaction => {
 
 // Auto-apply roles + nickname when a verified member joins any server
 client.on('guildMemberAdd', async (member) => {
+  try { await accessEvents.onMemberAdd(member); } catch (e) { console.error('[access guildMemberAdd]', e.message); }
   try {
     const { default: botDb } = await import('./utils/botDb.js');
     const verified = botDb.prepare("SELECT * FROM verified_members WHERE discord_id = ?").get(member.user.id);
@@ -2807,6 +2825,7 @@ client.on('guildMemberAdd', async (member) => {
 
 client.on('guildMemberRemove', async (member) => {
   try { await automod.checkMemberLeave(member); } catch (e) { console.error('[AutoMod guildMemberRemove]', e.message); }
+  try { await accessEvents.onMemberRemove(member); } catch (e) { console.error('[access guildMemberRemove]', e.message); }
 
   // Was this a kick/ban? If so, DON'T post a "Member Left" log — destructionWatcher
   // already fires a "👢 Member kicked" / ban alert off the audit log, and posting
