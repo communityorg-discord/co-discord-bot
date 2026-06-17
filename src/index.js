@@ -3324,6 +3324,7 @@ client.on('messageDelete', async (message) => {
 
     logMessageEvent({ guildId, channelName: message.channel?.name, authorId: message.author.id, authorTag: message.author.tag || message.author.username, type: 'delete', content: message.content || '' });
     await logEvent(client, { embed, category: 'message', type: 'message_delete', guildId, extraChannels: [MESSAGE_DELETE_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID] });
+    emitToLogsBot({ kind: 'index', embed }).catch(() => {}); // index for the /log AI search (no DM/post)
   } catch (e) {
     console.error('[messageDelete log error]', e.message);
   }
@@ -3458,6 +3459,7 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
 
     logMessageEvent({ guildId, channelName: newMessage.channel?.name, authorId: newMessage.author.id, authorTag: newMessage.author.tag || newMessage.author.username, type: 'edit', before: oldMessage.content || '', after: newMessage.content || '' });
     await logEvent(client, { embed, category: 'message', type: 'message_edit', guildId, extraChannels: [MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID] });
+    emitToLogsBot({ kind: 'index', embed }).catch(() => {}); // index for the /log AI search (no DM/post)
   } catch (e) {
     console.error('[messageUpdate log error]', e.message);
   }
