@@ -152,7 +152,7 @@ async function showInbox(interaction, inbox, discordUserId, discordRoleIds, page
     );
     const navRow = buildPaginationRow(inbox.inbox_id, page, totalPages);
     const backRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('inbox_back').setLabel('← Change Inbox').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('inbox_back').setLabel('Change Inbox').setEmoji(E.arrow_left).setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`inbox_compose|${inbox.inbox_id}`).setLabel('Compose').setStyle(ButtonStyle.Primary),
     );
     await interaction.editReply({
@@ -193,7 +193,8 @@ async function showEmail(interaction, inbox, uid, discordUserId, discordRoleIds,
     const backButton = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`inbox_back_email|${inbox.inbox_id}|${page}`)
-        .setLabel('← Back')
+        .setLabel('Back')
+        .setEmoji(E.arrow_left)
         .setStyle(ButtonStyle.Secondary),
     );
     await interaction.editReply({

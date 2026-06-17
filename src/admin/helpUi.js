@@ -79,7 +79,7 @@ export function buildCategory(group) {
         .setDescription(cmds.map((c) => `\`${c.usage}\`\n${c.desc}`).join('\n\n').slice(0, 4000))
         .setFooter({ text: 'Admin only · Dion + Evan' });
     const back = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('cohelp:home').setLabel('← All categories').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('cohelp:home').setLabel('All categories').setEmoji(E.arrow_left).setStyle(ButtonStyle.Primary),
     );
     return { embeds: [e], components: [back] };
 }

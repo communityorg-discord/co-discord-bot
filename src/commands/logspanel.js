@@ -180,11 +180,13 @@ function buildServerTypeSelect(disabled = false) {
 }
 
 // Build back button row
-function buildBackButton(label = '← Back to Categories') {
+function buildBackButton(label = 'Back to Categories') {
+  const clean = String(label).replace(/^[←⬅]️?\s*/, '');   // drop any leading arrow → branded emoji
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('logspanel_back')
-      .setLabel(label)
+      .setLabel(clean)
+      .setEmoji(E.arrow_left)
       .setStyle(2)
   );
 }

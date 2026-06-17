@@ -38,6 +38,7 @@ export const E = {
   unban: '<:unban:1509040371324420257>',
   verify: '<:verify:1509040424654864455>',
   warning: '<:warning:1509040360368640151>',
+  arrow_left: '<:arrow_left:1516642537828253697>',
 };
 export const e = (name) => E[name] || '';
 

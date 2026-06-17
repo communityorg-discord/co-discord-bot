@@ -159,7 +159,7 @@ export async function adminMenuPayload(interaction, target) {
     actionBtns.push(new ButtonBuilder().setCustomId(`acc:arefresh:${target.id}`).setLabel('Refresh').setStyle(ButtonStyle.Secondary).setEmoji(ce('calendar')));
     actionBtns.push(new ButtonBuilder().setCustomId('acc:adminpick').setLabel('Manage someone else').setStyle(ButtonStyle.Secondary).setEmoji(ce('member')));
     components.push(new ActionRowBuilder().addComponents(actionBtns));
-    const navBtns = [new ButtonBuilder().setCustomId('acc:back').setLabel('Back').setStyle(ButtonStyle.Secondary).setEmoji('⬅️')];
+    const navBtns = [new ButtonBuilder().setCustomId('acc:back').setLabel('Back').setStyle(ButtonStyle.Secondary).setEmoji(ce('arrow_left'))];
     if (isNetAdmin(sender) || isSuper) navBtns.push(new ButtonBuilder().setCustomId(`acc:atermbtn:${target.id}`).setLabel('Terminate').setStyle(ButtonStyle.Danger).setEmoji(ce('terminate')));
     components.push(new ActionRowBuilder().addComponents(navBtns));
     return { embeds: [embed], components };

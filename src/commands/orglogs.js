@@ -207,7 +207,8 @@ function buildBackButton() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('orglogs_back')
-      .setLabel('← Back to Categories')
+      .setLabel('Back to Categories')
+      .setEmoji(E.arrow_left)
       .setStyle(ButtonStyle.Secondary)
   );
 }

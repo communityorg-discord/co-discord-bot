@@ -16,7 +16,7 @@ import { E } from '../lib/emoji.js';
 const DRAFTS = new Map();                                   // userId → in-progress selections
 const draft = uid => { if (!DRAFTS.has(uid)) DRAFTS.set(uid, {}); return DRAFTS.get(uid); };
 const reset = uid => DRAFTS.set(uid, {});
-const backBtn = () => new ButtonBuilder().setCustomId('officep:home').setLabel('Back').setStyle(ButtonStyle.Secondary).setEmoji('🏠');
+const backBtn = () => new ButtonBuilder().setCustomId('officep:home').setLabel('Back').setStyle(ButtonStyle.Secondary).setEmoji(E.arrow_left);
 const vcSelect = (cid, ph) => new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId(cid).setChannelTypes(ChannelType.GuildVoice, ChannelType.GuildStageVoice).setPlaceholder(ph));
 
 export function buildHome(guild, note = null) {

@@ -89,7 +89,7 @@ export async function handleButton(interaction) {
         if (!isNetAdmin(sender) && !isFsaAdminRank(sender) && !isSuper) return reply(interaction, `${X} Only Network Administration may manage other members.`), true;
         await interaction.deferUpdate().catch(() => {});
         const pickRow = new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('acc:auser').setPlaceholder('Pick a member to manage…').setMaxValues(1));
-        const backRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('acc:back').setLabel('Back').setStyle(ButtonStyle.Secondary).setEmoji('⬅️'));
+        const backRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('acc:back').setLabel('Back').setStyle(ButtonStyle.Secondary).setEmoji(ce('arrow_left')));
         await interaction.editReply({ content: `${E.member} **Manage another member** — pick who:`, embeds: [], components: [pickRow, backRow] });
         return true;
     }
