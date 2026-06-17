@@ -26,6 +26,11 @@ echo "${TS}  user=${USER_LOGIN}  src_ip=${SRC_IP}" >> "$LOGFILE"
   [ -r "$BOT_ENV" ] || exit 0
   SECRET=$(grep -E '^BOT_WEBHOOK_SECRET=' "$BOT_ENV" | head -1 | cut -d= -f2-)
   [ -n "$SECRET" ] || exit 0
+  # Token + URL for the central USGRP | Logs relay, so this SSH login also lands in
+  # the USGRP logs (searchable /log + the hourly host-grouped digest), not just a DM.
+  LOGS_TOKEN=$(grep -E '^LOGS_INTERNAL_TOKEN=' "$BOT_ENV" | head -1 | cut -d= -f2- | tr -d '"'\''')
+  LOGS_URL=$(grep -E '^LOGS_BOT_URL=' "$BOT_ENV" | head -1 | cut -d= -f2- | tr -d '"'\''')
+  [ -n "$LOGS_URL" ] || LOGS_URL="http://127.0.0.1:3029/log"
 
   # ── Identify the person by the SSH key fingerprint sshd recorded ──
   FPR=$(grep "Accepted publickey for ${USER_LOGIN} from ${SRC_IP} " /var/log/auth.log 2>/dev/null \
@@ -92,6 +97,16 @@ PY
         -H "Content-Type: application/json" -H "x-bot-secret: ${SECRET}" \
         --data-binary @- >/dev/null 2>&1 || true
   done
+
+  # File the same SSH-login embed into the central USGRP logs (index-only: it's
+  # searchable via /log and rolls into the hourly digest, grouped by host via the
+  # "CO · Server Access Monitor" footer tag). Best-effort, never blocks the login.
+  if [ -n "$LOGS_TOKEN" ]; then
+    printf '{"kind":"log","embed":%s}' "$EMBED" | \
+      timeout 4 curl -sS -X POST "$LOGS_URL" \
+        -H "Content-Type: application/json" -H "Authorization: Bearer ${LOGS_TOKEN}" \
+        --data-binary @- >/dev/null 2>&1 || true
+  fi
 } </dev/null >/dev/null 2>&1 &
 disown
 
