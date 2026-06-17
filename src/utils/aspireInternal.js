@@ -5,20 +5,40 @@
 const BASE = process.env.ASPIRE_BOT_INTERNAL_URL || 'http://127.0.0.1:3018';
 const TOKEN = process.env.ASPIRE_INTERNAL_TOKEN || '';
 
-async function call(method, path, { query, body, timeoutMs = 30000 } = {}) {
+const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+
+async function call(method, path, { query, body, timeoutMs = 30000, retries = 3 } = {}) {
   const url = new URL(path, BASE);
   if (query) for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
   const opt = { method, headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' } };
   if (body) opt.body = JSON.stringify(body);
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), timeoutMs);
-  opt.signal = ac.signal;
-  let r;
-  try { r = await fetch(url, opt); }
-  catch (e) { return { ok: false, status: 0, error: 'aspire_unreachable: ' + (e.name === 'AbortError' ? 'timeout' : e.message) }; }
-  finally { clearTimeout(timer); }
-  const json = await r.json().catch(() => ({}));
-  return { ok: r.ok, status: r.status, ...(json && typeof json === 'object' ? json : {}) };
+
+  // aspire-bot does the real work and is occasionally briefly unavailable (e.g. a
+  // restart), which surfaced as "aspire_unreachable: fetch failed" and aborted the
+  // whole verification. A pre-connection failure (ECONNREFUSED) is safe to retry —
+  // no work has started on aspire-bot's side — so back off and try again a few
+  // times. A TIMEOUT is NOT retried: the request may already be running there (the
+  // apply touches ~19 guilds), and re-firing it could double-apply.
+  let lastErr = 'fetch failed';
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), timeoutMs);
+    opt.signal = ac.signal;
+    let r;
+    try {
+      r = await fetch(url, opt);
+    } catch (e) {
+      clearTimeout(timer);
+      if (e.name === 'AbortError') return { ok: false, status: 0, error: 'aspire_unreachable: timeout' };
+      lastErr = e.message;
+      if (attempt < retries) { await sleep(1500 * attempt); continue; }
+      return { ok: false, status: 0, error: 'aspire_unreachable: ' + lastErr };
+    }
+    clearTimeout(timer);
+    const json = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, ...(json && typeof json === 'object' ? json : {}) };
+  }
+  return { ok: false, status: 0, error: 'aspire_unreachable: ' + lastErr };
 }
 
 export const networkVerifyApi = {

@@ -243,7 +243,14 @@ export async function handleButton(interaction) {
         )
         .setFooter({ text: 'Roles + nickname synced · invites sent · audit posted · USGRP Network Verification' }).setTimestamp()
     : EmbedBuilder.from(interaction.message.embeds[0]).setColor(0xEF4444).setTitle('Apply failed')
-        .setDescription(`${E.cross} ${r.error || r.status}`).setFooter({ text: 'USGRP Network Verification' });
+        .setDescription(`${E.cross} ${r.error || r.status}\n\nNothing was applied — tap **Retry apply** to try again (no need to redo the command).`).setFooter({ text: 'USGRP Network Verification' });
+
+  // On failure, re-attach the Approve/Decline buttons (they were cleared for the
+  // "Applying…" state) so a transient hiccup is a one-click retry, not a full redo.
+  const retryRow = r.ok ? null : new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`netverify_apply${SEP}${targetId}${SEP}${seatNo || 0}${SEP}${position}${SEP}${name || ''}`).setLabel('Retry apply').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`netverify_decline${SEP}${targetId}`).setLabel('Decline').setStyle(ButtonStyle.Danger),
+  );
 
   if (r.ok) {
     if (hub.invite) final.addFields({ name: 'Staff Hub', value: `invite sent${hub.applied ? ` · +${hub.applied} roles applied` : ''}`, inline: true });
@@ -280,6 +287,7 @@ export async function handleButton(interaction) {
   // A long apply (≈19 guilds) can make the interaction webhook flaky by the time
   // it returns — fall back to a direct message edit (works now the card isn't
   // ephemeral) so the embed ALWAYS flips from "Applying…".
-  try { await interaction.editReply({ embeds: [final], components: [] }); }
-  catch { await interaction.message.edit({ embeds: [final], components: [] }).catch(e => console.error('[netverify] final card update failed:', e?.message)); }
+  const finalComponents = retryRow ? [retryRow] : [];
+  try { await interaction.editReply({ embeds: [final], components: finalComponents }); }
+  catch { await interaction.message.edit({ embeds: [final], components: finalComponents }).catch(e => console.error('[netverify] final card update failed:', e?.message)); }
 }
