@@ -2079,12 +2079,6 @@ client.on('interactionCreate', async interaction => {
     catch (e) { console.error('[snippet autocomplete]', e.message); return interaction.respond([]).catch(() => {}); }
   }
 
-  // Autocomplete for /access send (server picker)
-  if (interaction.isAutocomplete() && interaction.commandName === 'access') {
-    try { return await accessCmd.autocomplete(interaction); }
-    catch (e) { console.error('[access autocomplete]', e.message); return interaction.respond([]).catch(() => {}); }
-  }
-
   // Autocomplete for ticket-panel-send and ticket-panel-delete
   if (interaction.isAutocomplete() && (interaction.commandName === 'ticket-panel-send' || interaction.commandName === 'ticket-panel-delete')) {
     const { getAllTicketPanels } = await import('./utils/botDb.js');

@@ -64,4 +64,39 @@ Rules:
     };
 }
 
+// Admin instruction about ANOTHER member: send them an invite, or terminate.
+// targetServers: [{ key, name }] the target may be invited to.
+export async function parseAdminIntent(text, { targetServers = [] } = {}) {
+    const sys = `You route a USGRP Network Administrator's instruction about ANOTHER staff member into ONE action. Respond with a JSON object only.
+
+Servers the target member can be invited to (key — name):
+${targetServers.map(s => `  ${s.key} — ${s.name}`).join('\n') || '  (none)'}
+
+Return JSON:
+  "action": one of "send" | "terminate" | "unknown"
+  "server_key": the matching key from the list, or null (only for "send"). Match loosely.
+  "duration_days": integer days for the invite, or null for no limit
+  "no_limit": true if they want no time limit
+  "reason": the stated reason (needed for both actions), or null
+  "message": a one-sentence confirmation of what you understood
+
+Rules:
+- "invite / send / give them access to X" → "send".
+- "terminate / remove from the network / kick them out / fire" → "terminate".
+- Never invent a server_key that isn't listed.`;
+    let out;
+    try { out = JSON.parse(await chat(sys, text)); } catch { return { action: 'unknown' }; }
+    const action = ['send', 'terminate'].includes(out.action) ? out.action : 'unknown';
+    let duration_days = Number.isFinite(out.duration_days) ? Math.max(0, Math.round(out.duration_days)) : null;
+    if (duration_days === 0) duration_days = null;
+    return {
+        action,
+        server_key: out.server_key || null,
+        duration_days,
+        no_limit: !!out.no_limit,
+        reason: out.reason ? String(out.reason).slice(0, 300) : null,
+        message: out.message ? String(out.message).slice(0, 300) : null,
+    };
+}
+
 export const aiAvailable = () => !!API_KEY;
