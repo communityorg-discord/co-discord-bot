@@ -9,6 +9,7 @@ import {
     NETWORK_STAFF_ROLE, NETWORK_ADMIN_ROLE,
 } from './matrix.js';
 import * as store from './store.js';
+import { networkVerifyApi } from '../utils/aspireInternal.js';
 
 const DAY = 86400000;
 
@@ -66,6 +67,10 @@ export async function doTermination(client, { userId, byId = null, byName = 'Net
     }
     store.revokeGrantsForUser(userId);
 
+    // Remove them from the network verified list so the on-join handler never
+    // re-grants their roles when they rejoin a server.
+    const unverify = await networkVerifyApi.remove(userId).catch(() => ({ ok: false }));
+
     // Log to the network-staff unverified log.
     try {
         const ch = await client.channels.fetch(TERMINATION_LOG_CHANNEL);
@@ -76,12 +81,13 @@ export async function doTermination(client, { userId, byId = null, byName = 'Net
                 { name: 'Reason', value: String(reason).slice(0, 1024), inline: false },
                 { name: 'Kicked from', value: (kicked.length ? kicked.join(', ') : 'none').slice(0, 1024), inline: false },
                 { name: 'Roles stripped', value: (stripped.length ? stripped.join(', ') : 'none').slice(0, 1024), inline: false },
+                { name: 'Network verification', value: unverify.ok ? (unverify.removed ? '✅ removed from the verified list' : 'not on the verified list') : '⚠️ could not remove — check manually', inline: false },
                 { name: 'By', value: byName, inline: true },
             ).setTimestamp();
         await ch.send({ embeds: [e] });
     } catch { /* channel unreachable */ }
 
-    return { ok: true, kicked, kickFailed, stripped };
+    return { ok: true, kicked, kickFailed, stripped, unverified: !!unverify.ok };
 }
 
 // Best-effort: which mandatory servers a member is NOT currently in.

@@ -118,7 +118,7 @@ export async function handleButton(interaction) {
         if (verb === 'no') return reply(interaction, 'Cancelled — no action taken.'), true;
         const { doTermination } = await import('./actions.js');
         const r = await doTermination(interaction.client, { userId: p.userId, byId: p.byId, byName: p.byName, reason: p.reason });
-        return reply(interaction, `${OK} <@${p.userId}> terminated. Kicked from **${r.kicked.length}** server(s)${r.stripped.length ? `, roles stripped in ${r.stripped.length} server(s)` : ''}.${r.kickFailed.length ? `\n⚠️ Couldn't kick from: ${r.kickFailed.join(', ')}` : ''}`), true;
+        return reply(interaction, `${OK} <@${p.userId}> terminated. Kicked from **${r.kicked.length}** server(s)${r.stripped.length ? `, roles stripped in ${r.stripped.length} server(s)` : ''}${r.unverified ? ', removed from the verified list' : ''}.${r.kickFailed.length ? `\n⚠️ Couldn't kick from: ${r.kickFailed.join(', ')}` : ''}`), true;
     }
 
     if (action === 'extend') {                        // from a nearing-expiry DM: +7 days
@@ -184,7 +184,7 @@ export async function handleModal(interaction) {
         const tk = putPending({ kind: 'terminate', userId: targetId, reason, byId: interaction.user.id, byName: interaction.user.username });
         const e = new EmbedBuilder().setColor(0xB91C1C).setAuthor({ name: 'USGRP · Network Administration' })
             .setTitle('🚫  Confirm termination')
-            .setDescription(`This will **kick <@${targetId}> from the Network Staff Hub, DevOps and every department server**, strip their verified roles in the main server, and log it.`)
+            .setDescription(`This will **kick <@${targetId}> from the Network Staff Hub, DevOps and every department server**, strip their verified roles in the main server, remove them from the network verified list (so they won't get roles back on rejoin), and log it.`)
             .addFields({ name: 'Reason', value: reason.slice(0, 1024) }).setFooter({ text: 'This cannot be undone automatically.' });
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`acc:term:${tk}:yes`).setLabel('Terminate').setStyle(ButtonStyle.Danger),

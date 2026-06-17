@@ -169,7 +169,7 @@ async function adminFlow(interaction, message, target) {
         const token = putPending({ kind: 'terminate', userId: target.id, reason: intent.reason || 'No reason provided', byId: interaction.user.id, byName: interaction.user.username });
         const e = new EmbedBuilder().setColor(0xB91C1C).setAuthor({ name: 'USGRP · Network Administration' })
             .setTitle('🚫  Confirm termination')
-            .setDescription(`This will **kick <@${target.id}> from the Network Staff Hub, DevOps and every department server**, strip their verified roles in the main server, and log it.`)
+            .setDescription(`This will **kick <@${target.id}> from the Network Staff Hub, DevOps and every department server**, strip their verified roles in the main server, remove them from the network verified list (so they won't get roles back on rejoin), and log it.`)
             .addFields({ name: 'Reason', value: (intent.reason || 'No reason provided').slice(0, 1024) })
             .setFooter({ text: 'This cannot be undone automatically.' });
         const row = new ActionRowBuilder().addComponents(

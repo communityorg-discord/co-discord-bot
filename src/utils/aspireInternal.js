@@ -29,6 +29,9 @@ export const networkVerifyApi = {
   list: () => call('GET', '/internal/network-verification-list'),
   // Every verified staffer from ops.network_verifications: [{ discord_id, position, hub_roles[] }].
   all: () => call('GET', '/internal/network-verify-all'),
+  // Remove a member from the network verified list (termination) so the on-join
+  // handler won't re-grant their roles.
+  remove: (user_id) => call('POST', '/internal/network-verify-remove', { body: { user_id } }),
   preview: (user_id, position, name = '') => call('GET', '/internal/network-verify-preview', { query: { user_id, position, name } }),
   // Touches up to ~19 guilds (roles + nicknames + invites) — give it room.
   apply: (user_id, position, approved_by, seat_no = null, name = null) =>
