@@ -193,8 +193,21 @@ export async function handleWaitingRoomJoin(client, voiceState) {
 async function postWaitingRequest(client, guild, wrVc, requestId, requester, offices) {
   const target = wrVc || (getRequestFeed(guild.id) && guild.channels.cache.get(getRequestFeed(guild.id)));
   if (!target?.send) return;
-  // owner-role pings
-  const roleIds = [...new Set(offices.map(o => o.owner_role_id).filter(Boolean))];
+  // Ping ONLY the office owners who are RIGHT NOW sitting in an office voice
+  // channel — the people who can actually bring the requester in this moment.
+  // Empty offices and offline owners are never pinged, so this no longer blasts
+  // every owner role into the channel (the buttons still let anyone act).
+  const ownerRoleIds = new Set(offices.map(o => o.owner_role_id).filter(Boolean));
+  const presentOwnerIds = new Set();
+  for (const o of offices) {
+    const vc = guild.channels.cache.get(o.channel_id);
+    if (!vc?.members) continue;
+    for (const m of vc.members.values()) {
+      if (m.user?.bot) continue;
+      if (m.roles?.cache?.some(r => ownerRoleIds.has(r.id))) presentOwnerIds.add(m.id);
+    }
+  }
+  const pingIds = [...presentOwnerIds];
   const rows = [];
   const btns = offices.slice(0, 20).map(o => new ButtonBuilder().setCustomId(`office_bring_${requestId}_${o.channel_id}`).setLabel(`Bring to ${o.channel_name || 'office'}`.slice(0, 80)).setStyle(ButtonStyle.Success));
   for (let i = 0; i < btns.length; i += 5) rows.push(new ActionRowBuilder().addComponents(btns.slice(i, i + 5)));
@@ -202,7 +215,7 @@ async function postWaitingRequest(client, guild, wrVc, requestId, requester, off
   const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('Office Access Request')
     .setDescription(`${E.announce} <@${requester.id}> is in the waiting room and would like to join an office.\n\nAn office owner can bring them into their office, or deny the request.`)
     .setFooter({ text: `Request #${requestId} • expires in 10 min` }).setTimestamp();
-  const msg = await target.send({ content: roleIds.length ? roleIds.map(r => `<@&${r}>`).join(' ') : undefined, embeds: [embed], components: rows, allowedMentions: { roles: roleIds } }).catch(() => null);
+  const msg = await target.send({ content: pingIds.length ? pingIds.map(u => `<@${u}>`).join(' ') : undefined, embeds: [embed], components: rows, allowedMentions: { users: pingIds } }).catch(() => null);
   if (msg) setRequestMessage(requestId, msg.id);
   setTimeout(async () => {
     const req = getRequest(requestId); if (!req || req.status !== 'pending') return;
