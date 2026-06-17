@@ -31,7 +31,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
     const perm = await canUseCommand('access', interaction);
     if (!perm.allowed) return interaction.reply({ content: `${X} ${perm.reason}`, ephemeral: true });
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply(); // public — all invites go via DM, so the panel needn't be ephemeral
     const message = interaction.options.getString('message');
     const target = interaction.options.getUser('member');
     try {
@@ -53,18 +53,24 @@ async function selfMenu(interaction) {
     const embed = await buildStatus(interaction, member);
     const components = [];
 
-    // Build the "request an invite" picker: missing required servers first, then on-request.
-    const missingMand = [];
-    for (const s of member.mandatory) if (!(await isInGuild(interaction.client, s.guildId, member.userId))) missingMand.push(s);
-    const grantedKeys = new Set(store.activeGrantsFor(member.userId).filter(g => g.kind === 'request').map(g => g.server_key));
-    const reqServers = member.request.filter(s => !grantedKeys.has(s.key));
-    const options = [
-        ...missingMand.map(s => ({ label: `${nm(s)} · required`.slice(0, 100), value: s.key, description: 'You\'re expected to be in this — no time limit', emoji: '⭐' })),
-        ...reqServers.map(s => ({ label: nm(s).slice(0, 100), value: s.key, description: 'On request — you\'ll set a reason & optional time limit' })),
-    ].slice(0, 25);
-    if (options.length) {
+    // Mandatory servers picker — only the servers required for THIS member.
+    if (member.mandatory.length) {
+        const opts = [];
+        for (const s of member.mandatory) {
+            const inIt = await isInGuild(interaction.client, s.guildId, member.userId);
+            opts.push({ label: nm(s).slice(0, 100), value: s.key, emoji: inIt ? '✅' : '⭐', description: (inIt ? 'You\'re in — no time limit' : 'Required — get your invite').slice(0, 100) });
+        }
         components.push(new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder().setCustomId('acc:pick').setPlaceholder('🎟️  Request an invite to a server…').addOptions(options)));
+            new StringSelectMenuBuilder().setCustomId('acc:pick:m').setPlaceholder('⭐  Mandatory servers — get an invite…').addOptions(opts.slice(0, 25))));
+    }
+
+    // Department servers picker — only the on-request servers THIS member can access.
+    const grantedKeys = new Set(store.activeGrantsFor(member.userId).filter(g => g.kind === 'request').map(g => g.server_key));
+    const dept = member.request.filter(s => s.kind === 'department' && !grantedKeys.has(s.key));
+    if (dept.length) {
+        components.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId('acc:pick:d').setPlaceholder('🏛️  Department servers — request an invite…')
+                .addOptions(dept.slice(0, 25).map(s => ({ label: nm(s).slice(0, 100), value: s.key, description: 'Set a reason & optional time limit' })))));
     }
 
     const btns = [new ButtonBuilder().setCustomId('acc:ask').setLabel('Type a request instead').setStyle(ButtonStyle.Secondary).setEmoji('💬')];
@@ -84,16 +90,23 @@ async function adminMenu(interaction, target) {
     const tm = { ...(await resolveMember(target.id)), userId: target.id };
     if (!tm.verified) return interaction.editReply({ content: `${X} <@${target.id}> isn't a verified network staff member.` });
 
-    const servers = [...tm.mandatory, ...tm.request].filter(s => !(s.kind === 'staff' && !(isNetAdmin(sender) || isFsaAdminRank(sender) || isSuper)));
+    const canStaff = isNetAdmin(sender) || isFsaAdminRank(sender) || isSuper;
+    const mand = tm.mandatory.filter(s => canStaff || s.kind !== 'staff');
+    const dept = tm.request.filter(s => s.kind === 'department');
     const embed = new EmbedBuilder().setColor(NAVY).setAuthor({ name: 'USGRP · Network Administration' })
         .setTitle(`🛠️  Manage access — ${target.username}`)
         .setDescription(`<@${target.id}> · **${tm.group}${tm.hasNA ? ' · NA' : ''}**\n\nPick a server to invite them to, or terminate them.`)
         .setFooter({ text: 'You\'ll add a reason on the next step' });
     const components = [];
-    if (servers.length) {
+    if (mand.length) {
         components.push(new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder().setCustomId(`acc:apick:${target.id}`).setPlaceholder('🎟️  Send them an invite to…')
-                .addOptions(servers.slice(0, 25).map(s => ({ label: nm(s).slice(0, 100), value: s.key })))));
+            new StringSelectMenuBuilder().setCustomId(`acc:apick:${target.id}:m`).setPlaceholder('⭐  Mandatory servers — send an invite…')
+                .addOptions(mand.slice(0, 25).map(s => ({ label: nm(s).slice(0, 100), value: s.key })))));
+    }
+    if (dept.length) {
+        components.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId(`acc:apick:${target.id}:d`).setPlaceholder('🏛️  Department servers — send an invite…')
+                .addOptions(dept.slice(0, 25).map(s => ({ label: nm(s).slice(0, 100), value: s.key })))));
     }
     const tbtn = [];
     if (isNetAdmin(sender) || isSuper) tbtn.push(new ButtonBuilder().setCustomId(`acc:atermbtn:${target.id}`).setLabel('Terminate').setStyle(ButtonStyle.Danger).setEmoji('🚫'));

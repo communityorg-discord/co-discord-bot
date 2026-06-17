@@ -142,7 +142,7 @@ export async function handleModal(interaction) {
     const parts = id.split(':');
 
     if (parts[1] === 'askmodal') {                   // plain-English ask from the menu
-        await interaction.deferReply({ ephemeral: true }).catch(() => {});
+        await interaction.deferReply().catch(() => {});
         const q = interaction.fields.getTextInputValue('q').trim();
         try { await selfFlow(interaction, q); } catch (e) { await interaction.editReply({ content: `${X} ${e.message}` }).catch(() => {}); }
         return true;
@@ -150,7 +150,7 @@ export async function handleModal(interaction) {
 
     if (parts[1] === 'reasonmodal' || parts[1] === 'areasonmodal') {
         const token = parts[2];
-        await interaction.deferReply({ ephemeral: true }).catch(() => {});
+        await interaction.deferReply().catch(() => {});
         const p = takePending(token);
         if (!p) return reply(interaction, `${X} That request expired — run \`/access\` again.`), true;
         const reason = interaction.fields.getTextInputValue('reason').trim();
@@ -176,7 +176,7 @@ export async function handleModal(interaction) {
 
     if (parts[1] === 'atermreason') {                // admin terminate: reason → confirm
         const targetId = parts[2];
-        await interaction.deferReply({ ephemeral: true }).catch(() => {});
+        await interaction.deferReply().catch(() => {});
         const sender = await resolveMember(interaction.user.id);
         const isSuper = (await canUseCommand('terminate', interaction)).allowed;
         if (!isNetAdmin(sender) && !isSuper) return reply(interaction, `${X} Only Network Administration may terminate members.`), true;
