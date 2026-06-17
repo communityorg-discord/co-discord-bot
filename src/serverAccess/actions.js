@@ -16,12 +16,12 @@ const DAY = 86400000;
 // Grant a member access to a server: make an invite, DM it, record the grant
 // (with optional time limit). kind 'mandatory' | 'request'.
 export async function grantAndInvite(client, { userId, server, kind = 'request', reason = null, durationDays = null, byId = null, byName = null }) {
-    const inv = await createInvite(client, server, { maxAgeSeconds: 0 });
+    const inv = await createInvite(client, server); // one-time use, 30-min link
     if (!inv.ok) return { ok: false, error: inv.error };
     const expiresAt = (kind !== 'mandatory' && durationDays) ? Date.now() + durationDays * DAY : null;
     store.upsertGrant({ discord_id: userId, guild_id: server.guildId, server_key: server.key, kind, reason, granted_by: byId, expires_at: expiresAt });
     const sent = await sendInviteDM(client, userId, { server, url: inv.url, reason, kind, expiresAt, byName });
-    store.logInvite({ discord_id: userId, guild_id: server.guildId, server_key: server.key, kind, reason, by_id: byId, code: inv.code });
+    store.logInvite({ discord_id: userId, guild_id: server.guildId, server_key: server.key, kind, reason, by_id: byId, code: inv.code, link_expires_at: inv.linkExpiresAt });
     return { ok: true, sent, url: inv.url, expiresAt };
 }
 

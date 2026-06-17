@@ -34,10 +34,10 @@ export async function runDailyMandatory(client) {
 
         const buttons = [];
         for (const srv of missing.slice(0, 5)) {
-            const inv = await createInvite(client, srv, { maxAgeSeconds: 0 });
+            const inv = await createInvite(client, srv); // one-time use, 30-min link
             if (!inv.ok) continue;
             store.upsertGrant({ discord_id: userId, guild_id: srv.guildId, server_key: srv.key, kind: 'mandatory', reason: 'Required network server' });
-            store.logInvite({ discord_id: userId, guild_id: srv.guildId, server_key: srv.key, kind: 'mandatory', reason: 'daily reminder', by_id: null, code: inv.code });
+            store.logInvite({ discord_id: userId, guild_id: srv.guildId, server_key: srv.key, kind: 'mandatory', reason: 'daily reminder', by_id: null, code: inv.code, link_expires_at: inv.linkExpiresAt });
             buttons.push(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(`Join ${short(srv.name)}`.slice(0, 80)).setURL(inv.url));
         }
         if (!buttons.length) continue;

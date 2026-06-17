@@ -29,8 +29,10 @@ db.exec(`
     reason      TEXT,
     by_id       TEXT,
     code        TEXT,
-    at          INTEGER NOT NULL
+    at          INTEGER NOT NULL,
+    link_expires_at INTEGER
   );
+  CREATE INDEX IF NOT EXISTS idx_na_invite_code ON na_invite_log(code);
 
   CREATE TABLE IF NOT EXISTS na_leavewatch (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,6 +53,8 @@ db.exec(`
     last_dm_at  INTEGER NOT NULL
   );
 `);
+// Back-fill the link-expiry column on an older table.
+try { db.exec(`ALTER TABLE na_invite_log ADD COLUMN link_expires_at INTEGER`); } catch { /* exists */ }
 
 const now = () => Date.now();
 
@@ -89,11 +93,26 @@ export function markWarned(id) {
     db.prepare(`UPDATE na_grants SET warned_at=? WHERE id=?`).run(now(), id);
 }
 
-// ── Invite log ───────────────────────────────────────────────────────────────
-export function logInvite({ discord_id, guild_id, server_key, kind, reason, by_id, code }) {
-    db.prepare(`INSERT INTO na_invite_log (discord_id, guild_id, server_key, kind, reason, by_id, code, at)
-                VALUES (?,?,?,?,?,?,?,?)`)
-        .run(String(discord_id), String(guild_id), server_key, kind, reason, by_id ? String(by_id) : null, code, now());
+// ── Invite log (who each invite code was sent to) ────────────────────────────
+export function logInvite({ discord_id, guild_id, server_key, kind, reason, by_id, code, link_expires_at = null }) {
+    db.prepare(`INSERT INTO na_invite_log (discord_id, guild_id, server_key, kind, reason, by_id, code, at, link_expires_at)
+                VALUES (?,?,?,?,?,?,?,?,?)`)
+        .run(String(discord_id), String(guild_id), server_key, kind, reason, by_id ? String(by_id) : null, code, now(), link_expires_at);
+}
+// Find the intended recipient of a specific invite code.
+export function inviteRecipient(code) {
+    return db.prepare(`SELECT discord_id FROM na_invite_log WHERE code=? ORDER BY at DESC LIMIT 1`).get(String(code))?.discord_id || null;
+}
+// A tracked invite for this guild that is STILL within its link-expiry window
+// (so it can't have aged out) but is no longer present in the guild's invite
+// list → it was CONSUMED. Returns { code, discord_id } of the most recent such
+// invite (i.e. the one the joining member used), or null.
+export function consumedInvite(guild_id, presentCodes, nowMs) {
+    const rows = db.prepare(`SELECT code, discord_id FROM na_invite_log
+        WHERE guild_id=? AND link_expires_at IS NOT NULL AND link_expires_at > ?
+        ORDER BY at DESC`).all(String(guild_id), nowMs);
+    for (const r of rows) if (!presentCodes.has(r.code)) return r;
+    return null;
 }
 
 // ── Leave watch ──────────────────────────────────────────────────────────────

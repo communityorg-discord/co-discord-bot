@@ -5,7 +5,7 @@
 //   • guildMemberAdd    — resolve an open leave-watch when they rejoin
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder } from 'discord.js';
 import { resolveMember } from './core.js';
-import { SERVER_BY_KEY, SERVER_BY_GUILD, accessLevel, DIVISION_OPS_CHANNEL } from './matrix.js';
+import { SERVER_BY_KEY, SERVER_BY_GUILD, accessLevel, DIVISION_OPS_CHANNEL, FSA_OPS_CHANNEL } from './matrix.js';
 import { grantAndInvite, requestExtension } from './actions.js';
 import { putPending, takePending, peekPending } from './state.js';
 import * as store from './store.js';
@@ -251,7 +251,35 @@ export async function onMemberRemove(member) {
 export async function onMemberAdd(member) {
     try {
         const guildId = String(member.guild?.id || '');
-        if (!SERVER_BY_GUILD[guildId] || member.user?.bot) return;
-        store.resolveLeaveWatch(String(member.id), guildId);
+        const server = SERVER_BY_GUILD[guildId];
+        if (!server || member.user?.bot) return;
+        store.resolveLeaveWatch(String(member.id), guildId);   // they're back — close any watch
+
+        // Invite-gating — the public main server is exempt. Each invite we issue
+        // is one-time-use, 30 min, and tied to one person. If someone joins using
+        // a (still-in-window) invite that was sent to a DIFFERENT member, kick them.
+        if (server.kind === 'main') return;
+        let present;
+        try { const invs = await member.guild.invites.fetch(); present = new Set(invs.map(i => i.code)); }
+        catch { return; }                                       // can't read invites — don't punish
+        const consumed = store.consumedInvite(guildId, present, Date.now());
+        if (!consumed) return;                                  // joined via an untracked invite (verification/manual) — allowed
+        if (String(consumed.discord_id) === String(member.id)) return; // the intended recipient — fine
+        await member.kick(`Used an invite issued to ${consumed.discord_id}, not them`).catch(() => {});
+        await alertInviteMisuse(member, server, consumed);
     } catch (e) { console.error('[access onMemberAdd]', e.message); }
+}
+
+async function alertInviteMisuse(member, server, consumed) {
+    try {
+        await member.user.send({ embeds: [new EmbedBuilder().setColor(0xB91C1C).setAuthor({ name: 'USGRP · Network Administration' })
+            .setTitle('You were removed')
+            .setDescription(`You joined **${nm(server)}** using an invite that was issued to someone else. Network servers are invite-only and every invite is for one specific person, so you've been removed. If you genuinely need access, ask the relevant administrator to send you your own invite.`)
+            .setTimestamp()] });
+    } catch { /* dms closed */ }
+    const ch = await member.client.channels.fetch(FSA_OPS_CHANNEL).catch(() => null);
+    if (ch) await ch.send({ embeds: [new EmbedBuilder().setColor(0xB45309).setAuthor({ name: 'USGRP · Network Administration' })
+        .setTitle('🚨 Invite misuse — member auto-removed')
+        .setDescription(`<@${member.id}> (\`${member.id}\`) joined **${nm(server)}** using an invite that had been issued to <@${consumed.discord_id}>.\n\nEach invite is one-time-use and tied to one person, so the account was kicked automatically.`)
+        .setTimestamp()] }).catch(() => {});
 }

@@ -58,15 +58,19 @@ async function inviteChannel(guild) {
     return text[0] || null;
 }
 
-// Create a unique invite for a server. maxAgeSeconds 0 = never expires.
-export async function createInvite(client, server, { maxAgeSeconds = 0, maxUses = 0 } = {}) {
+// Create a unique invite for a server. Default: ONE-TIME USE, expires in 30
+// minutes (Discord-standard maxAge/maxUses) — so a link only ever admits the one
+// person it was sent to, and goes stale fast.
+export const INVITE_MAX_AGE = 1800;  // 30 minutes
+export const INVITE_MAX_USES = 1;    // one-time use
+export async function createInvite(client, server, { maxAgeSeconds = INVITE_MAX_AGE, maxUses = INVITE_MAX_USES } = {}) {
     const guild = guildOf(client, server.guildId);
     if (!guild) return { ok: false, error: 'The bot is not in that server.' };
     const ch = await inviteChannel(guild);
     if (!ch) return { ok: false, error: 'No channel available to make an invite.' };
     const inv = await ch.createInvite({ maxAge: maxAgeSeconds, maxUses, unique: true, reason: 'USGRP network access' }).catch((e) => ({ _err: e?.message }));
     if (!inv || inv._err) return { ok: false, error: inv?._err || 'Could not create an invite.' };
-    return { ok: true, code: inv.code, url: `https://discord.gg/${inv.code}` };
+    return { ok: true, code: inv.code, url: `https://discord.gg/${inv.code}`, linkExpiresAt: maxAgeSeconds ? Date.now() + maxAgeSeconds * 1000 : null };
 }
 
 // ── The designed invite DM ───────────────────────────────────────────────────
@@ -98,6 +102,7 @@ export async function sendInviteDM(client, userId, { server, url, reason, kind, 
         lines.push(`**Time limit:** none — you can stay as long as you need.`);
     }
     if (byName) lines.push(`\n*Invited by ${byName}.*`);
+    lines.push(`\n⏳ *This invite is **one-time use** and **expires in 30 minutes** — please join soon. It's tied to you; if anyone else uses it they'll be removed.*`);
     e.setDescription(lines.join('\n'));
     e.setFooter({ text: 'USGRP Network Administration · this invite is for you only' });
 
