@@ -49,6 +49,11 @@ export function logIcon(action = '', color) {
 // place so adding a new superuser auto-grants log DMs without two edits.
 const WATCHED_LOG_USER_IDS = SUPERUSER_IDS;
 
+// Log types that are channel-only — never DM'd to the watched audience because
+// they fire in high-volume bursts (routine membership churn). They still land
+// in their role-management log channels via the USGRP | Logs routing.
+const DM_SUPPRESSED_TYPES = new Set(['member_role_add', 'member_role_remove']);
+
 export async function sendToWatchedUsers(client, embed) {
   // Route the admin-log DM through the central USGRP | Logs bot so these stop
   // clogging CO Utilities' own DMs. Fall back to a direct DM only if the Logs
@@ -166,8 +171,12 @@ export async function logEvent(client, { embed, category, type, guildId, extraCh
   };
   for (const c of extraChannels) await sendTo(c);
   if (category && type) for (const c of getLogChannelsForEvent(guildId || '', category, type)) await sendTo(c);
-  // The guarantee — always DM the watched audience.
-  await sendToWatchedUsers(client, embed);
+  // DM the watched audience — but NOT for high-volume routine churn. Member
+  // role add/remove fire in bursts (mass syncs, bulk grants) and belong in the
+  // role-management log channels, not the founders' DMs. Everything else
+  // (moderation, security, verification) still pings them via the USGRP | Logs
+  // bot. Keeps real alerts visible without the role-add flood.
+  if (!DM_SUPPRESSED_TYPES.has(type)) await sendToWatchedUsers(client, embed);
 }
 
 export async function logAction(client, {
