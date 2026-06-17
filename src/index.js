@@ -2486,6 +2486,12 @@ client.on('interactionCreate', async interaction => {
   }
 
   // String select menu handlers
+  // USGRP network access — member picker (user-select menu)
+  if (interaction.isUserSelectMenu() && interaction.customId?.startsWith('acc:')) {
+    try { if (await accessEvents.handleSelect(interaction)) return; } catch (e) { console.error('[access user-select]', e.message); }
+    return;
+  }
+
   if (interaction.isStringSelectMenu()) {
     // CO Utilities hub (/panel) — "Go to…" nav + subcommand pickers
     if (interaction.customId?.startsWith('copanel:')) { try { if (await coPanel.handleSelect(interaction)) return; } catch (e) { console.error('[coPanel select]', e.message); } return; }

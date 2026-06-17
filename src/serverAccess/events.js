@@ -3,14 +3,14 @@
 //     capture, terminate, extend, plain-English ask)
 //   • guildMemberRemove — leave detection (flag supervisor, start 24h watch)
 //   • guildMemberAdd    — resolve an open leave-watch when they rejoin
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder } from 'discord.js';
 import { resolveMember } from './core.js';
 import { SERVER_BY_KEY, SERVER_BY_GUILD, accessLevel, DIVISION_OPS_CHANNEL } from './matrix.js';
 import { grantAndInvite, requestExtension } from './actions.js';
 import { putPending, takePending, peekPending } from './state.js';
 import * as store from './store.js';
 import { canUseCommand } from '../utils/permissions.js';
-import { selfFlow } from '../commands/access.js';
+import { selfFlow, adminMenuPayload } from '../commands/access.js';
 
 const X = '❌', OK = '✅';
 const nm = (s) => s ? s.name.replace(/^USGRP \| /, '') : '';
@@ -49,6 +49,18 @@ export async function handleSelect(interaction) {
         return true;
     }
 
+    if (parts[1] === 'auser') {                      // admin: picked which member to manage
+        const sender = await resolveMember(interaction.user.id);
+        const isSuper = (await canUseCommand('terminate', interaction)).allowed;
+        if (!isNetAdmin(sender) && !isFsaAdminRank(sender) && !isSuper) { await interaction.update({ content: `${X} Not authorised.`, embeds: [], components: [] }).catch(() => {}); return true; }
+        const target = await interaction.client.users.fetch(interaction.values?.[0]).catch(() => null);
+        if (!target) { await interaction.deferUpdate().catch(() => {}); return true; }
+        await interaction.deferUpdate().catch(() => {});
+        const payload = await adminMenuPayload(interaction, target);
+        await interaction.editReply({ content: payload.content || '', embeds: payload.embeds || [], components: payload.components || [] });
+        return true;
+    }
+
     if (parts[1] === 'apick') {                      // admin: invite picked server to a target
         const targetId = parts[2];
         const key = interaction.values?.[0];
@@ -69,6 +81,16 @@ export async function handleButton(interaction) {
     const id = interaction.customId;
     if (!id.startsWith('acc:')) return false;
     const [, action, token, verb] = id.split(':');
+
+    if (action === 'adminpick') {                    // panel: "Manage another member" → user picker
+        const sender = await resolveMember(interaction.user.id);
+        const isSuper = (await canUseCommand('terminate', interaction)).allowed;
+        if (!isNetAdmin(sender) && !isFsaAdminRank(sender) && !isSuper) return reply(interaction, `${X} Only Network Administration may manage other members.`), true;
+        await interaction.deferUpdate().catch(() => {});
+        const row = new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('acc:auser').setPlaceholder('Pick a member to manage…').setMaxValues(1));
+        await interaction.editReply({ content: '🛠️ **Manage another member** — pick who:', embeds: [], components: [row] });
+        return true;
+    }
 
     if (action === 'ask') {                          // menu: "type a request instead"
         const modal = new ModalBuilder().setCustomId('acc:askmodal').setTitle('Tell me what you need').addComponents(

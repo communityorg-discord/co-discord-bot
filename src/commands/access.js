@@ -9,7 +9,7 @@ import { canUseCommand } from '../utils/permissions.js';
 import { resolveMember, isInGuild } from '../serverAccess/core.js';
 import { SERVER_BY_KEY, accessLevel } from '../serverAccess/matrix.js';
 import { grantAndInvite, requestExtension } from '../serverAccess/actions.js';
-import { parseAccessIntent, parseAdminIntent, aiAvailable } from '../serverAccess/ai.js';
+import { parseAccessIntent, aiAvailable } from '../serverAccess/ai.js';
 import { putPending } from '../serverAccess/state.js';
 import * as store from '../serverAccess/store.js';
 
@@ -22,24 +22,14 @@ const isFsaAdminRank = (m) => /^FSA (Head |Senior )?Administrator$/i.test(m?.rec
 
 export const data = new SlashCommandBuilder()
     .setName('access')
-    .setDescription('USGRP network server access — open the menu, or just say what you need')
-    .addStringOption(o => o.setName('message').setRequired(false)
-        .setDescription('Optional: say it in plain English, e.g. "invite me to the Treasury for 3 days"'))
-    .addUserOption(o => o.setName('member')
-        .setDescription('(Network Admin) the member to invite or terminate'));
+    .setDescription('USGRP network server access — request invites, set time limits, manage members');
 
 export async function execute(interaction) {
     const perm = await canUseCommand('access', interaction);
     if (!perm.allowed) return interaction.reply({ content: `${X} ${perm.reason}`, ephemeral: true });
     await interaction.deferReply(); // public — all invites go via DM, so the panel needn't be ephemeral
-    const message = interaction.options.getString('message');
-    const target = interaction.options.getUser('member');
     try {
-        if (message) {
-            if (!aiAvailable()) return interaction.editReply({ content: `${X} The plain-English assistant isn't available right now — run \`/access\` without text to use the menu.` });
-            return target ? await adminFlow(interaction, message, target) : await selfFlow(interaction, message);
-        }
-        return target ? await adminMenu(interaction, target) : await selfMenu(interaction);
+        return await selfMenu(interaction);
     } catch (e) {
         return interaction.editReply({ content: `${X} Something went wrong: ${e.message}` });
     }
@@ -80,18 +70,23 @@ async function selfMenu(interaction) {
     if (store.activeGrantsFor(member.userId).some(g => g.expires_at)) {
         btns.push(new ButtonBuilder().setCustomId('acc:ext').setLabel('Extend my access').setStyle(ButtonStyle.Secondary).setEmoji('⏳'));
     }
+    // Network Admin tools live in the panel, shown only to those who can use them.
+    const isSuper = (await canUseCommand('terminate', interaction)).allowed;
+    if (isNetAdmin(member) || isFsaAdminRank(member) || isSuper) {
+        btns.push(new ButtonBuilder().setCustomId('acc:adminpick').setLabel('Manage another member').setStyle(ButtonStyle.Secondary).setEmoji('🛠️'));
+    }
     components.push(new ActionRowBuilder().addComponents(btns));
     return interaction.editReply({ embeds: [embed], components });
 }
 
-async function adminMenu(interaction, target) {
+// Build the admin "manage a member" panel — returns { embeds, components } or
+// { content } (error/denied). Used by the user-picker in the panel.
+export async function adminMenuPayload(interaction, target) {
     const sender = await resolveMember(interaction.user.id);
     const isSuper = (await canUseCommand('terminate', interaction)).allowed;
-    if (!isNetAdmin(sender) && !isFsaAdminRank(sender) && !isSuper) {
-        return interaction.editReply({ content: `${X} Only Network Administration may run access actions on other members.` });
-    }
+    if (!isNetAdmin(sender) && !isFsaAdminRank(sender) && !isSuper) return { content: `${X} Only Network Administration may run access actions on other members.` };
     const tm = { ...(await resolveMember(target.id)), userId: target.id };
-    if (!tm.verified) return interaction.editReply({ content: `${X} <@${target.id}> isn't a verified network staff member.` });
+    if (!tm.verified) return { content: `${X} <@${target.id}> isn't a verified network staff member.` };
 
     // Only offer servers the target isn't already in.
     const canStaff = isNetAdmin(sender) || isFsaAdminRank(sender) || isSuper;
@@ -116,7 +111,7 @@ async function adminMenu(interaction, target) {
     const tbtn = [];
     if (isNetAdmin(sender) || isSuper) tbtn.push(new ButtonBuilder().setCustomId(`acc:atermbtn:${target.id}`).setLabel('Terminate').setStyle(ButtonStyle.Danger).setEmoji('🚫'));
     if (tbtn.length) components.push(new ActionRowBuilder().addComponents(tbtn));
-    return interaction.editReply({ embeds: [embed], components });
+    return { embeds: [embed], components };
 }
 
 // ── Self-service ─────────────────────────────────────────────────────────────
@@ -157,53 +152,6 @@ export async function selfFlow(interaction, message) {
 }
 
 // ── Admin (member option set) ────────────────────────────────────────────────
-async function adminFlow(interaction, message, target) {
-    const sender = await resolveMember(interaction.user.id);
-    const isSuper = (await canUseCommand('terminate', interaction)).allowed;
-    if (!isNetAdmin(sender) && !isFsaAdminRank(sender) && !isSuper) {
-        return interaction.editReply({ content: `${X} Only Network Administration may run access actions on other members.` });
-    }
-    const tm = { ...(await resolveMember(target.id)), userId: target.id };
-    if (!tm.verified) return interaction.editReply({ content: `${X} <@${target.id}> isn't a verified network staff member.` });
-
-    const targetServers = [...tm.request, ...tm.mandatory].map(s => ({ key: s.key, name: s.name }));
-    const intent = await parseAdminIntent(message, { targetServers }).catch(() => ({ action: 'unknown' }));
-
-    if (intent.action === 'terminate') {
-        if (!isNetAdmin(sender) && !isSuper) return interaction.editReply({ content: `${X} Only Network Administration may terminate members.` });
-        const token = putPending({ kind: 'terminate', userId: target.id, reason: intent.reason || 'No reason provided', byId: interaction.user.id, byName: interaction.user.username });
-        const e = new EmbedBuilder().setColor(0xB91C1C).setAuthor({ name: 'USGRP · Network Administration' })
-            .setTitle('🚫  Confirm termination')
-            .setDescription(`This will **kick <@${target.id}> from the Network Staff Hub, DevOps and every department server**, strip their verified roles in the main server, remove them from the network verified list (so they won't get roles back on rejoin), and log it.`)
-            .addFields({ name: 'Reason', value: (intent.reason || 'No reason provided').slice(0, 1024) })
-            .setFooter({ text: 'This cannot be undone automatically.' });
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`acc:term:${token}:yes`).setLabel('Terminate').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId(`acc:term:${token}:no`).setLabel('Cancel').setStyle(ButtonStyle.Secondary));
-        return interaction.editReply({ embeds: [e], components: [row] });
-    }
-
-    if (intent.action === 'send') {
-        const server = intent.server_key ? SERVER_BY_KEY[intent.server_key] : null;
-        if (!server || server.manual) return interaction.editReply({ content: `${X} I couldn't match that to a server <@${target.id}> can be invited to. They can be invited to: ${targetServers.map(s => s.name.replace(/^USGRP \| /, '')).join(', ') || '(none)'}.` });
-        const lvl = accessLevel(server, tm.buckets);
-        if (lvl === 'none') return interaction.editReply({ content: `${X} <@${target.id}>'s role doesn't have access to **${nm(server)}**.` });
-        if (server.kind === 'staff' && !(isNetAdmin(sender) || isFsaAdminRank(sender) || isSuper)) {
-            return interaction.editReply({ content: `${X} Only an FSA Administrator (or above) may send Network Staff Hub invites.` });
-        }
-        if (!intent.reason) return interaction.editReply({ content: `${X} You must give a reason — e.g. *"invite them to the Treasury for 3 days **because** they're covering an audit"*.` });
-        const r = await grantAndInvite(interaction.client, {
-            userId: target.id, server, kind: lvl === 'mandatory' ? 'mandatory' : 'request',
-            reason: intent.reason, durationDays: lvl === 'mandatory' ? null : (intent.no_limit ? null : intent.duration_days),
-            byId: interaction.user.id, byName: interaction.user.username,
-        });
-        if (!r.ok) return interaction.editReply({ content: `${X} ${r.error}` });
-        return interaction.editReply({ content: `${OK} Invite to **${nm(server)}** sent to <@${target.id}>${r.expiresAt ? ` (expires <t:${Math.floor(r.expiresAt / 1000)}:R>)` : ' (no time limit)'}.${r.sent ? '' : ' *(They have DMs closed — they didn\'t receive it.)*'}` });
-    }
-
-    return interaction.editReply({ content: `🤔 With <@${target.id}> selected I can **send them an invite** (*"invite them to the Treasury for 3 days because …"*) or **terminate** them (*"terminate them — repeated misconduct"*). What would you like to do?` });
-}
-
 // ── Shared bits ──────────────────────────────────────────────────────────────
 async function buildStatus(interaction, member, { compact = false, mandStatus = null, deptNotIn = null } = {}) {
     const client = interaction.client;
