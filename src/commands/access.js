@@ -61,11 +61,12 @@ async function selfMenu(interaction) {
     const embed = await buildStatus(interaction, member, { compact: true, mandStatus, deptNotIn });
     const components = [];
 
-    // Mandatory servers picker — only servers required for THIS member.
-    if (mandStatus.length) {
+    // Mandatory servers picker — only required servers this member ISN'T in yet.
+    const mandMissing = mandStatus.filter(m => !m.inIt);
+    if (mandMissing.length) {
         components.push(new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('acc:pick:m').setPlaceholder('⭐  Mandatory servers — get an invite…')
-                .addOptions(mandStatus.slice(0, 25).map(({ s, inIt }) => ({ label: nm(s).slice(0, 100), value: s.key, emoji: inIt ? '✅' : '⭐', description: (inIt ? 'You\'re in — no time limit' : 'Required — get your invite').slice(0, 100) })))));
+                .addOptions(mandMissing.slice(0, 25).map(({ s }) => ({ label: nm(s).slice(0, 100), value: s.key, emoji: '⭐', description: 'Required — get your invite' })))));
     }
 
     // Department servers picker — only on-request servers this member can access AND isn't already in.
@@ -92,12 +93,14 @@ async function adminMenu(interaction, target) {
     const tm = { ...(await resolveMember(target.id)), userId: target.id };
     if (!tm.verified) return interaction.editReply({ content: `${X} <@${target.id}> isn't a verified network staff member.` });
 
+    // Only offer servers the target isn't already in.
     const canStaff = isNetAdmin(sender) || isFsaAdminRank(sender) || isSuper;
-    const mand = tm.mandatory.filter(s => canStaff || s.kind !== 'staff');
-    const dept = tm.request.filter(s => s.kind === 'department');
+    const mand = [], dept = [];
+    for (const s of tm.mandatory.filter(s => canStaff || s.kind !== 'staff')) if (!(await isInGuild(interaction.client, s.guildId, target.id))) mand.push(s);
+    for (const s of tm.request.filter(s => s.kind === 'department')) if (!(await isInGuild(interaction.client, s.guildId, target.id))) dept.push(s);
     const embed = new EmbedBuilder().setColor(NAVY).setAuthor({ name: 'USGRP · Network Administration' })
         .setTitle(`🛠️  Manage access — ${target.username}`)
-        .setDescription(`<@${target.id}> · **${tm.group}${tm.hasNA ? ' · NA' : ''}**\n\nPick a server to invite them to, or terminate them.`)
+        .setDescription(`<@${target.id}> · **${tm.group}${tm.hasNA ? ' · NA' : ''}**\n\n${mand.length || dept.length ? 'Pick a server to invite them to, or terminate them.' : 'They\'re already in every server they can access. You can still terminate them below.'}`)
         .setFooter({ text: 'You\'ll add a reason on the next step' });
     const components = [];
     if (mand.length) {
