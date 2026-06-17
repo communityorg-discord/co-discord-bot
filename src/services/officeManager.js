@@ -190,39 +190,85 @@ export async function handleWaitingRoomJoin(client, voiceState) {
   await postWaitingRequest(client, guild, wrVc, requestId, member, offices);
 }
 
+// Members sitting in an office's voice channel RIGHT NOW who could approve a
+// request (own it / superuser / higher rank / key). These are who we ping.
+function presentApprovers(guild, office) {
+  const vc = guild.channels?.cache?.get(office.channel_id);
+  if (!vc?.members) return [];
+  const ids = [];
+  for (const m of vc.members.values()) {
+    if (m.user?.bot) continue;
+    if (canAccessOffice(m, office)) ids.push(m.id);
+  }
+  return [...new Set(ids)];
+}
+
+// The actionable Allow / Deny card for ONE office, pinging that office's present
+// owner(s). Used for the single-office case and after the requester picks.
+async function postOfficeCard(target, requestId, requesterId, office, pingIds) {
+  const ids = [...new Set(pingIds || [])];
+  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('Office Access Request')
+    .setDescription(`${E.announce} <@${requesterId}> would like to join **${office.channel_name || 'your office'}**.\n\nAllow them in, or deny the request.`)
+    .setFooter({ text: `Request #${requestId} • expires in 10 min` }).setTimestamp();
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`office_bring_${requestId}_${office.channel_id}`).setLabel('Allow').setStyle(ButtonStyle.Success).setEmoji('✅'),
+    new ButtonBuilder().setCustomId(`office_deny_${requestId}`).setLabel('Deny').setStyle(ButtonStyle.Danger).setEmoji('❌'),
+  );
+  const msg = await target.send({ content: ids.length ? ids.map(u => `<@${u}>`).join(' ') : undefined, embeds: [embed], components: [row], allowedMentions: { users: ids } }).catch(() => null);
+  if (msg) setRequestMessage(requestId, msg.id);
+  return msg;
+}
+
 async function postWaitingRequest(client, guild, wrVc, requestId, requester, offices) {
   const target = wrVc || (getRequestFeed(guild.id) && guild.channels.cache.get(getRequestFeed(guild.id)));
   if (!target?.send) return;
-  // Ping ONLY the office owners who are RIGHT NOW sitting in an office voice
-  // channel — the people who can actually bring the requester in this moment.
-  // Empty offices and offline owners are never pinged, so this no longer blasts
-  // every owner role into the channel (the buttons still let anyone act).
-  const ownerRoleIds = new Set(offices.map(o => o.owner_role_id).filter(Boolean));
-  const presentOwnerIds = new Set();
+
+  // Only the offices actually IN USE — i.e. an owner who could approve is sitting
+  // in them right now. Empty offices and offline owners are never shown or pinged.
+  const occupied = [];
   for (const o of offices) {
-    const vc = guild.channels.cache.get(o.channel_id);
-    if (!vc?.members) continue;
-    for (const m of vc.members.values()) {
-      if (m.user?.bot) continue;
-      if (m.roles?.cache?.some(r => ownerRoleIds.has(r.id))) presentOwnerIds.add(m.id);
-    }
+    const approvers = presentApprovers(guild, o);
+    if (approvers.length) occupied.push({ office: o, approvers });
   }
-  const pingIds = [...presentOwnerIds];
-  const rows = [];
-  const btns = offices.slice(0, 20).map(o => new ButtonBuilder().setCustomId(`office_bring_${requestId}_${o.channel_id}`).setLabel(`Bring to ${o.channel_name || 'office'}`.slice(0, 80)).setStyle(ButtonStyle.Success));
-  for (let i = 0; i < btns.length; i += 5) rows.push(new ActionRowBuilder().addComponents(btns.slice(i, i + 5)));
-  rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`office_deny_${requestId}`).setLabel('Deny').setStyle(ButtonStyle.Danger).setEmoji('❌')));
-  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('Office Access Request')
-    .setDescription(`${E.announce} <@${requester.id}> is in the waiting room and would like to join an office.\n\nAn office owner can bring them into their office, or deny the request.`)
-    .setFooter({ text: `Request #${requestId} • expires in 10 min` }).setTimestamp();
-  const msg = await target.send({ content: pingIds.length ? pingIds.map(u => `<@${u}>`).join(' ') : undefined, embeds: [embed], components: rows, allowedMentions: { users: pingIds } }).catch(() => null);
-  if (msg) setRequestMessage(requestId, msg.id);
+
+  if (occupied.length === 1) {
+    // One office staffed → straight to Allow / Deny, pinging just its owner(s).
+    await postOfficeCard(target, requestId, requester.id, occupied[0].office, occupied[0].approvers);
+  } else if (occupied.length > 1) {
+    // Several staffed → ask the REQUESTER which one they want to join first.
+    const btns = occupied.slice(0, 20).map(({ office }) =>
+      new ButtonBuilder().setCustomId(`office_choose_${requestId}_${office.channel_id}`).setLabel((office.channel_name || 'Office').slice(0, 80)).setStyle(ButtonStyle.Primary));
+    const rows = [];
+    for (let i = 0; i < btns.length; i += 5) rows.push(new ActionRowBuilder().addComponents(btns.slice(i, i + 5)));
+    const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('Which office?')
+      .setDescription(`${E.announce} <@${requester.id}> — a few offices are open. Pick the one you're requesting to join and its owner will be asked to let you in.`)
+      .setFooter({ text: `Request #${requestId} • expires in 10 min` }).setTimestamp();
+    const msg = await target.send({ content: `<@${requester.id}>`, embeds: [embed], components: rows, allowedMentions: { users: [requester.id] } }).catch(() => null);
+    if (msg) setRequestMessage(requestId, msg.id);
+  } else {
+    // Nothing staffed → still post so an owner who shows up can act, but ping
+    // no-one (the old behaviour blasted every office-owner role into the channel).
+    const btns = offices.slice(0, 20).map(o => new ButtonBuilder().setCustomId(`office_bring_${requestId}_${o.channel_id}`).setLabel(`Bring to ${o.channel_name || 'office'}`.slice(0, 80)).setStyle(ButtonStyle.Success));
+    const rows = [];
+    for (let i = 0; i < btns.length; i += 5) rows.push(new ActionRowBuilder().addComponents(btns.slice(i, i + 5)));
+    rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`office_deny_${requestId}`).setLabel('Deny').setStyle(ButtonStyle.Danger).setEmoji('❌')));
+    const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('Office Access Request')
+      .setDescription(`${E.announce} <@${requester.id}> is in the waiting room and would like to join an office.\n\nNo office is staffed right now — an owner can bring them in, or deny.`)
+      .setFooter({ text: `Request #${requestId} • expires in 10 min` }).setTimestamp();
+    const msg = await target.send({ embeds: [embed], components: rows }).catch(() => null);
+    if (msg) setRequestMessage(requestId, msg.id);
+  }
+
+  // ONE expiry timer — always acts on the request's CURRENT message (it may move
+  // from the "which office?" picker to the Allow/Deny card after a pick).
   setTimeout(async () => {
     const req = getRequest(requestId); if (!req || req.status !== 'pending') return;
     resolveRequest(requestId, 'expired', null, null);
-    if (msg) { const m = await target.messages.fetch(msg.id).catch(() => null); if (m) await m.edit({ embeds: [EmbedBuilder.from(m.embeds[0] || embed).setColor(0x6b7280).setTitle('Request expired')], components: [], content: null }).catch(() => {}); }
+    if (req.feed_message_id) {
+      const m = await target.messages.fetch(req.feed_message_id).catch(() => null);
+      if (m) { const base = m.embeds[0] ? EmbedBuilder.from(m.embeds[0]) : new EmbedBuilder(); await m.edit({ embeds: [base.setColor(0x6b7280).setTitle('Request expired')], components: [], content: null }).catch(() => {}); }
+    }
   }, REQUEST_TIMEOUT_MS);
-  return msg;
 }
 
 export async function handleWaitingRoomLeave(client, voiceState) {
@@ -245,6 +291,23 @@ export async function handleButton(interaction, client) {
     if (!member.voice.channelId) return interaction.reply({ content: `${E.cross} Join the waiting room first, then pick an office.`, flags: 64 }).catch(() => {});
     await moveInto(member, office, 'self-select');
     return interaction.reply({ content: `${E.check} Taking you into **${office.channel_name}**.`, flags: 64 }).catch(() => {});
+  }
+
+  // Requester picks which staffed office they're requesting → fire the Allow/Deny
+  // card to that office's present owner(s). Only the requester can pick.
+  if (id.startsWith('office_choose_')) {
+    const rest = id.slice('office_choose_'.length); const sep = rest.indexOf('_');
+    const requestId = parseInt(rest.slice(0, sep)); const officeChannelId = rest.slice(sep + 1);
+    const req = getRequest(requestId);
+    if (!req || req.status !== 'pending') return interaction.reply({ content: 'This request is no longer open.', flags: 64 }).catch(() => {});
+    if (String(req.requester_id) !== String(interaction.user.id)) return interaction.reply({ content: `Only <@${req.requester_id}> can choose here.`, flags: 64 }).catch(() => {});
+    const office = getOffice(officeChannelId);
+    if (!office) return interaction.reply({ content: `${E.cross} That office is no longer configured.`, flags: 64 }).catch(() => {});
+    const approvers = presentApprovers(interaction.guild, office);
+    if (!approvers.length) return interaction.reply({ content: `${E.cross} No one's in **${office.channel_name}** anymore — pick another office.`, flags: 64 }).catch(() => {});
+    await interaction.update({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Requested').setDescription(`${E.check} You asked to join **${office.channel_name}** — its owner has been notified.`)], components: [], content: null }).catch(() => {});
+    await postOfficeCard(interaction.channel, requestId, req.requester_id, office, approvers);
+    return;
   }
 
   if (id.startsWith('office_deny_')) return resolveDeny(interaction, client, parseInt(id.replace('office_deny_', '')));
