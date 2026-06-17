@@ -4,15 +4,16 @@
 //   • guildMemberRemove — leave detection (flag supervisor, start 24h watch)
 //   • guildMemberAdd    — resolve an open leave-watch when they rejoin
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder } from 'discord.js';
-import { resolveMember } from './core.js';
+import { resolveMember, isInGuild } from './core.js';
 import { SERVER_BY_KEY, SERVER_BY_GUILD, accessLevel, DIVISION_OPS_CHANNEL, FSA_OPS_CHANNEL } from './matrix.js';
 import { grantAndInvite, requestExtension } from './actions.js';
 import { putPending, takePending, peekPending } from './state.js';
 import * as store from './store.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { selfFlow, adminMenuPayload } from '../commands/access.js';
+import { E, ce } from '../lib/emoji.js';
 
-const X = '❌', OK = '✅';
+const X = E.cross, OK = E.check;
 const nm = (s) => s ? s.name.replace(/^USGRP \| /, '') : '';
 const isNetAdmin = (m) => !!m?.hasNA;
 const isFsaAdminRank = (m) => /^FSA (Head |Senior )?Administrator$/i.test(m?.rec?.position || '');
@@ -88,8 +89,45 @@ export async function handleButton(interaction) {
         if (!isNetAdmin(sender) && !isFsaAdminRank(sender) && !isSuper) return reply(interaction, `${X} Only Network Administration may manage other members.`), true;
         await interaction.deferUpdate().catch(() => {});
         const row = new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('acc:auser').setPlaceholder('Pick a member to manage…').setMaxValues(1));
-        await interaction.editReply({ content: '🛠️ **Manage another member** — pick who:', embeds: [], components: [row] });
+        await interaction.editReply({ content: `${E.member} **Manage another member** — pick who:`, embeds: [], components: [row] });
         return true;
+    }
+
+    if (action === 'aforce' || action === 'arefresh') {   // admin: force-send all missing / refresh statuses
+        const targetId = token;                           // parts[2]
+        const sender = await resolveMember(interaction.user.id);
+        const isSuper = (await canUseCommand('terminate', interaction)).allowed;
+        const canStaff = isNetAdmin(sender) || isFsaAdminRank(sender) || isSuper;
+        if (!canStaff) return reply(interaction, `${X} Only Network Administration may manage other members.`), true;
+        await interaction.deferUpdate().catch(() => {});
+        const target = await interaction.client.users.fetch(targetId).catch(() => null);
+        if (!target) return reply(interaction, `${X} Couldn't find that member.`), true;
+
+        if (action === 'arefresh') {                      // just re-render the panel with fresh membership
+            const payload = await adminMenuPayload(interaction, target);
+            await interaction.editReply({ content: payload.content || '', embeds: payload.embeds || [], components: payload.components || [] });
+            return true;
+        }
+
+        // Force-send: DM every server they should/can be in but aren't.
+        const tm = { ...(await resolveMember(targetId)), userId: targetId };
+        if (!tm.verified) return reply(interaction, `${X} <@${targetId}> isn't a verified network staff member.`), true;
+        const missing = [];
+        for (const s of tm.mandatory.filter(s => canStaff || s.kind !== 'staff')) if (!(await isInGuild(interaction.client, s.guildId, targetId))) missing.push(s);
+        for (const s of tm.request.filter(s => s.kind === 'department')) if (!(await isInGuild(interaction.client, s.guildId, targetId))) missing.push(s);
+        if (!missing.length) return reply(interaction, `${OK} <@${targetId}> is already in every server they can access — nothing to send.`), true;
+        let delivered = 0, dmsClosed = 0; const failed = [];
+        for (const s of missing) {
+            const lvl = accessLevel(s, tm.buckets);
+            const r = await grantAndInvite(interaction.client, { userId: targetId, server: s, kind: lvl === 'mandatory' ? 'mandatory' : 'request', reason: `Sent by ${interaction.user.username} via the access panel`, byId: interaction.user.id, byName: interaction.user.username });
+            if (!r.ok) failed.push(nm(s));
+            else if (r.sent) delivered++;
+            else dmsClosed++;
+        }
+        const bits = [`${OK} Force-sent **${delivered}** invite${delivered === 1 ? '' : 's'} to <@${targetId}> by DM.`];
+        if (dmsClosed) bits.push(`${X} ${dmsClosed} couldn't be delivered (their DMs are closed).`);
+        if (failed.length) bits.push(`${E.warning} Couldn't create an invite for: ${failed.join(', ')}.`);
+        return reply(interaction, bits.join('\n')), true;
     }
 
     if (action === 'ask') {                          // menu: "type a request instead"
@@ -140,7 +178,7 @@ export async function handleButton(interaction) {
         if (verb === 'no') return reply(interaction, 'Cancelled — no action taken.'), true;
         const { doTermination } = await import('./actions.js');
         const r = await doTermination(interaction.client, { userId: p.userId, byId: p.byId, byName: p.byName, reason: p.reason });
-        return reply(interaction, `${OK} <@${p.userId}> terminated. Kicked from **${r.kicked.length}** server(s)${r.stripped.length ? `, roles stripped in ${r.stripped.length} server(s)` : ''}${r.unverified ? ', removed from the verified list' : ''}.${r.kickFailed.length ? `\n⚠️ Couldn't kick from: ${r.kickFailed.join(', ')}` : ''}`), true;
+        return reply(interaction, `${OK} <@${p.userId}> terminated. Kicked from **${r.kicked.length}** server(s)${r.stripped.length ? `, roles stripped in ${r.stripped.length} server(s)` : ''}${r.unverified ? ', removed from the verified list' : ''}.${r.kickFailed.length ? `\n${E.warning} Couldn't kick from: ${r.kickFailed.join(', ')}` : ''}`), true;
     }
 
     if (action === 'extend') {                        // from a nearing-expiry DM: +7 days
@@ -205,12 +243,12 @@ export async function handleModal(interaction) {
         const reason = interaction.fields.getTextInputValue('reason').trim() || 'No reason provided';
         const tk = putPending({ kind: 'terminate', userId: targetId, reason, byId: interaction.user.id, byName: interaction.user.username });
         const e = new EmbedBuilder().setColor(0xB91C1C).setAuthor({ name: 'USGRP · Network Administration' })
-            .setTitle('🚫  Confirm termination')
-            .setDescription(`This will **kick <@${targetId}> from the Network Staff Hub, DevOps and every department server**, strip their verified roles in the main server, remove them from the network verified list (so they won't get roles back on rejoin), and log it.`)
+            .setTitle('Confirm termination')
+            .setDescription(`${E.terminate} This will **kick <@${targetId}> from the Network Staff Hub, DevOps and every department server**, strip their verified roles in the main server, remove them from the network verified list (so they won't get roles back on rejoin), and log it.`)
             .addFields({ name: 'Reason', value: reason.slice(0, 1024) }).setFooter({ text: 'This cannot be undone automatically.' });
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`acc:term:${tk}:yes`).setLabel('Terminate').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId(`acc:term:${tk}:no`).setLabel('Cancel').setStyle(ButtonStyle.Secondary));
+            new ButtonBuilder().setCustomId(`acc:term:${tk}:yes`).setLabel('Terminate').setStyle(ButtonStyle.Danger).setEmoji(ce('terminate')),
+            new ButtonBuilder().setCustomId(`acc:term:${tk}:no`).setLabel('Cancel').setStyle(ButtonStyle.Secondary).setEmoji(ce('cross')));
         return interaction.editReply({ embeds: [e], components: [row] }), true;
     }
     return false;
@@ -238,8 +276,8 @@ export async function onMemberRemove(member) {
         const ch = await member.client.channels.fetch(chId).catch(() => null);
         if (ch) {
             await ch.send({ embeds: [new EmbedBuilder().setColor(0xB45309).setAuthor({ name: 'USGRP · Network Administration' })
-                .setTitle('⚠️ Staff member left a required server')
-                .setDescription(`<@${userId}> (${m.group}${m.hasNA ? ' · NA' : ''}) left **${nm(server)}**, which they're required to be in.\n\nIf they don't rejoin within **24 hours**, the bot will automatically send them a fresh invite. Supervisors, please check in.`)
+                .setTitle('Staff member left a required server')
+                .setDescription(`${E.warning} <@${userId}> (${m.group}${m.hasNA ? ' · NA' : ''}) left **${nm(server)}**, which they're required to be in.\n\nIf they don't rejoin within **24 hours**, the bot will automatically send them a fresh invite. Supervisors, please check in.`)
                 .setTimestamp()] }).catch(() => {});
             const w = store.openLeaveWatch(userId, guildId);
             if (w) store.markLeaveFlagged(w.id);
@@ -279,7 +317,7 @@ async function alertInviteMisuse(member, server, consumed) {
     } catch { /* dms closed */ }
     const ch = await member.client.channels.fetch(FSA_OPS_CHANNEL).catch(() => null);
     if (ch) await ch.send({ embeds: [new EmbedBuilder().setColor(0xB45309).setAuthor({ name: 'USGRP · Network Administration' })
-        .setTitle('🚨 Invite misuse — member auto-removed')
-        .setDescription(`<@${member.id}> (\`${member.id}\`) joined **${nm(server)}** using an invite that had been issued to <@${consumed.discord_id}>.\n\nEach invite is one-time-use and tied to one person, so the account was kicked automatically.`)
+        .setTitle('Invite misuse — member auto-removed')
+        .setDescription(`${E.warning} <@${member.id}> (\`${member.id}\`) joined **${nm(server)}** using an invite that had been issued to <@${consumed.discord_id}>.\n\nEach invite is one-time-use and tied to one person, so the account was kicked automatically.`)
         .setTimestamp()] }).catch(() => {});
 }

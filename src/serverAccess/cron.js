@@ -7,6 +7,7 @@ import {
 } from './matrix.js';
 import { grantAndInvite } from './actions.js';
 import * as store from './store.js';
+import { E, ce } from '../lib/emoji.js';
 
 const DAY = 86400000, HOUR = 3600000;
 const short = (n) => String(n).replace(/^USGRP \| /, '');
@@ -42,8 +43,8 @@ export async function runDailyMandatory(client) {
         }
         if (!buttons.length) continue;
         const e = new EmbedBuilder().setColor(0xC9A14A).setAuthor({ name: 'USGRP · Network Administration' })
-            .setTitle('📋  You\'re missing required server(s)')
-            .setDescription(`As network staff you're expected to be a member of these server(s). Please join using the buttons below — there's no time limit. *(You'll get this reminder daily until you join.)*\n\n${missing.slice(0, 5).map(srv => `• **${short(srv.name)}**`).join('\n')}`)
+            .setTitle('You\'re missing required server(s)')
+            .setDescription(`${E.star} As network staff you're expected to be a member of these server(s). Please join using the buttons below — there's no time limit. *(You'll get this reminder daily until you join.)*\n\n${missing.slice(0, 5).map(srv => `${E.server} **${short(srv.name)}**`).join('\n')}`)
             .setFooter({ text: 'USGRP Network Administration' }).setTimestamp();
         try {
             const u = await client.users.fetch(userId);
@@ -73,8 +74,8 @@ export async function runExpiryAndWarn(client) {
             try {
                 const u = await client.users.fetch(String(g.discord_id));
                 await u.send({ embeds: [new EmbedBuilder().setColor(0xB91C1C).setAuthor({ name: 'USGRP · Network Administration' })
-                    .setTitle('⌛ Your access has expired')
-                    .setDescription(`Your time-limited access to **${short(server.name)}** has ended, so you've been removed. Need back in? Run \`/access request\` and ask for a new invite or an extension.`)
+                    .setTitle('Your access has expired')
+                    .setDescription(`${E.pending} Your time-limited access to **${short(server.name)}** has ended, so you've been removed. Need back in? Run \`/access\` and ask for a new invite or an extension.`)
                     .setFooter({ text: 'USGRP Network Administration' }).setTimestamp()] });
             } catch { /* */ }
             continue;
@@ -85,10 +86,10 @@ export async function runExpiryAndWarn(client) {
             try {
                 const u = await client.users.fetch(String(g.discord_id));
                 const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`acc:extend:${g.id}`).setLabel('Yes, extend by 7 days').setStyle(ButtonStyle.Success).setEmoji('⏳'));
+                    new ButtonBuilder().setCustomId(`acc:extend:${g.id}`).setLabel('Yes, extend by 7 days').setStyle(ButtonStyle.Success).setEmoji(ce('calendar')));
                 await u.send({ embeds: [new EmbedBuilder().setColor(0xB45309).setAuthor({ name: 'USGRP · Network Administration' })
-                    .setTitle('⏳ Your access is about to expire')
-                    .setDescription(`Heads up — your access to **${short(server.name)}** ends <t:${Math.floor(g.expires_at / 1000)}:R>. Do you still need it?\n\nTap below to extend by 7 days, or run \`/access request\` and tell me how long you need (e.g. *"extend my ${short(server.name)} access by 2 weeks"*). If you don't need it any more, no action is needed — you'll be removed automatically.`)
+                    .setTitle('Your access is about to expire')
+                    .setDescription(`${E.pending} Heads up — your access to **${short(server.name)}** ends <t:${Math.floor(g.expires_at / 1000)}:R>. Do you still need it?\n\nTap below to extend by 7 days, or run \`/access\` and tell me how long you need (e.g. *"extend my ${short(server.name)} access by 2 weeks"*). If you don't need it any more, no action is needed — you'll be removed automatically.`)
                     .setFooter({ text: 'USGRP Network Administration' }).setTimestamp()], components: [row] });
                 warned++;
             } catch { /* */ }
@@ -132,21 +133,21 @@ export async function runWeeklyReport(client) {
     const timed = store.activeTimedGrants();
 
     const e = new EmbedBuilder().setColor(0x0A2342).setAuthor({ name: 'USGRP · Network Administration' })
-        .setTitle('📊  Weekly Network Access Report')
-        .setDescription(`Verified network staff: **${staff.length}**`)
+        .setTitle('Weekly Network Access Report')
+        .setDescription(`${E.logs} Verified network staff: **${staff.length}**`)
         .setTimestamp().setFooter({ text: 'USGRP Network Administration · weekly' });
     for (const srv of mandatoryServers) {
         const t = tally[srv.key];
         const miss = missingByServer[srv.key];
         e.addFields({
             name: `${short(srv.name)} — ${t.in}/${t.total} in`,
-            value: miss.length ? `Missing: ${miss.slice(0, 15).map(id => `<@${id}>`).join(' ')}${miss.length > 15 ? ` +${miss.length - 15}` : ''}` : '✅ everyone in',
+            value: miss.length ? `Missing: ${miss.slice(0, 15).map(id => `<@${id}>`).join(' ')}${miss.length > 15 ? ` +${miss.length - 15}` : ''}` : `${E.check} everyone in`,
             inline: false,
         });
     }
     if (timed.length) {
         e.addFields({
-            name: `⏳ Time-limited access (${timed.length})`,
+            name: `Time-limited access (${timed.length})`,
             value: timed.slice(0, 12).map(g => `<@${g.discord_id}> · ${short(SERVER_BY_KEY[g.server_key]?.name || g.server_key)} · until <t:${Math.floor(g.expires_at / 1000)}:d>`).join('\n').slice(0, 1024),
             inline: false,
         });

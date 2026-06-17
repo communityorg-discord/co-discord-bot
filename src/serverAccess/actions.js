@@ -10,6 +10,7 @@ import {
 } from './matrix.js';
 import * as store from './store.js';
 import { networkVerifyApi } from '../utils/aspireInternal.js';
+import { E } from '../lib/emoji.js';
 
 const DAY = 86400000;
 
@@ -40,8 +41,8 @@ export async function requestExtension(client, { userId, serverKey = null, extra
     try {
         const u = await client.users.fetch(String(userId));
         await u.send({ embeds: [new EmbedBuilder().setColor(0x166534).setAuthor({ name: 'USGRP · Network Administration' })
-            .setTitle('✅ Access extended')
-            .setDescription(`Your access to **${server?.name || grant.server_key}** now runs until <t:${Math.floor(newExpiry / 1000)}:F>.`)
+            .setTitle('Access extended')
+            .setDescription(`${E.check} Your access to **${server?.name || grant.server_key}** now runs until <t:${Math.floor(newExpiry / 1000)}:F>.`)
             .setFooter({ text: 'USGRP Network Administration' }).setTimestamp()] });
     } catch { /* dms closed */ }
     return { ok: true, server, newExpiry };
@@ -75,13 +76,13 @@ export async function doTermination(client, { userId, byId = null, byName = 'Net
     try {
         const ch = await client.channels.fetch(TERMINATION_LOG_CHANNEL);
         const e = new EmbedBuilder().setColor(0xB91C1C).setAuthor({ name: 'USGRP · Network Administration' })
-            .setTitle('🚫 Network Staff Terminated')
-            .setDescription(`<@${userId}> (\`${userId}\`) has been removed from the network.`)
+            .setTitle('Network Staff Terminated')
+            .setDescription(`${E.terminate} <@${userId}> (\`${userId}\`) has been removed from the network.`)
             .addFields(
                 { name: 'Reason', value: String(reason).slice(0, 1024), inline: false },
                 { name: 'Kicked from', value: (kicked.length ? kicked.join(', ') : 'none').slice(0, 1024), inline: false },
                 { name: 'Roles stripped', value: (stripped.length ? stripped.join(', ') : 'none').slice(0, 1024), inline: false },
-                { name: 'Network verification', value: unverify.ok ? (unverify.removed ? '✅ removed from the verified list' : 'not on the verified list') : '⚠️ could not remove — check manually', inline: false },
+                { name: 'Network verification', value: unverify.ok ? (unverify.removed ? `${E.check} removed from the verified list` : 'not on the verified list') : `${E.warning} could not remove — check manually`, inline: false },
                 { name: 'By', value: byName, inline: true },
             ).setTimestamp();
         await ch.send({ embeds: [e] });

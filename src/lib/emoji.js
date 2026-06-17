@@ -40,3 +40,12 @@ export const E = {
   warning: '<:warning:1509040360368640151>',
 };
 export const e = (name) => E[name] || '';
+
+// For component icons (button .setEmoji / select-option emoji). Custom emojis
+// DON'T render in embed titles or select-menu placeholders, but they DO render
+// in descriptions, field values, and on components — so parse "<:name:id>" into
+// the { id, name, animated } shape those accept. Returns undefined if unknown.
+export const ce = (name) => {
+  const m = /^<(a)?:([a-zA-Z0-9_]+):(\d+)>$/.exec(E[name] || '');
+  return m ? { id: m[3], name: m[2], animated: !!m[1] } : undefined;
+};

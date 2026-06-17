@@ -6,6 +6,7 @@ import {
     SERVERS, SERVER_BY_GUILD, bucketsFor, serversFor, accessLevel,
     NETWORK_STAFF_ROLE, NETWORK_ADMIN_ROLE,
 } from './matrix.js';
+import { E, ce } from '../lib/emoji.js';
 
 const NAVY = 0x0A2342, GOLD = 0xC9A14A, RED = 0xB91C1C, GREEN = 0x166534;
 
@@ -86,13 +87,13 @@ export async function sendInviteDM(client, userId, { server, url, reason, kind, 
     const e = new EmbedBuilder()
         .setColor(kind === 'mandatory' ? GOLD : NAVY)
         .setAuthor({ name: 'USGRP · Network Administration' })
-        .setTitle(`🎟️  Server Invite — ${server.name.replace(/^USGRP \| /, '')}`)
+        .setTitle(`Server Invite — ${server.name.replace(/^USGRP \| /, '')}`)
         .setTimestamp();
     const lines = [];
     if (kind === 'mandatory') {
-        lines.push(`You're **expected to be a member** of **${server.name}**. Please join using the button below — there's no time limit.`);
+        lines.push(`${E.star} You're **expected to be a member** of **${server.name}**. Please join using the button below — there's no time limit.`);
     } else {
-        lines.push(`Here's your invite to **${server.name}**.`);
+        lines.push(`${E.ticket} Here's your invite to **${server.name}**.`);
     }
     if (reason) lines.push(`\n**Reason:** ${reason}`);
     if (expiresAt) {
@@ -102,12 +103,12 @@ export async function sendInviteDM(client, userId, { server, url, reason, kind, 
         lines.push(`**Time limit:** none — you can stay as long as you need.`);
     }
     if (byName) lines.push(`\n*Invited by ${byName}.*`);
-    lines.push(`\n⏳ *This invite is **one-time use** and **expires in 30 minutes** — please join soon. It's tied to you; if anyone else uses it they'll be removed.*`);
+    lines.push(`\n${E.pending} *This invite is **one-time use** and **expires in 30 minutes** — please join soon. It's tied to you; if anyone else uses it they'll be removed.*`);
     e.setDescription(lines.join('\n'));
     e.setFooter({ text: 'USGRP Network Administration · this invite is for you only' });
 
     const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Join the server').setURL(url).setEmoji('🔗'),
+        new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Join the server').setURL(url).setEmoji(ce('link')),
     );
     try {
         const user = await client.users.fetch(String(userId));
