@@ -10,7 +10,7 @@ import { grantAndInvite, requestExtension } from './actions.js';
 import { putPending, takePending, peekPending } from './state.js';
 import * as store from './store.js';
 import { canUseCommand } from '../utils/permissions.js';
-import { selfFlow, adminMenuPayload } from '../commands/access.js';
+import { selfFlow, adminMenuPayload, selfMenu } from '../commands/access.js';
 import { E, ce } from '../lib/emoji.js';
 
 const X = E.cross, OK = E.check;
@@ -88,8 +88,15 @@ export async function handleButton(interaction) {
         const isSuper = (await canUseCommand('terminate', interaction)).allowed;
         if (!isNetAdmin(sender) && !isFsaAdminRank(sender) && !isSuper) return reply(interaction, `${X} Only Network Administration may manage other members.`), true;
         await interaction.deferUpdate().catch(() => {});
-        const row = new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('acc:auser').setPlaceholder('Pick a member to manage…').setMaxValues(1));
-        await interaction.editReply({ content: `${E.member} **Manage another member** — pick who:`, embeds: [], components: [row] });
+        const pickRow = new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('acc:auser').setPlaceholder('Pick a member to manage…').setMaxValues(1));
+        const backRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('acc:back').setLabel('Back').setStyle(ButtonStyle.Secondary).setEmoji('⬅️'));
+        await interaction.editReply({ content: `${E.member} **Manage another member** — pick who:`, embeds: [], components: [pickRow, backRow] });
+        return true;
+    }
+
+    if (action === 'back') {                         // return to the member's own /access panel
+        await interaction.deferUpdate().catch(() => {});
+        try { await selfMenu(interaction); } catch (e) { await interaction.editReply({ content: `${X} ${e.message}`, embeds: [], components: [] }).catch(() => {}); }
         return true;
     }
 

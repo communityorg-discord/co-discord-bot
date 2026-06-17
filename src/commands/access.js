@@ -37,7 +37,7 @@ export async function execute(interaction) {
 }
 
 // ── Menus (no message given) ─────────────────────────────────────────────────
-async function selfMenu(interaction) {
+export async function selfMenu(interaction) {
     const member = { ...(await resolveMember(interaction.user.id)), userId: interaction.user.id };
     if (!member.verified) return interaction.editReply({ content: `${X} You're not a verified network staff member, so you have no server access to manage.` });
 
@@ -100,33 +100,47 @@ export async function adminMenuPayload(interaction, target) {
     if (!tm.verified) return { content: `${X} <@${target.id}> isn't a verified network staff member.` };
     const canStaff = isNetAdmin(sender) || isFsaAdminRank(sender) || isSuper;
 
-    // Full live status across every server they should/can be in. mand[] / dept[]
-    // collect the ones they're NOT in (for the pickers + force-send).
-    const mandRows = [], deptRows = [], mand = [], dept = [];
+    // Live status. mand[] / dept[] collect the ones they're NOT in (for the
+    // pickers + force-send); the joined ones are summarised compactly so a fully
+    // onboarded member doesn't render as a wall of identical green ticks.
+    const mandRows = [], mand = [];
     for (const s of tm.mandatory.filter(s => canStaff || s.kind !== 'staff')) {
         const inIt = await isInGuild(interaction.client, s.guildId, target.id);
         mandRows.push(`${inIt ? OK : X} ${nm(s)}${inIt ? '' : ' — *not joined*'}`);
         if (!inIt) mand.push(s);
     }
+    const deptInNames = [], dept = [], deptOutRows = [];
     for (const s of tm.request.filter(s => s.kind === 'department')) {
         if (!guildOf(interaction.client, s.guildId)) continue;   // bot not in it — can't invite there
         const inIt = await isInGuild(interaction.client, s.guildId, target.id);
-        deptRows.push(`${inIt ? OK : X} ${nm(s)}${inIt ? '' : ' — *not joined*'}`);
-        if (!inIt) dept.push(s);
+        if (inIt) deptInNames.push(nm(s));
+        else { dept.push(s); deptOutRows.push(`${X} ${nm(s)} — *not joined*`); }
     }
+    const deptTotal = deptInNames.length + dept.length;
+    const total = mandRows.length + deptTotal;
     const missing = mand.length + dept.length;
+    const trunc = (str, n = 1010) => str.length > n ? str.slice(0, n) + '…' : str;
 
-    const desc = [`<@${target.id}> · **${tm.group}${tm.hasNA ? ' · NA' : ''}**`];
-    if (mandRows.length) { desc.push(`\n${E.star} **Required servers**`); desc.push(...mandRows); }
-    if (deptRows.length) { desc.push(`\n${E.server} **Department servers they can access**`); desc.push(...deptRows); }
-    desc.push(missing
-        ? `\n${E.warning} They're missing **${missing}** server${missing === 1 ? '' : 's'}. Force-send the invites below, or pick one server at a time.`
-        : `\n${E.check} They're in **every server** they can access.`);
-
-    const embed = new EmbedBuilder().setColor(NAVY).setAuthor({ name: 'USGRP · Network Administration' })
+    const embed = new EmbedBuilder().setColor(missing ? 0xB45309 : 0x166534)
+        .setAuthor({ name: 'USGRP · Network Administration' })
         .setTitle(`Manage access — ${target.username}`)
-        .setDescription(desc.join('\n').slice(0, 4000))
-        .setFooter({ text: missing ? 'Force-send DMs every missing invite at once · individual picks let you set a reason/time limit' : 'Use Refresh to re-check their server membership' });
+        .setThumbnail(target.displayAvatarURL?.({ size: 128 }) || null)
+        .setDescription([
+            `${E.member} <@${target.id}> · **${tm.group}${tm.hasNA ? ' · NA' : ''}**`,
+            '',
+            missing
+                ? `${E.warning} **Missing ${missing}** of ${total} server${total === 1 ? '' : 's'} — invite them below.`
+                : `${E.check} **In every server** they can access — ${mandRows.length} required, ${deptTotal} department.`,
+        ].join('\n'));
+
+    if (mandRows.length) embed.addFields({ name: 'Required servers', value: trunc(mandRows.join('\n')) });
+    if (deptTotal) {
+        const parts = [];
+        if (deptOutRows.length) parts.push(deptOutRows.join('\n'));
+        if (deptInNames.length) parts.push(`${OK} **In ${deptInNames.length}${deptOutRows.length ? ' other' : ''}:** ${deptInNames.join(' · ')}`);
+        embed.addFields({ name: 'Department access', value: trunc(parts.join('\n\n')) || '—' });
+    }
+    embed.setFooter({ text: missing ? 'Force-send DMs every missing invite · individual picks let you set a reason/time limit' : 'Refresh re-checks their live membership' });
 
     const components = [];
     if (mand.length) {
@@ -140,11 +154,13 @@ export async function adminMenuPayload(interaction, target) {
                 .addOptions(dept.slice(0, 25).map(s => ({ label: nm(s).slice(0, 100), value: s.key, emoji: ce('server') })))));
     }
     const actionBtns = [];
-    if (missing) actionBtns.push(new ButtonBuilder().setCustomId(`acc:aforce:${target.id}`).setLabel(`Force-send all ${missing} missing invite${missing === 1 ? '' : 's'}`).setStyle(ButtonStyle.Primary).setEmoji(ce('dm')));
-    actionBtns.push(new ButtonBuilder().setCustomId(`acc:arefresh:${target.id}`).setLabel('Refresh statuses').setStyle(ButtonStyle.Secondary).setEmoji(ce('calendar')));
+    if (missing) actionBtns.push(new ButtonBuilder().setCustomId(`acc:aforce:${target.id}`).setLabel(`Force-send ${missing} invite${missing === 1 ? '' : 's'}`).setStyle(ButtonStyle.Primary).setEmoji(ce('dm')));
+    actionBtns.push(new ButtonBuilder().setCustomId(`acc:arefresh:${target.id}`).setLabel('Refresh').setStyle(ButtonStyle.Secondary).setEmoji(ce('calendar')));
+    actionBtns.push(new ButtonBuilder().setCustomId('acc:adminpick').setLabel('Manage someone else').setStyle(ButtonStyle.Secondary).setEmoji(ce('member')));
     components.push(new ActionRowBuilder().addComponents(actionBtns));
-    if (isNetAdmin(sender) || isSuper) components.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`acc:atermbtn:${target.id}`).setLabel('Terminate').setStyle(ButtonStyle.Danger).setEmoji(ce('terminate'))));
+    const navBtns = [new ButtonBuilder().setCustomId('acc:back').setLabel('Back').setStyle(ButtonStyle.Secondary).setEmoji('⬅️')];
+    if (isNetAdmin(sender) || isSuper) navBtns.push(new ButtonBuilder().setCustomId(`acc:atermbtn:${target.id}`).setLabel('Terminate').setStyle(ButtonStyle.Danger).setEmoji(ce('terminate')));
+    components.push(new ActionRowBuilder().addComponents(navBtns));
     return { embeds: [embed], components };
 }
 
