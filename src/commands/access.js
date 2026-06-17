@@ -50,27 +50,29 @@ async function selfMenu(interaction) {
     const member = { ...(await resolveMember(interaction.user.id)), userId: interaction.user.id };
     if (!member.verified) return interaction.editReply({ content: `${X} You're not a verified network staff member, so you have no server access to manage.` });
 
-    const embed = await buildStatus(interaction, member);
+    // Compute live membership once and share it with the status embed + pickers.
+    const mandStatus = [];
+    for (const s of member.mandatory) mandStatus.push({ s, inIt: await isInGuild(interaction.client, s.guildId, member.userId) });
+    const grantedKeys = new Set(store.activeGrantsFor(member.userId).filter(g => g.kind === 'request').map(g => g.server_key));
+    const deptCandidates = member.request.filter(s => s.kind === 'department' && !grantedKeys.has(s.key));
+    const deptNotIn = [];
+    for (const s of deptCandidates) if (!(await isInGuild(interaction.client, s.guildId, member.userId))) deptNotIn.push(s);
+
+    const embed = await buildStatus(interaction, member, { compact: true, mandStatus, deptNotIn });
     const components = [];
 
-    // Mandatory servers picker — only the servers required for THIS member.
-    if (member.mandatory.length) {
-        const opts = [];
-        for (const s of member.mandatory) {
-            const inIt = await isInGuild(interaction.client, s.guildId, member.userId);
-            opts.push({ label: nm(s).slice(0, 100), value: s.key, emoji: inIt ? '✅' : '⭐', description: (inIt ? 'You\'re in — no time limit' : 'Required — get your invite').slice(0, 100) });
-        }
+    // Mandatory servers picker — only servers required for THIS member.
+    if (mandStatus.length) {
         components.push(new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder().setCustomId('acc:pick:m').setPlaceholder('⭐  Mandatory servers — get an invite…').addOptions(opts.slice(0, 25))));
+            new StringSelectMenuBuilder().setCustomId('acc:pick:m').setPlaceholder('⭐  Mandatory servers — get an invite…')
+                .addOptions(mandStatus.slice(0, 25).map(({ s, inIt }) => ({ label: nm(s).slice(0, 100), value: s.key, emoji: inIt ? '✅' : '⭐', description: (inIt ? 'You\'re in — no time limit' : 'Required — get your invite').slice(0, 100) })))));
     }
 
-    // Department servers picker — only the on-request servers THIS member can access.
-    const grantedKeys = new Set(store.activeGrantsFor(member.userId).filter(g => g.kind === 'request').map(g => g.server_key));
-    const dept = member.request.filter(s => s.kind === 'department' && !grantedKeys.has(s.key));
-    if (dept.length) {
+    // Department servers picker — only on-request servers this member can access AND isn't already in.
+    if (deptNotIn.length) {
         components.push(new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('acc:pick:d').setPlaceholder('🏛️  Department servers — request an invite…')
-                .addOptions(dept.slice(0, 25).map(s => ({ label: nm(s).slice(0, 100), value: s.key, description: 'Set a reason & optional time limit' })))));
+                .addOptions(deptNotIn.slice(0, 25).map(s => ({ label: nm(s).slice(0, 100), value: s.key, description: 'Set a reason & optional time limit' })))));
     }
 
     const btns = [new ButtonBuilder().setCustomId('acc:ask').setLabel('Type a request instead').setStyle(ButtonStyle.Secondary).setEmoji('💬')];
@@ -200,14 +202,17 @@ async function adminFlow(interaction, message, target) {
 }
 
 // ── Shared bits ──────────────────────────────────────────────────────────────
-async function buildStatus(interaction, member) {
+async function buildStatus(interaction, member, { compact = false, mandStatus = null, deptNotIn = null } = {}) {
     const client = interaction.client;
-    const lines = ['**Servers you must be in**'];
-    for (const s of member.mandatory) {
-        const inIt = await isInGuild(client, s.guildId, member.userId);
-        lines.push(`${inIt ? OK : X} ${nm(s)}${inIt ? '' : ' — *not joined; ask me for a fresh invite*'}`);
-    }
+    if (!mandStatus) { mandStatus = []; for (const s of member.mandatory) mandStatus.push({ s, inIt: await isInGuild(client, s.guildId, member.userId) }); }
     const grants = store.activeGrantsFor(member.userId).filter(g => g.kind === 'request');
+    if (!deptNotIn) {
+        const grantedKeys = new Set(grants.map(g => g.server_key));
+        const cand = member.request.filter(s => s.kind === 'department' && !grantedKeys.has(s.key));
+        deptNotIn = []; for (const s of cand) if (!(await isInGuild(client, s.guildId, member.userId))) deptNotIn.push(s);
+    }
+    const lines = ['**Servers you must be in**'];
+    for (const { s, inIt } of mandStatus) lines.push(`${inIt ? OK : X} ${nm(s)}${inIt ? '' : ' — *not joined*'}`);
     if (grants.length) {
         lines.push('\n**Your requested access**');
         for (const g of grants) {
@@ -215,12 +220,17 @@ async function buildStatus(interaction, member) {
             lines.push(`${DOT} ${s ? nm(s) : g.server_key} — ${g.expires_at ? `until <t:${Math.floor(g.expires_at / 1000)}:R>` : 'no time limit'}`);
         }
     }
-    const grantedKeys = new Set(grants.map(g => g.server_key));
-    const canReq = member.request.filter(s => !grantedKeys.has(s.key));
-    if (canReq.length) { lines.push('\n**You can request an invite to**'); lines.push(canReq.map(nm).join(' · ')); }
+    if (deptNotIn.length) {
+        if (compact) {
+            lines.push(`\n${DOT} **${deptNotIn.length}** department server${deptNotIn.length === 1 ? '' : 's'} you can request — pick one from the menu below.`);
+        } else {
+            lines.push('\n**You can request an invite to**');
+            lines.push(deptNotIn.slice(0, 12).map(nm).join(' · ') + (deptNotIn.length > 12 ? ` · +${deptNotIn.length - 12} more` : ''));
+        }
+    }
     return new EmbedBuilder().setColor(NAVY).setAuthor({ name: 'USGRP · Network Administration' })
         .setTitle('🗂️  Your Server Access').setDescription(lines.join('\n').slice(0, 4000))
-        .setFooter({ text: 'Use /access and tell me what you need' }).setTimestamp();
+        .setFooter({ text: 'Use the menus below, or /access and tell me what you need' }).setTimestamp();
 }
 
 export async function confirmInvite(interaction, member, server, reason, durationDays) {
