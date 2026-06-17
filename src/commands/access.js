@@ -4,7 +4,7 @@
 //           "I need an extension", "what am I in?"
 //   Admin:  add the `member` option, then "invite them to the FBI for a week
 //           because …" or "terminate them — repeated misconduct".
-import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { resolveMember, isInGuild } from '../serverAccess/core.js';
 import { SERVER_BY_KEY, accessLevel } from '../serverAccess/matrix.js';
@@ -22,9 +22,9 @@ const isFsaAdminRank = (m) => /^FSA (Head |Senior )?Administrator$/i.test(m?.rec
 
 export const data = new SlashCommandBuilder()
     .setName('access')
-    .setDescription('USGRP network server access — just tell me what you need')
-    .addStringOption(o => o.setName('message').setRequired(true)
-        .setDescription('What do you need? e.g. "invite me to the Treasury for 3 days" or "what am I in?"'))
+    .setDescription('USGRP network server access — open the menu, or just say what you need')
+    .addStringOption(o => o.setName('message').setRequired(false)
+        .setDescription('Optional: say it in plain English, e.g. "invite me to the Treasury for 3 days"'))
     .addUserOption(o => o.setName('member')
         .setDescription('(Network Admin) the member to invite or terminate'));
 
@@ -32,18 +32,77 @@ export async function execute(interaction) {
     const perm = await canUseCommand('access', interaction);
     if (!perm.allowed) return interaction.reply({ content: `${X} ${perm.reason}`, ephemeral: true });
     await interaction.deferReply({ ephemeral: true });
-    if (!aiAvailable()) return interaction.editReply({ content: `${X} The assistant isn't available right now — try again shortly.` });
     const message = interaction.options.getString('message');
     const target = interaction.options.getUser('member');
     try {
-        return target ? await adminFlow(interaction, message, target) : await selfFlow(interaction, message);
+        if (message) {
+            if (!aiAvailable()) return interaction.editReply({ content: `${X} The plain-English assistant isn't available right now — run \`/access\` without text to use the menu.` });
+            return target ? await adminFlow(interaction, message, target) : await selfFlow(interaction, message);
+        }
+        return target ? await adminMenu(interaction, target) : await selfMenu(interaction);
     } catch (e) {
         return interaction.editReply({ content: `${X} Something went wrong: ${e.message}` });
     }
 }
 
+// ── Menus (no message given) ─────────────────────────────────────────────────
+async function selfMenu(interaction) {
+    const member = { ...(await resolveMember(interaction.user.id)), userId: interaction.user.id };
+    if (!member.verified) return interaction.editReply({ content: `${X} You're not a verified network staff member, so you have no server access to manage.` });
+
+    const embed = await buildStatus(interaction, member);
+    const components = [];
+
+    // Build the "request an invite" picker: missing required servers first, then on-request.
+    const missingMand = [];
+    for (const s of member.mandatory) if (!(await isInGuild(interaction.client, s.guildId, member.userId))) missingMand.push(s);
+    const grantedKeys = new Set(store.activeGrantsFor(member.userId).filter(g => g.kind === 'request').map(g => g.server_key));
+    const reqServers = member.request.filter(s => !grantedKeys.has(s.key));
+    const options = [
+        ...missingMand.map(s => ({ label: `${nm(s)} · required`.slice(0, 100), value: s.key, description: 'You\'re expected to be in this — no time limit', emoji: '⭐' })),
+        ...reqServers.map(s => ({ label: nm(s).slice(0, 100), value: s.key, description: 'On request — you\'ll set a reason & optional time limit' })),
+    ].slice(0, 25);
+    if (options.length) {
+        components.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId('acc:pick').setPlaceholder('🎟️  Request an invite to a server…').addOptions(options)));
+    }
+
+    const btns = [new ButtonBuilder().setCustomId('acc:ask').setLabel('Type a request instead').setStyle(ButtonStyle.Secondary).setEmoji('💬')];
+    if (store.activeGrantsFor(member.userId).some(g => g.expires_at)) {
+        btns.push(new ButtonBuilder().setCustomId('acc:ext').setLabel('Extend my access').setStyle(ButtonStyle.Secondary).setEmoji('⏳'));
+    }
+    components.push(new ActionRowBuilder().addComponents(btns));
+    return interaction.editReply({ embeds: [embed], components });
+}
+
+async function adminMenu(interaction, target) {
+    const sender = await resolveMember(interaction.user.id);
+    const isSuper = (await canUseCommand('terminate', interaction)).allowed;
+    if (!isNetAdmin(sender) && !isFsaAdminRank(sender) && !isSuper) {
+        return interaction.editReply({ content: `${X} Only Network Administration may run access actions on other members.` });
+    }
+    const tm = { ...(await resolveMember(target.id)), userId: target.id };
+    if (!tm.verified) return interaction.editReply({ content: `${X} <@${target.id}> isn't a verified network staff member.` });
+
+    const servers = [...tm.mandatory, ...tm.request].filter(s => !(s.kind === 'staff' && !(isNetAdmin(sender) || isFsaAdminRank(sender) || isSuper)));
+    const embed = new EmbedBuilder().setColor(NAVY).setAuthor({ name: 'USGRP · Network Administration' })
+        .setTitle(`🛠️  Manage access — ${target.username}`)
+        .setDescription(`<@${target.id}> · **${tm.group}${tm.hasNA ? ' · NA' : ''}**\n\nPick a server to invite them to, or terminate them.`)
+        .setFooter({ text: 'You\'ll add a reason on the next step' });
+    const components = [];
+    if (servers.length) {
+        components.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId(`acc:apick:${target.id}`).setPlaceholder('🎟️  Send them an invite to…')
+                .addOptions(servers.slice(0, 25).map(s => ({ label: nm(s).slice(0, 100), value: s.key })))));
+    }
+    const tbtn = [];
+    if (isNetAdmin(sender) || isSuper) tbtn.push(new ButtonBuilder().setCustomId(`acc:atermbtn:${target.id}`).setLabel('Terminate').setStyle(ButtonStyle.Danger).setEmoji('🚫'));
+    if (tbtn.length) components.push(new ActionRowBuilder().addComponents(tbtn));
+    return interaction.editReply({ embeds: [embed], components });
+}
+
 // ── Self-service ─────────────────────────────────────────────────────────────
-async function selfFlow(interaction, message) {
+export async function selfFlow(interaction, message) {
     const member = { ...(await resolveMember(interaction.user.id)), userId: interaction.user.id };
     if (!member.verified) return interaction.editReply({ content: `${X} You're not a verified network staff member, so you have no server access to manage.` });
 

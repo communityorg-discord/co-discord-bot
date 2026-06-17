@@ -2489,6 +2489,8 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isStringSelectMenu()) {
     // CO Utilities hub (/panel) — "Go to…" nav + subcommand pickers
     if (interaction.customId?.startsWith('copanel:')) { try { if (await coPanel.handleSelect(interaction)) return; } catch (e) { console.error('[coPanel select]', e.message); } return; }
+    // USGRP network access menu selects
+    if (interaction.customId?.startsWith('acc:')) { try { if (await accessEvents.handleSelect(interaction)) return; } catch (e) { console.error('[access select]', e.message); } return; }
     // AutoMod panel select menus
     if (interaction.customId?.startsWith('automod_')) {
       try { const handled = await automodPanelHandler(interaction); if (handled) return; }
@@ -2582,8 +2584,8 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isModalSubmit()) {
     // CO Utilities hub (/panel) — command-launch modals
     if (interaction.customId?.startsWith('copanel:')) { try { if (await coPanel.handleModal(interaction)) return; } catch (e) { console.error('[coPanel modal]', e.message); } return; }
-    // USGRP network access — invite reason modal
-    if (interaction.customId?.startsWith('acc:reasonmodal:')) { try { if (await accessEvents.handleModal(interaction)) return; } catch (e) { console.error('[access modal]', e.message); } return; }
+    // USGRP network access — menu/reason/terminate modals
+    if (interaction.customId?.startsWith('acc:')) { try { if (await accessEvents.handleModal(interaction)) return; } catch (e) { console.error('[access modal]', e.message); } return; }
     // Network Staff role-offer decline → notify Dion + Evan, with optional reason.
     if (interaction.customId === 'roleoffer_decline_modal') {
       let reason = '';
