@@ -1968,6 +1968,13 @@ const COMMAND_CHANNEL_ID = '1487636502593798255';
 const COMMAND_CHANNEL_GUILD = '1357119461957570570';
 const COMMAND_SUPERUSERS = ['723199054514749450', '415922272956710912', '1355367209249148928', '878775920180228127'];
 const VERIFICATION_CHANNEL_ID = '1487631939103100969';
+// Per-guild bot-commands channel: slash commands are only allowed in these.
+const COMMAND_CHANNELS = {
+  '1357119461957570570': '1487636502593798255', // CO Staff HQ → #bot-commands
+  '1458621643537514590': '1508702297318887424', // USGRP main  → #bot-commands
+};
+const NETADMIN_ROLE_ID = '1516004496612786248'; // USGRP Network Administration — exempt
+const cmdChannelOffenses = new Map();            // userId → { count, lastWarn } — warn on 2nd+
 
 client.on('interactionCreate', async interaction => {
   try {
@@ -1978,11 +1985,31 @@ client.on('interactionCreate', async interaction => {
     return handlePanel(interaction, client);
   }
   if (interaction.isChatInputCommand()) {
-    // Restrict slash commands to the bot commands channel in Staff HQ (superusers exempt)
-    // Allow /verify in the verification channel as well
+    // Restrict slash commands to each guild's bot-commands channel (superusers +
+    // USGRP Network Administration exempt). /verify is allowed in the verification
+    // channel too. Buttons / select menus / modals are NOT gated — only commands.
     const isVerifyInVerificationChannel = interaction.commandName === 'verify' && interaction.channelId === VERIFICATION_CHANNEL_ID;
-    if (interaction.guildId === COMMAND_CHANNEL_GUILD && interaction.channelId !== COMMAND_CHANNEL_ID && !COMMAND_SUPERUSERS.includes(interaction.user.id) && !isVerifyInVerificationChannel) {
-      return interaction.reply({ content: `${E.cross} Bot commands can only be used in <#${COMMAND_CHANNEL_ID}>.`, ephemeral: true });
+    const requiredCmdChannel = COMMAND_CHANNELS[interaction.guildId];
+    const hasNetAdmin = !!interaction.member?.roles?.cache?.has?.(NETADMIN_ROLE_ID);
+    if (requiredCmdChannel && interaction.channelId !== requiredCmdChannel
+        && !COMMAND_SUPERUSERS.includes(interaction.user.id)
+        && !isVerifyInVerificationChannel
+        && !hasNetAdmin) {
+      // 2nd+ wrong-channel attempt → CO Utilities DMs a warning (rate-limited).
+      const uid = interaction.user.id;
+      const rec = cmdChannelOffenses.get(uid) || { count: 0, lastWarn: 0 };
+      rec.count++;
+      if (rec.count >= 2 && Date.now() - rec.lastWarn > 10 * 60 * 1000) {
+        rec.lastWarn = Date.now();
+        interaction.user.send({ embeds: [{
+          color: 0xE53935,
+          title: '⚠️ Please use the bot-commands channel',
+          description: `You've now run bot commands outside <#${requiredCmdChannel}> more than once. Running commands in general channels clutters them for everyone.\n\nPlease keep all bot commands in <#${requiredCmdChannel}>. Network Administration staff are exempt.`,
+          footer: { text: 'Community Organisation' },
+        }] }).catch(() => {});
+      }
+      cmdChannelOffenses.set(uid, rec);
+      return interaction.reply({ content: `${E.cross} Bot commands can only be used in <#${requiredCmdChannel}>.`, ephemeral: true });
     }
 
     // Maintenance gate — during an active bot-maintenance window, only superusers may run commands
