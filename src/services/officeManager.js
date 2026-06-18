@@ -175,18 +175,28 @@ export async function handleWaitingRoomJoin(client, voiceState) {
   if (!offices.length) return;
   const accessible = offices.filter(o => canAccessOffice(member, o));
   const wrVc = guild.channels.cache.get(channelId);
+  // Of the offices they can access, which are actually IN USE (someone's in them)?
+  const inUse = accessible.filter(o => officeOccupied(guild, o));
 
-  // 1) They already have access to exactly one office → take them straight in.
+  // 1) They can access exactly one office → take them straight in.
   if (accessible.length === 1) { await moveInto(member, accessible[0], 'auto'); return; }
 
-  // 2) They have access to several → ask which one (self-select, no approval needed).
+  // 2) Only ONE of their offices is in use → straight into it, no "which office?"
+  //    prompt. Don't make a member pick from every office their rank can reach when
+  //    there's clearly one being used (e.g. only the Ownership office is staffed).
+  if (inUse.length === 1) { await moveInto(member, inUse[0], 'auto'); return; }
+
+  // 3) Several to choose from → ask which: the IN-USE ones if more than one is
+  //    staffed, otherwise all accessible offices (so they can still pick where to
+  //    set up when none is in use yet).
   if (accessible.length > 1) {
+    const choices = inUse.length > 1 ? inUse : accessible;
     const rows = [];
-    const btns = accessible.slice(0, 20).map(o => new ButtonBuilder().setCustomId(`office_self_${o.channel_id}`).setLabel((o.channel_name || 'Office').slice(0, 80)).setStyle(ButtonStyle.Primary));
+    const btns = choices.slice(0, 20).map(o => new ButtonBuilder().setCustomId(`office_self_${o.channel_id}`).setLabel((o.channel_name || 'Office').slice(0, 80)).setStyle(ButtonStyle.Primary));
     for (let i = 0; i < btns.length; i += 5) rows.push(new ActionRowBuilder().addComponents(btns.slice(i, i + 5)));
     await wrVc?.send({
       content: `<@${member.id}>`,
-      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Which office?').setDescription(`${E.announce} <@${member.id}> — you have access to several offices. Pick the one you'd like to join.`)],
+      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Which office?').setDescription(`${E.announce} <@${member.id}> — pick the office you'd like to join.`)],
       components: rows, allowedMentions: { users: [member.id] },
     }).catch(() => {});
     return;
@@ -195,6 +205,14 @@ export async function handleWaitingRoomJoin(client, voiceState) {
   // 3) No access → post an access request, pinging the office owners, in the waiting-room text chat.
   const requestId = createRequest({ guildId: guild.id, requesterId: member.id, requesterTag: member.user.tag || member.user.username, sourceChannelId: channelId });
   await postWaitingRequest(client, guild, wrVc, requestId, member, offices);
+}
+
+// Is anyone (a non-bot member) currently sitting in this office's voice channel?
+function officeOccupied(guild, office) {
+  const vc = guild.channels?.cache?.get(office.channel_id);
+  if (!vc?.members) return false;
+  for (const m of vc.members.values()) if (!m.user?.bot) return true;
+  return false;
 }
 
 // Members sitting in an office's voice channel RIGHT NOW who could approve a
