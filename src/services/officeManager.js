@@ -2,7 +2,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'disc
 import db from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { SUPERUSER_IDS } from '../config.js';
-import { E } from '../lib/emoji.js';
+import { E, ce } from '../lib/emoji.js';
 
 const APPROVE_WINDOW_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 10 * 60_000;
@@ -223,8 +223,8 @@ async function postOfficeCard(target, requestId, requesterId, office, pingIds) {
     .setDescription(`${E.announce} <@${requesterId}> would like to join **${office.channel_name || 'your office'}**.\n\nAllow them in, or deny the request.`)
     .setFooter({ text: `Request #${requestId} • expires in 10 min` }).setTimestamp();
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`office_bring_${requestId}_${office.channel_id}`).setLabel('Allow').setStyle(ButtonStyle.Success).setEmoji('✅'),
-    new ButtonBuilder().setCustomId(`office_deny_${requestId}`).setLabel('Deny').setStyle(ButtonStyle.Danger).setEmoji('❌'),
+    new ButtonBuilder().setCustomId(`office_bring_${requestId}_${office.channel_id}`).setLabel('Allow').setStyle(ButtonStyle.Success).setEmoji(ce('allow')),
+    new ButtonBuilder().setCustomId(`office_deny_${requestId}`).setLabel('Deny').setStyle(ButtonStyle.Danger).setEmoji(ce('deny')),
   );
   const msg = await target.send({ content: ids.length ? ids.map(u => `<@${u}>`).join(' ') : undefined, embeds: [embed], components: [row], allowedMentions: { users: ids } }).catch(() => null);
   if (msg) setRequestMessage(requestId, msg.id);
@@ -262,10 +262,10 @@ async function postWaitingRequest(client, guild, wrVc, requestId, requester, off
   } else {
     // Nothing staffed → still post so an owner who shows up can act, but ping
     // no-one (the old behaviour blasted every office-owner role into the channel).
-    const btns = offices.slice(0, 20).map(o => new ButtonBuilder().setCustomId(`office_bring_${requestId}_${o.channel_id}`).setLabel(`Bring to ${o.channel_name || 'office'}`.slice(0, 80)).setStyle(ButtonStyle.Success));
+    const btns = offices.slice(0, 20).map(o => new ButtonBuilder().setCustomId(`office_bring_${requestId}_${o.channel_id}`).setLabel(`Bring to ${o.channel_name || 'office'}`.slice(0, 80)).setStyle(ButtonStyle.Success).setEmoji(ce('allow')));
     const rows = [];
     for (let i = 0; i < btns.length; i += 5) rows.push(new ActionRowBuilder().addComponents(btns.slice(i, i + 5)));
-    rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`office_deny_${requestId}`).setLabel('Deny').setStyle(ButtonStyle.Danger).setEmoji('❌')));
+    rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`office_deny_${requestId}`).setLabel('Deny').setStyle(ButtonStyle.Danger).setEmoji(ce('deny'))));
     const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('Office Access Request')
       .setDescription(`${E.announce} <@${requester.id}> is in the waiting room and would like to join an office.\n\nNo office is staffed right now — an owner can bring them in, or deny.`)
       .setFooter({ text: `Request #${requestId} • expires in 10 min` }).setTimestamp();

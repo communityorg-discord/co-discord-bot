@@ -39,6 +39,10 @@ export const E = {
   verify: '<:verify:1509040424654864455>',
   warning: '<:warning:1509040360368640151>',
   arrow_left: '<:arrow_left:1516642537828253697>',
+  // White check / X (with a dark outline) for Allow/Deny buttons — they stay crisp
+  // on the green/red button colours, unlike a coloured ✅/❌ that blends in.
+  allow: '<:allow:1517668026772881538>',
+  deny: '<:deny:1517668028685357287>',
 };
 export const e = (name) => E[name] || '';
 
