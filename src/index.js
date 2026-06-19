@@ -3556,6 +3556,34 @@ client.on('roleDelete', async (role) => {
 });
 
 // Role updated (name, color, permissions, etc.)
+// A role REORDER shifts every role between the old and new slot, and Discord fires
+// a position-only roleUpdate for each — one drag can emit 100+. Rather than 100+
+// separate logs (which floods the founders' DMs AND rate-limits the USGRP | Logs
+// bot into the Utilities-DM fallback), coalesce a guild's position changes over a
+// short quiet window into ONE summary log + DM. The founders still get DM'd, via
+// the Logs bot, just once per reorder.
+const _rolePosBuf = new Map(); // guildId -> { client, guildName, roles: Map(id -> {id,name,from,to}), timer }
+async function _flushRolePositions(gid) {
+  const b = _rolePosBuf.get(gid);
+  if (!b) return;
+  _rolePosBuf.delete(gid);
+  const roles = [...b.roles.values()].filter(r => r.from !== r.to); // drop net-zero shuffles
+  if (!roles.length) return;
+  const shown = roles.slice(0, 20).map(r => `<@&${r.id}> \`${r.from} → ${r.to}\``);
+  const list = (shown.join('\n') + (roles.length > 20 ? `\n…and ${roles.length - 20} more` : '')).slice(0, 1024);
+  try {
+    await logRoleAction(b.client, {
+      action: roles.length === 1 ? 'Role Repositioned' : `${roles.length} Roles Repositioned`,
+      target: null, moderator: null, color: 0xF59E0B,
+      fields: [
+        { name: 'Server', value: b.guildName, inline: true },
+        { name: roles.length === 1 ? 'Change' : 'Changes', value: list, inline: false },
+      ],
+      roleLogType: 'role_update', guildId: gid,
+    });
+  } catch (e) { console.error('[roleUpdate flush error]', e.message); }
+}
+
 client.on('roleUpdate', async (oldRole, newRole) => {
   try {
     const nameChanged = oldRole.name !== newRole.name;
@@ -3563,21 +3591,28 @@ client.on('roleUpdate', async (oldRole, newRole) => {
     const positionChanged = oldRole.position !== newRole.position;
     const permsChanged = oldRole.permissions.bitfield !== newRole.permissions.bitfield;
 
+    // Position-only updates arrive in reorder bursts — buffer per guild and emit
+    // ONE debounced summary (logged + DM'd via USGRP | Logs) so a reorder doesn't
+    // flood the DMs or knock the Logs bot over.
+    if (positionChanged && !nameChanged && !colorChanged && !permsChanged) {
+      const gid = newRole.guild.id;
+      let b = _rolePosBuf.get(gid);
+      if (!b) { b = { client: newRole.client, guildName: newRole.guild.name, roles: new Map(), timer: null }; _rolePosBuf.set(gid, b); }
+      b.guildName = newRole.guild.name;
+      const prev = b.roles.get(newRole.id); // keep the EARLIEST from if it moves twice in the window
+      b.roles.set(newRole.id, { id: newRole.id, name: newRole.name, from: prev ? prev.from : oldRole.position, to: newRole.position });
+      if (b.timer) clearTimeout(b.timer);
+      b.timer = setTimeout(() => _flushRolePositions(gid), 5000);
+      if (b.timer.unref) b.timer.unref();
+      return;
+    }
+
     const changes = [];
     if (nameChanged) changes.push(`Name: "${oldRole.name}" → "${newRole.name}"`);
     if (colorChanged) changes.push(`Color: ${oldRole.hexColor || 'Default'} → ${newRole.hexColor || 'Default'}`);
     if (positionChanged) changes.push(`Position: ${oldRole.position} → ${newRole.position}`);
     if (permsChanged) changes.push(`Permissions changed`);
-
     if (changes.length === 0) return; // No meaningful changes
-
-    const guildId = newRole.guild.id;
-    // A reorder shifts every role between the old and new slot — Discord fires a
-    // position-only roleUpdate for each, so one drag can emit 100+ of these at once.
-    // Keep the channel log but suppress the founder DM so it doesn't flood (and
-    // doesn't rate-limit the Logs bot into the local-DM fallback). Name/colour/
-    // permission edits are deliberate and still DM via USGRP | Logs.
-    const positionOnly = positionChanged && !nameChanged && !colorChanged && !permsChanged;
 
     await logRoleAction(newRole.client, {
       action: 'Role Updated',
@@ -3590,8 +3625,7 @@ client.on('roleUpdate', async (oldRole, newRole) => {
         { name: 'Changes', value: changes.join('\n'), inline: false },
       ],
       roleLogType: permsChanged ? 'role_permission' : 'role_update',
-      guildId,
-      dmSuppress: positionOnly,
+      guildId: newRole.guild.id,
     });
   } catch (e) {
     console.error('[roleUpdate log error]', e.message);
