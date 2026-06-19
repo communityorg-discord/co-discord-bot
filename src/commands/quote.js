@@ -1,25 +1,32 @@
 // COMMAND_PERMISSION_FALLBACK: everyone
-// Fetch a Discord message by link and re-render it as a quote embed.
-// Useful when staff want to surface a moment from one channel into
-// another (or into a DM) with the bot's signature ephemeral receipt.
+// /quote — attribute a quote to someone. Shows who said it (name + profile
+// picture), the quote itself ("…" and/or an attached image), who quoted them,
+// and optional context. Posts publicly so the channel can enjoy it.
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { E } from '../lib/emoji.js';
 
-// https://discord.com/channels/{guild_id}/{channel_id}/{message_id}
-// or          discordapp.com (legacy host) — handle both.
-const MESSAGE_LINK_RE = /^https?:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/channels\/(\d{17,20}|@me)\/(\d{17,20})\/(\d{17,20})\/?$/i;
+const isImageAttachment = (a) =>
+  !!a && (/^image\//i.test(a.contentType || '') || /\.(png|jpe?g|gif|webp)$/i.test(a.name || ''));
 
 export const data = new SlashCommandBuilder()
   .setName('quote')
-  .setDescription('Fetch a Discord message by link and reformat as a quote embed')
-  .addStringOption(opt => opt
-    .setName('link')
-    .setDescription('Message link — right-click → Copy Message Link')
+  .setDescription('Quote someone — who said it, what they said, and who caught it')
+  .addUserOption(opt => opt
+    .setName('author')
+    .setDescription('Who said the quote')
     .setRequired(true))
-  .addBooleanOption(opt => opt
-    .setName('public')
-    .setDescription('Post the quote visibly in this channel (default: ephemeral)'));
+  .addStringOption(opt => opt
+    .setName('quote')
+    .setDescription('What they said (leave blank if you are quoting via an image)')
+    .setMaxLength(1000))
+  .addAttachmentOption(opt => opt
+    .setName('image')
+    .setDescription('Attach an image of the quote (optional)'))
+  .addStringOption(opt => opt
+    .setName('context')
+    .setDescription('Optional context for the quote')
+    .setMaxLength(500));
 
 export async function execute(interaction) {
   const perm = await canUseCommand('quote', interaction);
@@ -27,63 +34,41 @@ export async function execute(interaction) {
     return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
   }
 
-  const link = interaction.options.getString('link').trim();
-  const isPublic = interaction.options.getBoolean('public') || false;
+  const authorUser = interaction.options.getUser('author');
+  const authorMember = interaction.options.getMember('author');
+  const text = (interaction.options.getString('quote') || '').trim();
+  const image = interaction.options.getAttachment('image');
+  const context = (interaction.options.getString('context') || '').trim();
 
-  const m = link.match(MESSAGE_LINK_RE);
-  if (!m) {
+  // Need either words or a picture to quote.
+  if (!text && !image) {
     return interaction.reply({
-      content: `${E.cross} That doesn't look like a Discord message link. Right-click a message → Copy Message Link.`,
+      content: `${E.cross} Give me a quote — type what they said, or attach an image of it.`,
       ephemeral: true,
     });
   }
-  const [, guildId, channelId, messageId] = m;
-
-  await interaction.deferReply({ ephemeral: !isPublic });
-
-  // Bot must be in the source guild
-  if (guildId !== '@me' && !interaction.client.guilds.cache.has(guildId)) {
-    return interaction.editReply({ content: `${E.cross} Bot is not in the source server.` });
+  if (image && !isImageAttachment(image)) {
+    return interaction.reply({
+      content: `${E.cross} The attachment needs to be an image (png, jpg, gif or webp).`,
+      ephemeral: true,
+    });
   }
 
-  const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
-  if (!channel || !channel.isTextBased?.()) {
-    return interaction.editReply({ content: `${E.cross} Couldn't access that channel.` });
-  }
-
-  const msg = await channel.messages.fetch(messageId).catch(() => null);
-  if (!msg) {
-    return interaction.editReply({ content: `${E.cross} Message not found (deleted or no read history).` });
-  }
-
-  const author = msg.author;
-  const guild = msg.guild;
-  const memberDisplay = guild ? (await guild.members.fetch(author.id).catch(() => null))?.displayName : author.username;
-
-  const content = msg.content || '_(no text · embeds/attachments only)_';
+  // Who said it — guild display name + their avatar.
+  const saidName = authorMember?.displayName || authorUser.globalName || authorUser.username;
+  const saidAvatar = (authorMember ?? authorUser).displayAvatarURL?.() || authorUser.displayAvatarURL();
+  // Who's quoting them.
+  const quoterName = interaction.member?.displayName || interaction.user.globalName || interaction.user.username;
 
   const embed = new EmbedBuilder()
-    .setAuthor({
-      name: `${memberDisplay || author.username} ${author.bot ? '[bot]' : ''}`,
-      iconURL: author.displayAvatarURL(),
-      url: msg.url,
-    })
-    .setDescription(`${E.inbox} ${content.slice(0, 4000)}`)
     .setColor(0x6366f1)
-    .setTimestamp(msg.createdTimestamp)
-    .setFooter({
-      text: `${guild ? `${guild.name} · ` : ''}#${channel.name || 'dm'} · quoted by ${interaction.user.username}`,
-    });
+    .setAuthor({ name: saidName, iconURL: saidAvatar })
+    .setFooter({ text: `Quoted by ${quoterName}`, iconURL: interaction.user.displayAvatarURL() })
+    .setTimestamp();
 
-  if (msg.attachments.size > 0) {
-    embed.addFields({ name: 'Attachments', value: `${msg.attachments.size} attachment${msg.attachments.size === 1 ? '' : 's'}`, inline: true });
-  }
+  if (text) embed.setDescription(`“${text}”`);
+  if (image) embed.setImage(image.url);
+  if (context) embed.addFields({ name: 'Context', value: context.slice(0, 1024) });
 
-  // Forward image attachment as embed image (Discord only supports one)
-  const firstImage = [...msg.attachments.values()].find(a => /image\//i.test(a.contentType || '') || /\.(png|jpe?g|gif|webp)$/i.test(a.name || ''));
-  if (firstImage) {
-    try { embed.setImage(firstImage.url); } catch {}
-  }
-
-  await interaction.editReply({ embeds: [embed] });
+  return interaction.reply({ embeds: [embed] });
 }

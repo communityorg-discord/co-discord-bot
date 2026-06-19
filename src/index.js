@@ -201,7 +201,7 @@ const HIDDEN_COMMANDS = new Set([
 const PANEL_COMMANDS = new Set([
   'ticket-panel-send', 'ticket-panel-delete', 'ticket-options',
   'logs', 'logspanel', 'orglogs', 'privatelogs', 'audit-log', 'automod', 'server-health', 'bot-perms', 'counting',
-  'poll', 'embed', 'quote', 'snippet', 'remind', 'reminders', 'todo', 'random-pick', 'timezone', 'break', 'feedback', 'idea', 'schedule-dm',
+  'poll', 'embed', 'snippet', 'remind', 'reminders', 'todo', 'random-pick', 'timezone', 'break', 'feedback', 'idea', 'schedule-dm',
   'bot', 'info', 'ping', 'user', 'serverinfo', 'channel-info', 'role-info', 'who-is-here',
   'record', 'office', 'emergency', 'panic-bot',
 ]);

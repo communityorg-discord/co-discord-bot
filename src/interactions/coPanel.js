@@ -22,7 +22,7 @@ const SECTIONS = [
   ['logs',     { label: 'Logs & Config',  emoji: '📋', blurb: 'Log routing, audit log, AutoMod, server health.',
     commands: ['logs', 'logspanel', 'orglogs', 'privatelogs', 'audit-log', 'automod', 'server-health', 'bot-perms', 'counting'] }],
   ['utilities',{ label: 'Utilities',      emoji: '🔧', blurb: 'Polls, embeds, reminders, snippets and more.',
-    commands: ['poll', 'embed', 'quote', 'snippet', 'remind', 'reminders', 'todo', 'random-pick', 'timezone', 'break', 'feedback', 'idea', 'schedule-dm'] }],
+    commands: ['poll', 'embed', 'snippet', 'remind', 'reminders', 'todo', 'random-pick', 'timezone', 'break', 'feedback', 'idea', 'schedule-dm'] }],
   ['info',     { label: 'Info & Lookups', emoji: 'ℹ️', blurb: 'Bot, server, user, channel and role info.',
     commands: ['bot', 'info', 'ping', 'user', 'serverinfo', 'channel-info', 'role-info', 'who-is-here'] }],
   ['system',   { label: 'Voice & System', emoji: '🎙️', blurb: 'Voice recording/office and emergency controls.',
