@@ -159,7 +159,7 @@ const ROLE_CHANNEL_MAP = {
  * @param {string} [o.guildId]
  * @param {string[]} [o.extraChannels] hardcoded channel IDs to always include
  */
-export async function logEvent(client, { embed, category, type, guildId, extraChannels = [] }) {
+export async function logEvent(client, { embed, category, type, guildId, extraChannels = [], dmSuppress = false }) {
   const seen = new Set();
   const sendTo = async (channelId) => {
     if (!channelId || seen.has(channelId)) return;
@@ -172,11 +172,13 @@ export async function logEvent(client, { embed, category, type, guildId, extraCh
   for (const c of extraChannels) await sendTo(c);
   if (category && type) for (const c of getLogChannelsForEvent(guildId || '', category, type)) await sendTo(c);
   // DM the watched audience — but NOT for high-volume routine churn. Member
-  // role add/remove fire in bursts (mass syncs, bulk grants) and belong in the
-  // role-management log channels, not the founders' DMs. Everything else
-  // (moderation, security, verification) still pings them via the USGRP | Logs
-  // bot. Keeps real alerts visible without the role-add flood.
-  if (!DM_SUPPRESSED_TYPES.has(type)) await sendToWatchedUsers(client, embed);
+  // role add/remove fire in bursts (mass syncs, bulk grants), and a role REORDER
+  // fires a roleUpdate for every role it shifts (moving one role can emit 100+
+  // position-only updates at once) — these belong in the role-management log
+  // channels, not the founders' DMs. A DM flood also rate-limits the USGRP | Logs
+  // bot into the local-DM fallback, so suppressing it keeps the surviving alerts
+  // coming reliably from the Logs bot. Everything meaningful still pings them.
+  if (!DM_SUPPRESSED_TYPES.has(type) && !dmSuppress) await sendToWatchedUsers(client, embed);
 }
 
 export async function logAction(client, {
@@ -204,7 +206,7 @@ export async function logAction(client, {
 export async function logRoleAction(client, {
   action, target, moderator,
   color = 0x9B59B6, fields = [],
-  roleLogType, guildId,
+  roleLogType, guildId, dmSuppress = false,
 }) {
   const embed = new EmbedBuilder()
     .setTitle(action)
@@ -217,5 +219,5 @@ export async function logRoleAction(client, {
     )
     .setTimestamp()
     .setFooter({ text: 'Community Organisation | Role Management Log' });
-  await logEvent(client, { embed, category: 'role_management', type: roleLogType, guildId, extraChannels: [ROLE_ALL_LOG_CHANNEL_ID, ROLE_CHANNEL_MAP[roleLogType]] });
+  await logEvent(client, { embed, category: 'role_management', type: roleLogType, guildId, extraChannels: [ROLE_ALL_LOG_CHANNEL_ID, ROLE_CHANNEL_MAP[roleLogType]], dmSuppress });
 }

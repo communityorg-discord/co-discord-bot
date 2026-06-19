@@ -3558,16 +3558,26 @@ client.on('roleDelete', async (role) => {
 // Role updated (name, color, permissions, etc.)
 client.on('roleUpdate', async (oldRole, newRole) => {
   try {
+    const nameChanged = oldRole.name !== newRole.name;
+    const colorChanged = oldRole.hexColor !== newRole.hexColor;
+    const positionChanged = oldRole.position !== newRole.position;
+    const permsChanged = oldRole.permissions.bitfield !== newRole.permissions.bitfield;
+
     const changes = [];
-    if (oldRole.name !== newRole.name) changes.push(`Name: "${oldRole.name}" → "${newRole.name}"`);
-    if (oldRole.hexColor !== newRole.hexColor) changes.push(`Color: ${oldRole.hexColor || 'Default'} → ${newRole.hexColor || 'Default'}`);
-    if (oldRole.position !== newRole.position) changes.push(`Position: ${oldRole.position} → ${newRole.position}`);
-    if (oldRole.permissions.bitfield !== newRole.permissions.bitfield) changes.push(`Permissions changed`);
+    if (nameChanged) changes.push(`Name: "${oldRole.name}" → "${newRole.name}"`);
+    if (colorChanged) changes.push(`Color: ${oldRole.hexColor || 'Default'} → ${newRole.hexColor || 'Default'}`);
+    if (positionChanged) changes.push(`Position: ${oldRole.position} → ${newRole.position}`);
+    if (permsChanged) changes.push(`Permissions changed`);
 
     if (changes.length === 0) return; // No meaningful changes
 
     const guildId = newRole.guild.id;
-    const isPermissionChange = oldRole.permissions.bitfield !== newRole.permissions.bitfield;
+    // A reorder shifts every role between the old and new slot — Discord fires a
+    // position-only roleUpdate for each, so one drag can emit 100+ of these at once.
+    // Keep the channel log but suppress the founder DM so it doesn't flood (and
+    // doesn't rate-limit the Logs bot into the local-DM fallback). Name/colour/
+    // permission edits are deliberate and still DM via USGRP | Logs.
+    const positionOnly = positionChanged && !nameChanged && !colorChanged && !permsChanged;
 
     await logRoleAction(newRole.client, {
       action: 'Role Updated',
@@ -3579,8 +3589,9 @@ client.on('roleUpdate', async (oldRole, newRole) => {
         { name: 'Server', value: newRole.guild.name, inline: true },
         { name: 'Changes', value: changes.join('\n'), inline: false },
       ],
-      roleLogType: isPermissionChange ? 'role_permission' : 'role_update',
-      guildId
+      roleLogType: permsChanged ? 'role_permission' : 'role_update',
+      guildId,
+      dmSuppress: positionOnly,
     });
   } catch (e) {
     console.error('[roleUpdate log error]', e.message);
