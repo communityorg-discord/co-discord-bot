@@ -6,7 +6,7 @@
 // final summary itself.
 //
 // CONCURRENCY: instead of one global lock (one session at a time), there is a
-// POOL of bot identities — CO | Utilities, USGRP | Services, USGRP | GOVT,
+// POOL of bot identities — USGRP | Utilities, USGRP | Services, USGRP | GOVT,
 // USGRP | Logs. Each run claims the first FREE identity and posts AS that bot,
 // so up to N "Claude" sessions can run at once. A run that finds every worker
 // busy says so and bails. Locks are PID-stamped AND time-bounded, so a crashed
@@ -52,10 +52,10 @@ function readTok(file, varName) {
     return m ? m[1].trim().replace(/^["']|["']$/g, '') : null;
   } catch { return null; }
 }
-// The worker pool, in preference order — a single run uses CO | Utilities (the
+// The worker pool, in preference order — a single run uses USGRP | Utilities (the
 // familiar "Claude" identity); extra concurrent runs spill onto the others.
 const POOL_DEF = [
-  { name: 'CO | Utilities',  file: 'co-discord-bot/.env', var: 'DISCORD_BOT_TOKEN' },
+  { name: 'USGRP | Utilities', file: 'co-discord-bot/.env', var: 'DISCORD_BOT_TOKEN' },
   { name: 'USGRP | Services', file: 'aspire-bot/.env',     var: 'ASPIRE_DISCORD_BOT_TOKEN' },
   { name: 'USGRP | GOVT',    file: 'usgrp-gov-bot/.env',  var: 'USGRP_GOV_BOT_TOKEN' },
   { name: 'USGRP | Logs',    file: 'usgrp-logs-bot/.env', var: 'DISCORD_TOKEN' },
