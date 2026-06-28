@@ -252,7 +252,11 @@ export async function ensurePanel(client) {
   const channel = await resolveLoaChannel(client);
   if (!channel) { console.warn('[LOA] no #loa channel found — panel not posted. Run /loa-panel in the channel you want.'); return; }
   const existingId = getBotConfig('loa_panel_msg_id');
-  if (existingId) { const msg = await channel.messages.fetch(existingId).catch(() => null); if (msg) return; }
+  if (existingId) {
+    const msg = await channel.messages.fetch(existingId).catch(() => null);
+    // Refresh the existing panel in place so copy changes land without reposting.
+    if (msg) { try { await msg.edit(buildInfoPanel()); } catch (e) { console.warn('[LOA] panel refresh failed:', e.message); } return; }
+  }
   try {
     const msg = await channel.send(buildInfoPanel());
     setBotConfig('loa_panel_msg_id', msg.id);
