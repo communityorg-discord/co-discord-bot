@@ -4,7 +4,7 @@ import multer from 'multer';
 import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Partials, AuditLogEvent } from 'discord.js';
 import { E } from './lib/emoji.js';
 import { config } from 'dotenv';
-import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID } from './config.js';
+import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID, IS_USGRP, ACTIVE_NETWORK } from './config.js';
 import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent, logAtlasBotAction, logMessageEvent, isDmRelay, getActiveUltimatums, getUltimatum, setUltimatumStatus, setUltimatumNextReminder } from './utils/botDb.js';
 import { sendToWatchedUsers, logEvent } from './utils/logger.js';
 import { getUserByDiscordId } from './db.js';
@@ -185,14 +185,17 @@ const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLo
 // The CO Staff Network is suspended, so its CO-specific commands are HIDDEN —
 // the command files are kept, they're just not registered with Discord or routed.
 // Moderation, tickets, office, network-verify and general utility stay live.
-const HIDDEN_COMMANDS = new Set([
+// CO-only commands (HR / activity / CO verify / leave / cases). Hidden when the
+// bot runs as USGRP; restored automatically in CO mode (ACTIVE_NETWORK=co).
+const CO_ONLY_COMMANDS = [
   'dm', 'dm-exempt', 'brag', 'leave', 'staff', 'cases', 'case', 'aps', 'helpdesk',
   'nid', 'suspend', 'unsuspend', 'investigate', 'terminate', 'infractions',
   'verify', 'unverify', 'authorisation-override', 'inbox', 'assign', 'acting',
   'onboard', 'eliminate', 'stats', 'sync-roles', 'sync-all-roles', 'whois',
   'find-user', 'leaderboard', 'myroles', 'staff-online', 'standup', 'thanks',
   'kudos-leaderboard', 'my-kudos', 'links',
-]);
+];
+const HIDDEN_COMMANDS = new Set(IS_USGRP ? CO_ONLY_COMMANDS : []);
 // Less-used commands pulled OUT of the slash-command picker and reached via the
 // /panel hub instead (gov-bot style). Their modules stay loaded and their
 // button/select/modal handlers still route by customId — they're just not
@@ -288,7 +291,7 @@ client.once('clientReady', async () => {
   // (leave/acting, activity-point syncs, server-health, staff-cache, assignment
   // overdue, weekly stats) are paused. USGRP crons (network access, automod) and
   // the suspension/ban safety net stay live. Flip to false to resume CO.
-  const CO_SUSPENDED = true;
+  const CO_SUSPENDED = IS_USGRP;   // driven by ACTIVE_NETWORK; set =co (env) to resume CO
 
   // Rotating funny status. Type: 0 Playing · 2 Listening · 3 Watching · 5 Competing.
   const STATUSES = [

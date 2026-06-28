@@ -20,8 +20,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SUPERUSER_IDS } from '../config.js';
+import { SUPERUSER_IDS, IS_USGRP } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
+import { usgrpHasRank } from './usgrpAuthority.js';
 import { commandHasAnyRows, commandPermitsUser } from './botDb.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -125,14 +126,19 @@ function memberRoleNames(interaction) {
   return [];
 }
 
-function applyFallback(commandKey, interaction, discordId) {
+async function applyFallback(commandKey, interaction, discordId) {
   const fallback = FALLBACK_MAP.get(commandKey);
   if (!fallback) return false;
   const f = fallback.toLowerCase().trim();
   if (f === 'superuser_only') return false; // already short-circuited above
   if (f === 'everyone' || f === 'public') return true;
   const lvlMatch = f.match(/^auth_level\s*>=\s*(\d+)$/);
-  if (lvlMatch) return hasPortalAuth(discordId, Number(lvlMatch[1]));
+  if (lvlMatch) {
+    const n = Number(lvlMatch[1]);
+    // On USGRP, the "auth_level >= N" thresholds resolve against netadmin
+    // RANK (see usgrpAuthority.js), not the CO portal auth_level. Same N.
+    return IS_USGRP ? await usgrpHasRank(discordId, n) : hasPortalAuth(discordId, n);
+  }
   const roleNameMatch = f.match(/^role:(.+)$/);
   if (roleNameMatch) {
     const target = roleNameMatch[1].trim().toLowerCase();
@@ -179,7 +185,7 @@ export async function canUseCommand(commandName, interaction) {
       return ok ? { allowed: true, reason: `Granted via Bot Permissions (${key})` } : denied;
     }
     // No rows of its own — honour THIS key's fallback and stop (don't inherit base).
-    const ok = applyFallback(key, interaction, discordId);
+    const ok = await applyFallback(key, interaction, discordId);
     return ok ? { allowed: true, reason: `Granted via fallback (${key})` } : denied;
   }
   return denied;

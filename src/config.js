@@ -15,6 +15,18 @@ export {
   networkAllows,
 } from '../../aspire-shared/networks.js';
 
+// ── Active network switch ────────────────────────────────────────────
+// The single config key that decides which network this bot runs as.
+//   ACTIVE_NETWORK=usgrp  → USGRP mode (default while CO is suspended):
+//       authority resolves by netadmin RANK (utils/usgrpAuthority.js); only
+//       the USGRP + network-admin surface is active; CO-only crons + commands
+//       are off.
+//   ACTIVE_NETWORK=co     → CO mode (when we go back to CO): the original CO
+//       auth_level + staff/activity/HR surface returns, unchanged.
+export const ACTIVE_NETWORK = (process.env.ACTIVE_NETWORK || 'usgrp').toLowerCase();
+export const IS_USGRP = ACTIVE_NETWORK !== 'co';
+export const IS_CO = ACTIVE_NETWORK === 'co';
+
 export const STAFF_HQ_ID = process.env.STAFF_HQ_ID;
 export const NETWORK_SERVER_IDS = (process.env.NETWORK_SERVER_IDS || '').split(',').filter(Boolean);
 export const ALL_SERVER_IDS = [
