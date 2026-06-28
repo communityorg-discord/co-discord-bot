@@ -344,7 +344,9 @@ export async function handleAiText(interaction, rawText) {
     const loa = getLoa(createdId);
 
     const payload = buildPendingEmbed(loa);
-    const fsaRole = channel?.guild?.roles?.cache?.find(r => /^FSA\b/i.test(r.name) || /Federal Server Administration/i.test(r.name));
+    // Ping the FSA TEAM role ("USGRP | Federal Server Administration"), not an
+    // individual rank role like "FSA | Senior Administrator".
+    const fsaRole = channel?.guild?.roles?.cache?.find(r => /federal server administration/i.test(r.name));
     const content = fsaRole ? `${fsaRole} — new LOA request` : undefined;
 
     const msg = await channel.send({ ...payload, content, allowedMentions: fsaRole ? { roles: [fsaRole.id] } : { parse: [] } });
