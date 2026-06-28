@@ -148,14 +148,14 @@ function emojiId(e) {
   return m ? m[1] : undefined;
 }
 
-function reqFields(loa, durationLabel) {
+function durLabel(loa) { return loa.duration_text ? String(loa.duration_text).slice(0, 100) : 'Open-ended'; }
+function reqFields(loa) {
   return [
     { name: 'Member', value: `<@${loa.discord_id}>`, inline: true },
-    { name: 'How long', value: durationLabel, inline: true },
+    { name: 'How long', value: durLabel(loa), inline: true },
     { name: 'Reason', value: String(loa.reason || '—').slice(0, 1024), inline: false },
   ];
 }
-function durLabel(loa) { return loa.duration_text ? String(loa.duration_text).slice(0, 100) : 'Open-ended'; }
 
 export function buildPendingEmbed(loa) {
   const embed = new EmbedBuilder()
@@ -335,25 +335,24 @@ export async function handleAiText(interaction, rawText) {
   }
 
   clearDraft(uid);
-  const durationText = durLabelFromDays(parsed.duration_days);
-  const channel = (await resolveLoaChannel(interaction.client)) || interaction.channel;
-  const displayName = interaction.member?.displayName || interaction.user.username;
-  const id = createLoaRequest({ discordId: uid, displayName, reason: parsed.reason, durationText, startAt: parsed.start_at, channelId: channel?.id });
-  const loa = getLoa(id);
-
-  const payload = buildPendingEmbed(loa);
-  let content;
-  const fsaRole = channel?.guild?.roles?.cache?.find(r => /^FSA\b/i.test(r.name) || /Federal Server Administration/i.test(r.name));
-  if (fsaRole) content = `${fsaRole} — new LOA request`;
-
   try {
+    const durationText = durLabelFromDays(parsed.duration_days);
+    const channel = (await resolveLoaChannel(interaction.client)) || interaction.channel;
+    const displayName = interaction.member?.displayName || interaction.user.username;
+    const id = createLoaRequest({ discordId: uid, displayName, reason: parsed.reason, durationText, startAt: parsed.start_at, channelId: channel?.id });
+    const loa = getLoa(id);
+
+    const payload = buildPendingEmbed(loa);
+    const fsaRole = channel?.guild?.roles?.cache?.find(r => /^FSA\b/i.test(r.name) || /Federal Server Administration/i.test(r.name));
+    const content = fsaRole ? `${fsaRole} — new LOA request` : undefined;
+
     const msg = await channel.send({ ...payload, content, allowedMentions: fsaRole ? { roles: [fsaRole.id] } : { parse: [] } });
     setLoaRequestMessage(id, channel.id, msg.id);
     const summary = parsed.summary ? `\n\n> ${parsed.summary}` : '';
     return interaction.editReply({ content: `${E.check} Your LOA request (#${id}) has been sent to ${channel} for FSA review.${summary}\n\nYou'll be DM'd when it's decided.`, components: [] });
   } catch (e) {
     console.error('[LOA] post request error:', e.message);
-    return interaction.editReply({ content: `${E.cross} Couldn't post your request to the LOA channel. Ping an admin.`, components: [] });
+    return interaction.editReply({ content: `${E.cross} Something went wrong filing your request — ping an admin. (${String(e.message).slice(0, 100)})`, components: [] });
   }
 }
 
