@@ -16,6 +16,7 @@ import {
 import { E } from '../lib/emoji.js';
 import { BRAND } from '../utils/brand.js';
 import { isFSA } from '../utils/usgrpAuthority.js';
+import { parseLoaIntent, aiAvailable } from '../serverAccess/ai.js';
 import {
   createLoaRequest, getLoa, getActiveLoaForUser, getPendingLoaForUser, getOpenLoaForUser,
   setLoaRequestMessage, approveLoaRow, scheduleLoaRow, activateLoaRow, declineLoaRow, endLoaRow,
@@ -62,35 +63,18 @@ async function durationToMs(text) {
   catch { return null; }
 }
 
-// Parse a freeform "start date" into an ISO time. Accepts relative ("in 3 days",
-// "1 week", "48h") and absolute dates ("2026-07-05", "5 July"). Returns
-// { ok, at }: at=null means start immediately (on approval).
 const C_SCHEDULED = 0x3B82F6; // blue
-async function parseStartAt(text) {
-  if (!text || !text.trim()) return { ok: true, at: null };
-  const t = text.trim();
-  const rel = t.replace(/^in\s+/i, '');
-  let relMs = null;
-  try { const { default: ms } = await import('ms'); const v = ms(rel); if (typeof v === 'number' && v > 0 && /[a-z]/i.test(rel)) relMs = v; } catch {}
-  if (relMs) return { ok: true, at: new Date(Date.now() + relMs).toISOString() };
-  const parsed = Date.parse(t);
-  if (!Number.isNaN(parsed)) {
-    if (parsed > Date.now() + 60_000) return { ok: true, at: new Date(parsed).toISOString() };
-    // Past — but a yearless date (e.g. "5 July") defaults to year 2001 in V8.
-    // Retry with this year, then next year, and take the first that's in the future.
-    if (!/\b\d{4}\b/.test(t)) {
-      const yr = new Date().getFullYear();
-      for (const y of [yr, yr + 1]) {
-        const p2 = Date.parse(`${t} ${y}`);
-        if (!Number.isNaN(p2) && p2 > Date.now() + 60_000) return { ok: true, at: new Date(p2).toISOString() };
-      }
-    }
-    return { ok: false, error: 'That start date looks like it\'s in the past — give a future date.' };
-  }
-  return { ok: false, error: 'Couldn\'t read that start date. Try `2026-07-05`, `5 July`, or `in 3 days` (or leave it blank to start when approved).' };
-}
 function ts(iso, style = 'F') { return `<t:${Math.floor(new Date(iso).getTime() / 1000)}:${style}>`; }
 function isFuture(iso) { return iso && new Date(iso).getTime() > Date.now() + 60_000; }
+function durLabelFromDays(d) { return d ? `${d} day${d === 1 ? '' : 's'}` : null; }
+
+// Short-lived per-user draft of an in-progress AI request, so a follow-up
+// answer is combined with what they already said. TTL 10 min.
+const _drafts = new Map(); // userId -> { text, question, at }
+const DRAFT_TTL = 10 * 60_000;
+function getDraft(uid) { const d = _drafts.get(uid); if (d && Date.now() - d.at < DRAFT_TTL) return d; _drafts.delete(uid); return null; }
+function setDraft(uid, text, question) { _drafts.set(uid, { text, question, at: Date.now() }); }
+function clearDraft(uid) { _drafts.delete(uid); }
 
 // ── cross-guild apply / revert ───────────────────────────────────────────────
 
@@ -141,10 +125,10 @@ export function buildInfoPanel() {
     .setColor(BRAND.color)
     .setTitle(`${E.leave} Leave of Absence (LOA)`)
     .setDescription(
-      'Going to be away for a while? Request an LOA so the team knows you\'re off — no questions, just give us a heads-up.\n\n' +
+      'Going to be away for a while? Request an LOA so the team knows you\'re off — no forms, just tell it in your own words.\n\n' +
       '**How to request**\n' +
       '• Tap **Request LOA** below (or run `/loa`).\n' +
-      '• Tell us **why** and **roughly how long** you\'ll be away.\n' +
+      '• Just describe it naturally — e.g. *"I need an LOA next week for exams, about 10 days"* or *"off now for a fortnight, holiday"*. It works out the dates for you and asks if anything\'s missing.\n' +
       '• Your request appears here for review.\n\n' +
       '**What happens next**\n' +
       '• A member of the **FSA** approves or declines it.\n' +
@@ -287,20 +271,15 @@ export async function postPanelTo(channel) {
 
 // ── interaction handlers ───────────────────────────────────────────────────────
 
-function requestModal() {
+// One free-text box — the member just describes their leave in their own words
+// and the AI works out the reason, start date and duration. `placeholder` carries
+// a follow-up question when we need more info.
+function aiModal(placeholder) {
   return new ModalBuilder().setCustomId('loa_modal').setTitle('Request a Leave of Absence').addComponents(
     new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('reason').setLabel('Why are you taking leave?')
-        .setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(900)
-        .setPlaceholder('e.g. exams, holiday, personal time, work…')),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('duration').setLabel('How long? (optional)')
-        .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(60)
-        .setPlaceholder('e.g. 1 week, 10 days, 48h — blank = open-ended')),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('start').setLabel('Start date? (optional)')
-        .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(60)
-        .setPlaceholder('blank = starts when approved · e.g. 5 July, in 3 days')),
+      new TextInputBuilder().setCustomId('text').setLabel('Tell me about your leave')
+        .setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(500)
+        .setPlaceholder((placeholder || 'e.g. "I need an LOA next week for exams, about 10 days" — or "off now for 2 weeks, holiday"').slice(0, 100))),
   );
 }
 
@@ -310,37 +289,55 @@ function openMsg(open) {
   return `${E.pending} You already have a pending LOA request (#${open.id}) waiting on FSA review.`;
 }
 
-// Slash command + button both open the same modal.
+// Slash command + button both open the same AI box.
 export async function openRequestModal(interaction) {
   const open = getOpenLoaForUser(interaction.user.id);
   if (open) return interaction.reply({ content: openMsg(open), ephemeral: true });
-  return interaction.showModal(requestModal());
+  return interaction.showModal(aiModal());
 }
 
 export async function handleModalSubmit(interaction) {
   if (interaction.customId !== 'loa_modal') return false;
-  const reason = (interaction.fields.getTextInputValue('reason') || '').trim();
-  const durationText = (interaction.fields.getTextInputValue('duration') || '').trim() || null;
-  const startText = (interaction.fields.getTextInputValue('start') || '').trim() || null;
-  if (!reason) return interaction.reply({ content: `${E.cross} A reason is required.`, ephemeral: true });
+  await handleAiText(interaction, interaction.fields.getTextInputValue('text') || '');
+  return true;
+}
 
-  // Validate the optional start date before anything else.
-  const start = await parseStartAt(startText);
-  if (!start.ok) return interaction.reply({ content: `${E.cross} ${start.error}`, ephemeral: true });
+// The AI request flow: interpret the member's words, ask a follow-up if needed,
+// otherwise file the request. Used by the modal, /loa <text>, and the follow-up.
+export async function handleAiText(interaction, rawText) {
+  const uid = interaction.user.id;
+  const text = String(rawText || '').trim();
+  if (!text) return interaction.reply({ content: `${E.cross} Tell me about your leave first.`, ephemeral: true });
 
-  // Guard against duplicates (modal could be opened before another finished).
-  const open = getOpenLoaForUser(interaction.user.id);
-  if (open) return interaction.reply({ content: openMsg(open), ephemeral: true });
+  const open = getOpenLoaForUser(uid);
+  if (open) { clearDraft(uid); return interaction.reply({ content: openMsg(open), ephemeral: true }); }
 
   await interaction.deferReply({ ephemeral: true });
 
+  // Combine with any prior draft (i.e. a follow-up answer to our question).
+  const draft = getDraft(uid);
+  const combined = draft ? `${draft.text}\n${text}` : text;
+
+  let parsed = null;
+  if (aiAvailable()) { try { parsed = await parseLoaIntent(combined, { nowIso: new Date().toISOString() }); } catch (e) { console.error('[LOA] AI parse error:', e.message); } }
+  // No AI / parse failed → treat the whole message as the reason, open-ended, start now.
+  if (!parsed || !parsed.ok) parsed = { ok: true, reason: combined.slice(0, 500), start_at: null, duration_days: null, complete: true, summary: null, question: null };
+
+  if (!parsed.complete) {
+    setDraft(uid, combined, parsed.question);
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('loa:more').setLabel('Add details').setStyle(ButtonStyle.Primary));
+    return interaction.editReply({ content: `${E.pending} ${parsed.question}`, components: [row] });
+  }
+
+  clearDraft(uid);
+  const durationText = durLabelFromDays(parsed.duration_days);
   const channel = (await resolveLoaChannel(interaction.client)) || interaction.channel;
   const displayName = interaction.member?.displayName || interaction.user.username;
-  const id = createLoaRequest({ discordId: interaction.user.id, displayName, reason, durationText, startAt: start.at, channelId: channel?.id });
+  const id = createLoaRequest({ discordId: uid, displayName, reason: parsed.reason, durationText, startAt: parsed.start_at, channelId: channel?.id });
   const loa = getLoa(id);
 
   const payload = buildPendingEmbed(loa);
-  // Ping the FSA division role in that guild, if present.
   let content;
   const fsaRole = channel?.guild?.roles?.cache?.find(r => /^FSA\b/i.test(r.name) || /Federal Server Administration/i.test(r.name));
   if (fsaRole) content = `${fsaRole} — new LOA request`;
@@ -348,11 +345,11 @@ export async function handleModalSubmit(interaction) {
   try {
     const msg = await channel.send({ ...payload, content, allowedMentions: fsaRole ? { roles: [fsaRole.id] } : { parse: [] } });
     setLoaRequestMessage(id, channel.id, msg.id);
-    const startNote = start.at ? ` It's requested to start ${ts(start.at, 'R')}.` : '';
-    return interaction.editReply({ content: `${E.check} Your LOA request (#${id}) has been sent to ${channel} for FSA review.${startNote} You'll be DM'd when it's decided.` });
+    const summary = parsed.summary ? `\n\n> ${parsed.summary}` : '';
+    return interaction.editReply({ content: `${E.check} Your LOA request (#${id}) has been sent to ${channel} for FSA review.${summary}\n\nYou'll be DM'd when it's decided.`, components: [] });
   } catch (e) {
     console.error('[LOA] post request error:', e.message);
-    return interaction.editReply({ content: `${E.cross} Couldn't post your request to the LOA channel. Ping an admin.` });
+    return interaction.editReply({ content: `${E.cross} Couldn't post your request to the LOA channel. Ping an admin.`, components: [] });
   }
 }
 
@@ -361,6 +358,13 @@ export async function handleButton(interaction) {
   const [, action, idStr] = interaction.customId.split(':');
   const id = idStr ? Number(idStr) : null;
   if (action === 'request') { await openRequestModal(interaction); return true; }
+  if (action === 'more') {
+    const open = getOpenLoaForUser(interaction.user.id);
+    if (open) { await interaction.reply({ content: openMsg(open), ephemeral: true }); return true; }
+    const draft = getDraft(interaction.user.id);
+    await interaction.showModal(aiModal(draft?.question));
+    return true;
+  }
   if (action === 'approve') { await handleApprove(interaction, id); return true; }
   if (action === 'decline') { await handleDecline(interaction, id); return true; }
   if (action === 'cancel')  { await handleCancel(interaction, id);  return true; }

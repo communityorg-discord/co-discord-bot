@@ -99,4 +99,42 @@ Rules:
     };
 }
 
+// Turn a plain-English Leave of Absence request into structured fields, resolving
+// relative dates against the current time. Returns { ok, reason, start_at,
+// duration_days, complete, question, summary }.
+export async function parseLoaIntent(text, { nowIso } = {}) {
+    const now = nowIso || new Date().toISOString();
+    const sys = `You turn a USGRP staff member's plain-English Leave of Absence (LOA) request into structured JSON. The current date and time is ${now} (UTC). Respond with a JSON object only.
+
+Return JSON:
+  "reason": their reason for the leave as a short phrase, or null if they didn't give one.
+  "start_at": ISO-8601 UTC timestamp for when the leave should START, or null if it starts now / when approved. Compute relative dates ("next week", "on the 5th", "tomorrow", "in 3 days", "from monday") from the current date/time above. Only set this when they clearly want a FUTURE start.
+  "duration_days": whole number of days the leave lasts, or null if open-ended / not stated. Convert units ("a week"=7, "two weeks"=14, "a fortnight"=14, "a month"=30, "48h"=2, "a couple days"=2).
+  "complete": true only if you have at least a reason. false if the reason is missing or the request is too vague to act on.
+  "question": if complete is false, ONE short friendly question for the missing info (usually the reason, plus timing if unclear). null when complete.
+  "summary": a one-sentence friendly read-back of what you understood, e.g. "An open-ended LOA starting now — reason: exams." or "A 7-day LOA starting next Monday — reason: holiday."
+
+Rules:
+- "now" / "today" / "right away" / no mention of timing → start_at null (starts on approval).
+- A reason is REQUIRED for complete=true. If they only gave timing, ask for the reason.
+- Never invent a reason. Never set start_at to a past time.`;
+    let out;
+    try { out = JSON.parse(await chat(sys, text, 500)); } catch { return { ok: false }; }
+    let start_at = null;
+    if (out.start_at) { const t = Date.parse(out.start_at); if (!Number.isNaN(t) && t > Date.now() + 60_000) start_at = new Date(t).toISOString(); }
+    let duration_days = Number.isFinite(out.duration_days) ? Math.max(0, Math.round(out.duration_days)) : null;
+    if (duration_days === 0) duration_days = null;
+    const reason = out.reason ? String(out.reason).slice(0, 500) : null;
+    const complete = !!out.complete && !!reason;
+    return {
+        ok: true,
+        reason,
+        start_at,
+        duration_days,
+        complete,
+        question: complete ? null : (out.question ? String(out.question).slice(0, 300) : 'What\'s the reason for your leave, and roughly how long?'),
+        summary: out.summary ? String(out.summary).slice(0, 300) : null,
+    };
+}
+
 export const aiAvailable = () => !!API_KEY;
