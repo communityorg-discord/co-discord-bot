@@ -19,6 +19,23 @@
 //   9  Head Administrator
 // Founders (SUPERUSER_IDS) bypass everything before this is even consulted.
 import { networkVerifyApi } from './aspireInternal.js';
+import { SUPERUSER_IDS } from '../config.js';
+
+// Is this member a member of the FSA (Federal Server Administration) — the
+// division that approves LOAs and runs network terminations? Founders always
+// pass; otherwise their netadmin position is "FSA | …" or they hold the
+// Federal Server Administration division role. Used by /loa + /terminate.
+export async function isFSA(discordId) {
+  if (SUPERUSER_IDS.includes(String(discordId))) return true;
+  try {
+    const resp = await networkVerifyApi.record(String(discordId));
+    const rec = resp?.record || resp;
+    if (!rec || resp?.ok === false) return false;
+    if (/^FSA\b/i.test(String(rec.position || ''))) return true;
+    const roles = Array.isArray(rec.roles) ? rec.roles : [];
+    return roles.some(r => /^FSA\b/i.test(String(r)) || /Federal Server Administration/i.test(String(r)));
+  } catch { return false; }
+}
 
 // Map a netadmin position record -> 0-9 power level. Pattern-matched on the
 // position title (same shape bucketsFor uses), most-specific first.

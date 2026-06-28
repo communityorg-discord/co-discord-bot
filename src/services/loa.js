@@ -15,8 +15,7 @@ import {
 } from 'discord.js';
 import { E } from '../lib/emoji.js';
 import { BRAND } from '../utils/brand.js';
-import { SUPERUSER_IDS } from '../config.js';
-import { networkVerifyApi } from '../utils/aspireInternal.js';
+import { isFSA } from '../utils/usgrpAuthority.js';
 import {
   createLoaRequest, getLoa, getActiveLoaForUser, getPendingLoaForUser, getOpenLoaForUser,
   setLoaRequestMessage, approveLoaRow, scheduleLoaRow, activateLoaRow, declineLoaRow, endLoaRow,
@@ -35,19 +34,8 @@ const C_ENDED   = 0x9CA3AF;   // grey
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-// Is this member allowed to approve LOAs? Founders always; otherwise a member of
-// the FSA (Federal Server Administration) — position "FSA | …" or the division role.
-export async function isFSA(discordId) {
-  if (SUPERUSER_IDS.includes(String(discordId))) return true;
-  try {
-    const resp = await networkVerifyApi.record(String(discordId));
-    const rec = resp?.record || resp;
-    if (!rec || resp?.ok === false) return false;
-    if (/^FSA\b/i.test(String(rec.position || ''))) return true;
-    const roles = Array.isArray(rec.roles) ? rec.roles : [];
-    return roles.some(r => /^FSA\b/i.test(String(r)) || /Federal Server Administration/i.test(String(r)));
-  } catch { return false; }
-}
+// LOA approvals + cancels are gated to the FSA (shared with /terminate).
+export { isFSA };
 
 // Strip any "| suffix" (rank/title or an existing | LOA) to get the bare name.
 function baseNameOf(member) {

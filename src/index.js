@@ -193,7 +193,7 @@ const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLo
 // bot runs as USGRP; restored automatically in CO mode (ACTIVE_NETWORK=co).
 const CO_ONLY_COMMANDS = [
   'dm', 'dm-exempt', 'brag', 'leave', 'staff', 'cases', 'case', 'caseopen', 'aps', 'helpdesk',
-  'nid', 'suspend', 'unsuspend', 'investigate', 'terminate', 'infractions',
+  'nid', 'suspend', 'unsuspend', 'investigate', 'infractions',
   'verify', 'unverify', 'authorisation-override', 'inbox', 'assign', 'acting',
   'onboard', 'eliminate', 'stats', 'sync-roles', 'sync-all-roles', 'whois',
   'find-user', 'leaderboard', 'myroles', 'staff-online', 'standup', 'thanks',
