@@ -18,9 +18,9 @@ import { BRAND } from '../utils/brand.js';
 import { SUPERUSER_IDS } from '../config.js';
 import { networkVerifyApi } from '../utils/aspireInternal.js';
 import {
-  createLoaRequest, getLoa, getActiveLoaForUser, getPendingLoaForUser,
-  setLoaRequestMessage, approveLoaRow, declineLoaRow, endLoaRow, getExpiredActiveLoas,
-  getBotConfig, setBotConfig,
+  createLoaRequest, getLoa, getActiveLoaForUser, getPendingLoaForUser, getOpenLoaForUser,
+  setLoaRequestMessage, approveLoaRow, scheduleLoaRow, activateLoaRow, declineLoaRow, endLoaRow,
+  getExpiredActiveLoas, getDueScheduledLoas, getBotConfig, setBotConfig,
 } from '../utils/botDb.js';
 
 const LOA_ROLE_NAME = 'LOA';
@@ -73,6 +73,36 @@ async function durationToMs(text) {
   try { const { default: ms } = await import('ms'); const v = ms(text.trim()); return (typeof v === 'number' && v > 0) ? v : null; }
   catch { return null; }
 }
+
+// Parse a freeform "start date" into an ISO time. Accepts relative ("in 3 days",
+// "1 week", "48h") and absolute dates ("2026-07-05", "5 July"). Returns
+// { ok, at }: at=null means start immediately (on approval).
+const C_SCHEDULED = 0x3B82F6; // blue
+async function parseStartAt(text) {
+  if (!text || !text.trim()) return { ok: true, at: null };
+  const t = text.trim();
+  const rel = t.replace(/^in\s+/i, '');
+  let relMs = null;
+  try { const { default: ms } = await import('ms'); const v = ms(rel); if (typeof v === 'number' && v > 0 && /[a-z]/i.test(rel)) relMs = v; } catch {}
+  if (relMs) return { ok: true, at: new Date(Date.now() + relMs).toISOString() };
+  const parsed = Date.parse(t);
+  if (!Number.isNaN(parsed)) {
+    if (parsed > Date.now() + 60_000) return { ok: true, at: new Date(parsed).toISOString() };
+    // Past — but a yearless date (e.g. "5 July") defaults to year 2001 in V8.
+    // Retry with this year, then next year, and take the first that's in the future.
+    if (!/\b\d{4}\b/.test(t)) {
+      const yr = new Date().getFullYear();
+      for (const y of [yr, yr + 1]) {
+        const p2 = Date.parse(`${t} ${y}`);
+        if (!Number.isNaN(p2) && p2 > Date.now() + 60_000) return { ok: true, at: new Date(p2).toISOString() };
+      }
+    }
+    return { ok: false, error: 'That start date looks like it\'s in the past — give a future date.' };
+  }
+  return { ok: false, error: 'Couldn\'t read that start date. Try `2026-07-05`, `5 July`, or `in 3 days` (or leave it blank to start when approved).' };
+}
+function ts(iso, style = 'F') { return `<t:${Math.floor(new Date(iso).getTime() / 1000)}:${style}>`; }
+function isFuture(iso) { return iso && new Date(iso).getTime() > Date.now() + 60_000; }
 
 // ── cross-guild apply / revert ───────────────────────────────────────────────
 
@@ -160,11 +190,31 @@ export function buildPendingEmbed(loa) {
     .setColor(C_PENDING)
     .setTitle(`${E.pending} LOA Request — Pending`)
     .addFields(reqFields(loa))
-    .addFields({ name: 'Requested', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true })
+    .addFields(
+      { name: 'Starts', value: loa.start_at ? ts(loa.start_at) : 'When approved', inline: true },
+      { name: 'Requested', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
+    )
     .setFooter({ text: `LOA #${loa.id} · approved by the FSA` });
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`loa:approve:${loa.id}`).setLabel('Approve').setStyle(ButtonStyle.Success).setEmoji(emojiId(E.allow) || emojiId(E.check)),
     new ButtonBuilder().setCustomId(`loa:decline:${loa.id}`).setLabel('Decline').setStyle(ButtonStyle.Danger).setEmoji(emojiId(E.deny) || emojiId(E.cross)),
+  );
+  return { embeds: [embed], components: [row] };
+}
+
+export function buildScheduledEmbed(loa) {
+  const embed = new EmbedBuilder()
+    .setColor(C_SCHEDULED)
+    .setTitle(`${E.calendar} LOA — Scheduled`)
+    .addFields(reqFields(loa))
+    .addFields(
+      { name: 'Starts', value: loa.start_at ? `${ts(loa.start_at)} (${ts(loa.start_at, 'R')})` : 'Soon', inline: true },
+      { name: 'Ends', value: loa.ends_at ? ts(loa.ends_at) : 'When cancelled', inline: true },
+      { name: 'Approved by', value: loa.decided_by ? `<@${loa.decided_by}>` : '—', inline: true },
+    )
+    .setFooter({ text: `LOA #${loa.id} · activates automatically on the start date` });
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`loa:cancel:${loa.id}`).setLabel('Cancel (before it starts)').setStyle(ButtonStyle.Danger).setEmoji(emojiId(E.cross)),
   );
   return { embeds: [embed], components: [row] };
 }
@@ -259,15 +309,23 @@ function requestModal() {
       new TextInputBuilder().setCustomId('duration').setLabel('How long? (optional)')
         .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(60)
         .setPlaceholder('e.g. 1 week, 10 days, 48h — blank = open-ended')),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId('start').setLabel('Start date? (optional)')
+        .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(60)
+        .setPlaceholder('blank = starts when approved · e.g. 5 July, in 3 days')),
   );
+}
+
+function openMsg(open) {
+  if (open.status === 'active') return `${E.cross} You're already on LOA (#${open.id}). End that one before starting another.`;
+  if (open.status === 'scheduled') return `${E.pending} You already have an LOA (#${open.id}) scheduled to start ${open.start_at ? ts(open.start_at, 'R') : 'soon'}. Cancel it first if you want to change it.`;
+  return `${E.pending} You already have a pending LOA request (#${open.id}) waiting on FSA review.`;
 }
 
 // Slash command + button both open the same modal.
 export async function openRequestModal(interaction) {
-  const active = getActiveLoaForUser(interaction.user.id);
-  if (active) return interaction.reply({ content: `${E.cross} You're already on LOA (#${active.id}). End that one before starting another.`, ephemeral: true });
-  const pending = getPendingLoaForUser(interaction.user.id);
-  if (pending) return interaction.reply({ content: `${E.pending} You already have a pending LOA request (#${pending.id}) waiting on FSA review.`, ephemeral: true });
+  const open = getOpenLoaForUser(interaction.user.id);
+  if (open) return interaction.reply({ content: openMsg(open), ephemeral: true });
   return interaction.showModal(requestModal());
 }
 
@@ -275,19 +333,22 @@ export async function handleModalSubmit(interaction) {
   if (interaction.customId !== 'loa_modal') return false;
   const reason = (interaction.fields.getTextInputValue('reason') || '').trim();
   const durationText = (interaction.fields.getTextInputValue('duration') || '').trim() || null;
+  const startText = (interaction.fields.getTextInputValue('start') || '').trim() || null;
   if (!reason) return interaction.reply({ content: `${E.cross} A reason is required.`, ephemeral: true });
 
+  // Validate the optional start date before anything else.
+  const start = await parseStartAt(startText);
+  if (!start.ok) return interaction.reply({ content: `${E.cross} ${start.error}`, ephemeral: true });
+
   // Guard against duplicates (modal could be opened before another finished).
-  const active = getActiveLoaForUser(interaction.user.id);
-  if (active) return interaction.reply({ content: `${E.cross} You're already on LOA (#${active.id}).`, ephemeral: true });
-  const pending = getPendingLoaForUser(interaction.user.id);
-  if (pending) return interaction.reply({ content: `${E.pending} You already have a pending LOA request (#${pending.id}).`, ephemeral: true });
+  const open = getOpenLoaForUser(interaction.user.id);
+  if (open) return interaction.reply({ content: openMsg(open), ephemeral: true });
 
   await interaction.deferReply({ ephemeral: true });
 
   const channel = (await resolveLoaChannel(interaction.client)) || interaction.channel;
   const displayName = interaction.member?.displayName || interaction.user.username;
-  const id = createLoaRequest({ discordId: interaction.user.id, displayName, reason, durationText, channelId: channel?.id });
+  const id = createLoaRequest({ discordId: interaction.user.id, displayName, reason, durationText, startAt: start.at, channelId: channel?.id });
   const loa = getLoa(id);
 
   const payload = buildPendingEmbed(loa);
@@ -299,7 +360,8 @@ export async function handleModalSubmit(interaction) {
   try {
     const msg = await channel.send({ ...payload, content, allowedMentions: fsaRole ? { roles: [fsaRole.id] } : { parse: [] } });
     setLoaRequestMessage(id, channel.id, msg.id);
-    return interaction.editReply({ content: `${E.check} Your LOA request (#${id}) has been sent to ${channel} for FSA review. You'll be DM'd when it's decided.` });
+    const startNote = start.at ? ` It's requested to start ${ts(start.at, 'R')}.` : '';
+    return interaction.editReply({ content: `${E.check} Your LOA request (#${id}) has been sent to ${channel} for FSA review.${startNote} You'll be DM'd when it's decided.` });
   } catch (e) {
     console.error('[LOA] post request error:', e.message);
     return interaction.editReply({ content: `${E.cross} Couldn't post your request to the LOA channel. Ping an admin.` });
@@ -328,17 +390,30 @@ async function handleApprove(interaction, id) {
   if (!loa || loa.status !== 'pending') return interaction.reply({ content: `${E.cross} This request isn't pending anymore.`, ephemeral: true });
   await interaction.deferUpdate();
 
-  const { snapshot, loaNick } = await applyLoaAcrossGuilds(interaction.client, loa.discord_id);
   const durMs = await durationToMs(loa.duration_text);
-  const endsAt = durMs ? new Date(Date.now() + durMs).toISOString() : null;
-  approveLoaRow(id, { decidedBy: interaction.user.id, endsAt, nickSnapshot: snapshot, loaNick });
+  const startMs = isFuture(loa.start_at) ? new Date(loa.start_at).getTime() : Date.now();
+  const endsAt = durMs ? new Date(startMs + durMs).toISOString() : null;
+  const user = await interaction.client.users.fetch(loa.discord_id).catch(() => null);
 
+  if (isFuture(loa.start_at)) {
+    // Future-dated → schedule it; the role/nick apply when the start date arrives.
+    scheduleLoaRow(id, { decidedBy: interaction.user.id, endsAt });
+    const updated = getLoa(id);
+    await refreshRequestMessage(interaction, buildScheduledEmbed(updated));
+    if (user) {
+      const endLine = endsAt ? `It will then end automatically ${ts(endsAt, 'R')}.` : 'It stays active until you (or the FSA) end it.';
+      await user.send(dm(`${E.calendar} Your LOA is approved & scheduled`, `Your leave of absence has been **approved** by <@${interaction.user.id}>.\n\nIt starts ${ts(loa.start_at)} (${ts(loa.start_at, 'R')}) — your **${LOA_ROLE_NAME}** role and \`Name | LOA\` nickname go on automatically then. ${endLine}\n\nNeed to call it off before it starts? Tap **Cancel** on your request in the LOA channel.`, C_SCHEDULED)).catch(() => {});
+    }
+    return;
+  }
+
+  // Immediate.
+  const { snapshot, loaNick } = await applyLoaAcrossGuilds(interaction.client, loa.discord_id);
+  approveLoaRow(id, { decidedBy: interaction.user.id, endsAt, nickSnapshot: snapshot, loaNick });
   const updated = getLoa(id);
   await refreshRequestMessage(interaction, buildActiveEmbed(updated));
-
-  const user = await interaction.client.users.fetch(loa.discord_id).catch(() => null);
   if (user) {
-    const endLine = endsAt ? `It will end automatically <t:${Math.floor(new Date(endsAt).getTime() / 1000)}:R>.` : 'It stays active until you (or the FSA) end it.';
+    const endLine = endsAt ? `It will end automatically ${ts(endsAt, 'R')}.` : 'It stays active until you (or the FSA) end it.';
     await user.send(dm(`${E.check} Your LOA is active`, `Your leave of absence has been **approved** by <@${interaction.user.id}>.\n\nYour name now shows as **\`${loaNick}\`** across the network and you have the **${LOA_ROLE_NAME}** role.\n\n${endLine}\n\nTo come back early, tap **Cancel** on your approved request in the LOA channel.`, C_ACTIVE)).catch(() => {});
   }
 }
@@ -359,20 +434,50 @@ async function handleDecline(interaction, id) {
 
 async function handleCancel(interaction, id) {
   const loa = getLoa(id);
-  if (!loa || loa.status !== 'active') return interaction.reply({ content: `${E.cross} This LOA isn't active.`, ephemeral: true });
+  if (!loa || (loa.status !== 'active' && loa.status !== 'scheduled')) return interaction.reply({ content: `${E.cross} This LOA isn't active or scheduled.`, ephemeral: true });
   const isOwner = String(interaction.user.id) === String(loa.discord_id);
   if (!isOwner && !await isFSA(interaction.user.id)) return interaction.reply({ content: `${E.cross} Only the person on LOA or a member of the FSA can end this.`, ephemeral: true });
   await interaction.deferUpdate();
 
-  let snapshot = {};
-  try { snapshot = JSON.parse(loa.nick_snapshot || '{}'); } catch {}
-  await endLoaAcrossGuilds(interaction.client, loa.discord_id, snapshot);
-  endLoaRow(id, 'cancelled');
+  // Scheduled (not started yet) → nothing applied across guilds; just cancel.
+  if (loa.status === 'active') {
+    let snapshot = {};
+    try { snapshot = JSON.parse(loa.nick_snapshot || '{}'); } catch {}
+    await endLoaAcrossGuilds(interaction.client, loa.discord_id, snapshot);
+  }
+  endLoaRow(id, loa.status === 'scheduled' ? 'cancelled-before-start' : 'cancelled');
   const updated = getLoa(id);
   await refreshRequestMessage(interaction, buildEndedEmbed(updated, 'cancelled'));
 
   const user = await interaction.client.users.fetch(loa.discord_id).catch(() => null);
-  if (user) await user.send(dm(`${E.member} Welcome back — LOA ended`, `Your leave of absence has ended${isOwner ? '' : ` (ended by <@${interaction.user.id}>)`}. Your name and roles are back to normal across the network.`, C_ENDED)).catch(() => {});
+  if (user) {
+    const body = loa.status === 'scheduled'
+      ? `Your scheduled leave of absence has been cancelled${isOwner ? '' : ` by <@${interaction.user.id}>`} before it started.`
+      : `Your leave of absence has ended${isOwner ? '' : ` (ended by <@${interaction.user.id}>)`}. Your name and roles are back to normal across the network.`;
+    await user.send(dm(`${E.member} LOA ${loa.status === 'scheduled' ? 'cancelled' : 'ended — welcome back'}`, body, C_ENDED)).catch(() => {});
+  }
+}
+
+// 60s tick: activate scheduled LOAs whose start date has arrived.
+export async function activateScheduledLOAs(client) {
+  const rows = getDueScheduledLoas(new Date().toISOString());
+  for (const loa of rows) {
+    try {
+      const { snapshot, loaNick } = await applyLoaAcrossGuilds(client, loa.discord_id);
+      activateLoaRow(loa.id, { nickSnapshot: snapshot, loaNick });
+      const updated = getLoa(loa.id);
+      if (loa.channel_id && loa.request_message_id) {
+        const ch = await client.channels.fetch(loa.channel_id).catch(() => null);
+        if (ch) { const msg = await ch.messages.fetch(loa.request_message_id).catch(() => null); if (msg) await msg.edit(buildActiveEmbed(updated)).catch(() => {}); }
+      }
+      const user = await client.users.fetch(loa.discord_id).catch(() => null);
+      if (user) {
+        const endLine = updated.ends_at ? `It will end automatically ${ts(updated.ends_at, 'R')}.` : 'It stays active until you (or the FSA) end it.';
+        await user.send(dm(`${E.check} Your LOA has started`, `Your scheduled leave of absence is now **active** — your name shows as **\`${loaNick}\`** with the **${LOA_ROLE_NAME}** role across the network.\n\n${endLine}\n\nTap **Cancel** on your request to come back early.`, C_ACTIVE)).catch(() => {});
+      }
+      console.log('[LOA] activated scheduled LOA #' + loa.id);
+    } catch (e) { console.error('[LOA] activate error for #' + loa.id, e.message); }
+  }
 }
 
 // 60s tick: end any active LOA whose duration has elapsed.
@@ -394,4 +499,10 @@ export async function sweepExpiredLOAs(client) {
       console.log('[LOA] auto-ended expired LOA #' + loa.id);
     } catch (e) { console.error('[LOA] sweep error for #' + loa.id, e.message); }
   }
+}
+
+// One tick: start any scheduled LOAs that are due, then end any that have expired.
+export async function tickLOAs(client) {
+  await activateScheduledLOAs(client);
+  await sweepExpiredLOAs(client);
 }

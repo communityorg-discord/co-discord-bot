@@ -1356,6 +1356,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS loa_requests (
   requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   decided_at DATETIME,
   decided_by TEXT,
+  start_at DATETIME,
   started_at DATETIME,
   ends_at DATETIME,
   ended_at DATETIME,
@@ -1365,13 +1366,16 @@ db.exec(`CREATE TABLE IF NOT EXISTS loa_requests (
   nick_snapshot TEXT,
   loa_nick TEXT
 )`);
+// start_at = requested/approved future start (null = begins on approval). Added
+// for existing DBs created before scheduled-LOA support.
+try { db.exec("ALTER TABLE loa_requests ADD COLUMN start_at DATETIME"); } catch (e) { /* column exists */ }
 db.exec(`CREATE INDEX IF NOT EXISTS idx_loa_status ON loa_requests(status)`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_loa_user ON loa_requests(discord_id, status)`);
 
-export function createLoaRequest({ discordId, displayName, reason, durationText, channelId }) {
-  return db.prepare(`INSERT INTO loa_requests (discord_id, display_name, reason, duration_text, channel_id, status)
-    VALUES (?, ?, ?, ?, ?, 'pending')`).run(
-    String(discordId), displayName || null, reason, durationText || null, channelId || null
+export function createLoaRequest({ discordId, displayName, reason, durationText, startAt, channelId }) {
+  return db.prepare(`INSERT INTO loa_requests (discord_id, display_name, reason, duration_text, start_at, channel_id, status)
+    VALUES (?, ?, ?, ?, ?, ?, 'pending')`).run(
+    String(discordId), displayName || null, reason, durationText || null, startAt || null, channelId || null
   ).lastInsertRowid;
 }
 export function getLoa(id) {
@@ -1383,14 +1387,31 @@ export function getActiveLoaForUser(discordId) {
 export function getPendingLoaForUser(discordId) {
   return db.prepare("SELECT * FROM loa_requests WHERE discord_id = ? AND status = 'pending'").get(String(discordId));
 }
+// Any "open" LOA (waiting, scheduled to start, or running) — used to block duplicates.
+export function getOpenLoaForUser(discordId) {
+  return db.prepare("SELECT * FROM loa_requests WHERE discord_id = ? AND status IN ('pending','scheduled','active') ORDER BY id DESC").get(String(discordId));
+}
 export function setLoaRequestMessage(id, channelId, messageId) {
   db.prepare('UPDATE loa_requests SET channel_id = ?, request_message_id = ? WHERE id = ?').run(channelId || null, messageId || null, id);
 }
+// Approve + start now: role/nick already applied, becomes active immediately.
 export function approveLoaRow(id, { decidedBy, endsAt, nickSnapshot, loaNick }) {
   db.prepare(`UPDATE loa_requests
     SET status = 'active', decided_at = CURRENT_TIMESTAMP, decided_by = ?, started_at = CURRENT_TIMESTAMP,
         ends_at = ?, nick_snapshot = ?, loa_nick = ?
     WHERE id = ?`).run(String(decidedBy), endsAt || null, nickSnapshot ? JSON.stringify(nickSnapshot) : null, loaNick || null, id);
+}
+// Approve a future-dated LOA: scheduled, role/nick NOT applied until start_at.
+export function scheduleLoaRow(id, { decidedBy, endsAt }) {
+  db.prepare(`UPDATE loa_requests
+    SET status = 'scheduled', decided_at = CURRENT_TIMESTAMP, decided_by = ?, ends_at = ?
+    WHERE id = ?`).run(String(decidedBy), endsAt || null, id);
+}
+// A scheduled LOA whose start_at has arrived — apply role/nick, go active.
+export function activateLoaRow(id, { nickSnapshot, loaNick }) {
+  db.prepare(`UPDATE loa_requests
+    SET status = 'active', started_at = CURRENT_TIMESTAMP, nick_snapshot = ?, loa_nick = ?
+    WHERE id = ?`).run(nickSnapshot ? JSON.stringify(nickSnapshot) : null, loaNick || null, id);
 }
 export function declineLoaRow(id, decidedBy) {
   db.prepare(`UPDATE loa_requests SET status = 'declined', decided_at = CURRENT_TIMESTAMP, decided_by = ? WHERE id = ?`)
@@ -1402,6 +1423,9 @@ export function endLoaRow(id, endReason) {
 }
 export function getExpiredActiveLoas(nowIso) {
   return db.prepare("SELECT * FROM loa_requests WHERE status = 'active' AND ends_at IS NOT NULL AND ends_at <= ?").all(nowIso);
+}
+export function getDueScheduledLoas(nowIso) {
+  return db.prepare("SELECT * FROM loa_requests WHERE status = 'scheduled' AND start_at IS NOT NULL AND start_at <= ?").all(nowIso);
 }
 
 // ── Acting Assignments ───────────────────────────────────────────────────────

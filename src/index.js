@@ -434,8 +434,8 @@ client.once('clientReady', async () => {
       if (expiredSuspensions.length > 0 || expiredBans.length > 0) {
         console.log('[C-05 safety net] Processed', expiredSuspensions.length, 'suspensions and', expiredBans.length, 'bans');
       }
-      // End any LOAs whose duration has elapsed.
-      try { await loaService.sweepExpiredLOAs(client); } catch (e) { console.error('[loa sweep]', e.message); }
+      // Start scheduled LOAs that are due + end any whose duration has elapsed.
+      try { await loaService.tickLOAs(client); } catch (e) { console.error('[loa tick]', e.message); }
       // Also sweep temp_bans (serverban.js) — catches any whose remaining time
       // exceeded MAX_TIMEOUT_MS at boot (armTempBanTimer skips those) and also
       // re-arms timers for bans that have now come within the safe setTimeout
