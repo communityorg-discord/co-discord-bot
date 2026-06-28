@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } from 'discord.js';
 import { db } from '../utils/botDb.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 import { execFile } from 'child_process';
 import { writeFile, readFile, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -193,7 +194,7 @@ async function generateMemoPdfFallback(data) {
       doc.font('Helvetica').fontSize(10).text(`Issued by: ${data.issued_by}`);
       doc.text(`Urgency: ${data.urgency || 'Medium'}`);
       doc.moveDown(1);
-      doc.fontSize(8).fillColor('#666').text('Standards and Compliance Sub-Committee | Community Organisation', { align: 'center' });
+      doc.fontSize(8).fillColor('#666').text(`Standards and Compliance Sub-Committee | ${BRAND.name}`, { align: 'center' });
       doc.end();
     });
   } catch (e) {
@@ -512,7 +513,7 @@ export async function handleTransferApproved(client, data) {
         { name: 'Old Position', value: data.old_position || 'Unknown', inline: true },
         { name: 'New Position', value: data.new_position, inline: true },
       )
-      .setFooter({ text: 'Community Organisation | Staff Management' })
+      .setFooter({ text: `${BRAND.name} | Staff Management` })
       .setTimestamp()
     ]});
   } catch {}

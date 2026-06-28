@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 const CATEGORIES = [
   { name: 'Verification & Onboarding', emoji: '', commands: [
@@ -169,13 +170,13 @@ export async function execute(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('CO Bot — Command Reference')
+    .setTitle(`${BRAND.short} Bot — Command Reference`)
     .setDescription(
       search
         ? `${E.info} **${totalCmds} match${totalCmds === 1 ? '' : 'es'}** for \`${search}\`\n\u200b`
         : `${E.info} **${totalCmds} commands** across ${CATEGORIES.length} categories\n\u200b`
     )
-    .setFooter({ text: 'Community Organisation | Staff Assistant' })
+    .setFooter({ text: BRAND.footer })
     .setTimestamp();
 
   for (const cat of visible) {

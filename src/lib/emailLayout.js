@@ -32,6 +32,7 @@
  */
 
 import { CO_BRAND_EMAIL as C, EMAIL_FONT_STACK as FONT } from './coBrandEmail.js';
+import { BRAND } from '../utils/brand.js';
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
@@ -169,7 +170,7 @@ export function wrapEmail({
   footerNote,
   signature,
 } = {}) {
-  const title = heading || 'Community Organisation';
+  const title = heading || BRAND.name;
   const preheaderText = preheader ? esc(preheader) : '';
   const introHtml = intro
     ? `<p style="margin:0 0 20px 0;font-family:${FONT};font-size:16px;line-height:1.55;color:${C.BODY_INK};">${esc(intro)}</p>`
@@ -190,14 +191,14 @@ export function wrapEmail({
           <div style="color:${C.NAVY};font-weight:bold;">${esc(signature.name)}</div>
           ${signature.role ? `<div style="color:${C.DARK_GREY};font-size:13px;">${esc(signature.role)}</div>` : ''}
           ${signature.team ? `<div style="color:${C.DARK_GREY};font-size:13px;">${esc(signature.team)}</div>` : ''}
-          ${!signature.team && !signature.role ? `<div style="color:${C.DARK_GREY};font-size:13px;">Community Organisation</div>` : ''}
+          ${!signature.team && !signature.role ? `<div style="color:${C.DARK_GREY};font-size:13px;">${esc(BRAND.name)}</div>` : ''}
         </td></tr>
       </table>`;
   } else {
     signatureHtml = `
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 0 0;">
         <tr><td style="border-top:1px solid #E5E7EB;width:160px;height:1px;line-height:1px;font-size:0;">&nbsp;</td></tr>
-        <tr><td style="padding-top:14px;font-family:${FONT};font-size:14px;line-height:1.5;color:${C.DARK_GREY};">Community Organisation</td></tr>
+        <tr><td style="padding-top:14px;font-family:${FONT};font-size:14px;line-height:1.5;color:${C.DARK_GREY};">${esc(BRAND.name)}</td></tr>
       </table>`;
   }
 
@@ -206,7 +207,7 @@ export function wrapEmail({
         <tr>
           <td align="center" style="padding:22px 32px;font-family:${FONT};font-size:12px;line-height:1.55;color:${C.DARK_GREY};">
             ${footerNote ? `<div style="margin-bottom:8px;">${esc(footerNote)}</div>` : '<div style="margin-bottom:8px;">Automated message \u2014 please do not reply directly to this email.</div>'}
-            <div style="color:${C.NAVY};font-weight:bold;letter-spacing:0.05em;">Community Organisation</div>
+            <div style="color:${C.NAVY};font-weight:bold;letter-spacing:0.05em;">${esc(BRAND.name)}</div>
             <div><a href="https://portal.communityorg.co.uk" style="color:${C.DARK_GREY};text-decoration:none;">portal.communityorg.co.uk</a></div>
           </td>
         </tr>
@@ -233,8 +234,8 @@ export function wrapEmail({
             <td style="background:${C.NAVY};padding:18px 26px;">
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                 <tr>
-                  <td align="left" style="font-family:${FONT};font-size:22px;font-weight:bold;letter-spacing:0.04em;color:${C.GOLD};line-height:1;">CO
-                    <span style="font-size:13px;font-weight:normal;color:${C.WHITE};margin-left:10px;letter-spacing:0.02em;">Community Organisation</span>
+                  <td align="left" style="font-family:${FONT};font-size:22px;font-weight:bold;letter-spacing:0.04em;color:${C.GOLD};line-height:1;">${esc(BRAND.short)}
+                    <span style="font-size:13px;font-weight:normal;color:${C.WHITE};margin-left:10px;letter-spacing:0.02em;">${esc(BRAND.name)}</span>
                   </td>
                   <td align="right" style="font-family:${FONT};font-size:11px;font-style:italic;color:${C.LIGHT_GOLD};">${esc(title)}</td>
                 </tr>
@@ -291,9 +292,9 @@ export function wrapEmail({
     textLines.push(signature.name);
     if (signature.role) textLines.push(signature.role);
     if (signature.team) textLines.push(signature.team);
-    if (!signature.role && !signature.team) textLines.push('Community Organisation');
+    if (!signature.role && !signature.team) textLines.push(BRAND.name);
   } else {
-    textLines.push('Community Organisation');
+    textLines.push(BRAND.name);
   }
   textLines.push('');
   textLines.push(footerNote || 'Automated message — please do not reply directly to this email.');

@@ -3,6 +3,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getUserByDiscordId, getRecentCases } from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 export const data = new SlashCommandBuilder()
   .setName('cases')
@@ -48,7 +49,7 @@ export async function execute(interaction) {
       inline: false,
     })))
     .addFields({ name: 'View in Portal', value: `[Open Case Management](${process.env.PORTAL_URL}/cases)`, inline: false })
-    .setFooter({ text: 'Community Organisation | Case Management' })
+    .setFooter({ text: `${BRAND.name} | Case Management` })
     .setTimestamp();
 
   await interaction.reply({ embeds: [embed], ephemeral: true });

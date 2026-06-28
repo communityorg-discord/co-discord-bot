@@ -8,6 +8,7 @@ import { SUSPEND_UNSUSPEND_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import botDb from '../utils/botDb.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 export const data = new SlashCommandBuilder()
   .setName('unsuspend')
@@ -32,7 +33,7 @@ export async function execute(interaction) {
   const inf = addInfraction(target.id, 'unsuspend', reason, interaction.user.id, interaction.user.username);
   await unsuspendAcrossGuilds(interaction.client, target.id, botDb);
 
-  try { await target.send({ content: `${E.check} Your suspension from Community Organisation has been lifted. Your roles have been restored.` }); } catch {}
+  try { await target.send({ content: `${E.check} Your suspension from ${BRAND.name} has been lifted. Your roles have been restored.` }); } catch {}
 
   await logAction(interaction.client, {
     action: 'Suspension Lifted',
@@ -53,7 +54,7 @@ export async function execute(interaction) {
       { name: 'Moderator', value: interaction.user.username, inline: true },
       { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true }
     )
-    .setFooter({ text: 'Community Organisation' })
+    .setFooter({ text: BRAND.name })
     .setTimestamp()
   ]});
 }

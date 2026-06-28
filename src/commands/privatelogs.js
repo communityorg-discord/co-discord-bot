@@ -4,6 +4,7 @@ import { logAction } from '../utils/logger.js';
 import { setLogChannel, getLogChannel, getAllLogConfig, getGlobalLogChannel, setGlobalLogChannel } from '../utils/botDb.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 // Private logs use a separate scope key so they don't interfere with /orglogs
 const PRIVATE_SCOPE = 'private';
@@ -148,7 +149,7 @@ function buildOverviewEmbed() {
     .setColor(0x8b5cf6)
     .setDescription(`${E.logs} Private log channels — separate from organisation-wide logs.\nThese do not interfere with /orglogs bindings.\nSelect a category below to configure.`)
     .addFields(fields)
-    .setFooter({ text: 'Community Organisation | Use /orglogs for organisation-wide logs' })
+    .setFooter({ text: `${BRAND.name} | Use /orglogs for organisation-wide logs` })
     .setTimestamp();
 }
 
@@ -275,7 +276,7 @@ export async function handleSelect(interaction) {
         .setColor(0x8b5cf6)
         .setDescription(`${E.logs} Private catch-all channels — separate from /orglogs catch-all bindings.`)
         .addFields({ name: 'Catch-All Bindings', value: catchallLines.join('\n'), inline: false })
-        .setFooter({ text: 'Community Organisation | Private Logs' })
+        .setFooter({ text: `${BRAND.name} | Private Logs` })
         .setTimestamp();
 
       const selectRow = buildCatchallSelect();
@@ -306,7 +307,7 @@ export async function handleSelect(interaction) {
       .setColor(0x8b5cf6)
       .setDescription(`${E.logs} Private log bindings — separate from /orglogs.`)
       .addFields({ name: '​', value: typeRows.join('\n'), inline: false })
-      .setFooter({ text: 'Community Organisation | Private Logs' })
+      .setFooter({ text: `${BRAND.name} | Private Logs` })
       .setTimestamp();
 
     const typeRow = buildTypeSelect(categoryKey);

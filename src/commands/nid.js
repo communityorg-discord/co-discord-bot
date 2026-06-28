@@ -3,6 +3,7 @@ import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, But
 import { getUserByDiscordId } from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 export const data = new SlashCommandBuilder()
   .setName('nid')
@@ -23,7 +24,7 @@ export async function execute(interaction) {
   }
   const supervisor = getUserByDiscordId(interaction.user.id);
   if (!supervisor) {
-    return interaction.reply({ content: `${E.cross} Your Discord account is not linked to a CO Staff Portal account.`, ephemeral: true });
+    return interaction.reply({ content: `${E.cross} Your Discord account is not linked to a ${BRAND.short} Staff Portal account.`, ephemeral: true });
   }
 
   const staffInput = interaction.options.getString('staff');
@@ -51,7 +52,7 @@ export async function execute(interaction) {
       { name: 'Submitted By', value: supervisor.display_name || supervisor.full_name, inline: true }
     )
     .setDescription(`${E.gavel} Please confirm this NID submission. This will be sent to DMSPC for review.`)
-    .setFooter({ text: 'Section 5.1 — CO Internal Staff Policy' });
+    .setFooter({ text: `Section 5.1 — ${BRAND.short} Internal Staff Policy` });
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`nid_confirm_${targetUser.id}_${actionType}`).setLabel('Confirm & Submit').setStyle(ButtonStyle.Danger),

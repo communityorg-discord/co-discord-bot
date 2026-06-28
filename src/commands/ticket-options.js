@@ -5,6 +5,7 @@ import { logAction } from '../utils/logger.js';
 import { getTicketChannelByChannelId, closeTicket, getTicketPanelById } from '../utils/botDb.js';
 import { closeTicketWithTranscript } from '../utils/ticketTranscript.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 export const data = new SlashCommandBuilder()
   .setName('ticket-options')
@@ -67,7 +68,7 @@ export async function execute(interaction) {
       { name: 'Opened By', value: `<@${ticket.user_id}>`, inline: true },
       { name: 'Claimed By', value: ticket.claimed_by ? `<@${ticket.claimed_by}>` : 'Nobody', inline: true },
     )
-    .setFooter({ text: 'Community Organisation | Ticket System' })
+    .setFooter({ text: `${BRAND.name} | Ticket System` })
     .setTimestamp();
 
   await interaction.reply({ embeds: [embed], components: [row1, row2], ephemeral: true });

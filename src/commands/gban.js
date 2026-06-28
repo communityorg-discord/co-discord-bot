@@ -7,6 +7,7 @@ import { logAction } from '../utils/logger.js';
 import { GBAN_UNGBAN_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 export const data = new SlashCommandBuilder()
   .setName('gban')
@@ -57,7 +58,7 @@ export async function execute(interaction) {
       embeds: [new EmbedBuilder()
         .setTitle('Global Ban')
         .setColor(0x7F1D1D)
-        .setDescription(`${E.gban} You have been globally banned from all Community Organisation servers.`)
+        .setDescription(`${E.gban} You have been globally banned from all ${BRAND.servers}.`)
         .addFields(
           { name: 'Reason', value: reason },
           { name: 'Appeal', value: appealable ? 'You may appeal this ban in the Appeals Server.' : 'This ban is **not appealable**.' }
@@ -102,7 +103,7 @@ export async function execute(interaction) {
       { name: 'Appealable', value: appealable ? 'Yes' : 'No', inline: true },
       { name: 'Moderator', value: interaction.user.username, inline: true }
     )
-    .setFooter({ text: 'Community Organisation' })
+    .setFooter({ text: BRAND.name })
     .setTimestamp()
   ]});
 }

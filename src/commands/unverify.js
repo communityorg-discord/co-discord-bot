@@ -6,6 +6,7 @@ import db from '../utils/botDb.js';
 import { VERIFY_UNVERIFY_LOG_CHANNEL_ID } from '../config.js';
 import { logAction } from '../utils/logger.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 // Build per-guild result lines for unverify
 function buildUnverifyGuildResultsField(results) {
@@ -190,13 +191,13 @@ export async function handleModal(interaction) {
     if (targetUser) {
       await targetUser.send({
         embeds: [new EmbedBuilder()
-          .setTitle('CO Verification Removed')
+          .setTitle(`${BRAND.short} Verification Removed`)
           .setColor(0xef4444)
-          .setDescription(`${E.id} Your CO staff verification has been removed by <@${interaction.user.id}>.`)
+          .setDescription(`${E.id} Your ${BRAND.short} staff verification has been removed by <@${interaction.user.id}>.`)
           .addFields(
             { name: 'Reason', value: reason, inline: false },
           )
-          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setFooter({ text: BRAND.footer })
           .setTimestamp()
         ]
       });

@@ -8,6 +8,7 @@ import { TERMINATE_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import botDb from '../utils/botDb.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 export const data = new SlashCommandBuilder()
   .setName('terminate')
@@ -34,12 +35,12 @@ export async function execute(interaction) {
       embeds: [new EmbedBuilder()
         .setTitle('Employment Terminated')
         .setColor(0xEF4444)
-        .setDescription(`${E.terminate} Your employment with Community Organisation has been terminated.`)
+        .setDescription(`${E.terminate} Your employment with ${BRAND.name} has been terminated.`)
         .addFields(
           { name: 'Reason', value: reason },
           { name: 'Effective', value: `<t:${Math.floor(Date.now() / 1000)}:F>` }
         )
-        .setFooter({ text: 'Community Organisation' })
+        .setFooter({ text: BRAND.name })
         .setTimestamp()
       ]
     });
@@ -67,7 +68,7 @@ export async function execute(interaction) {
       { name: 'Moderator', value: interaction.user.username, inline: true },
       { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true }
     )
-    .setFooter({ text: 'Community Organisation' })
+    .setFooter({ text: BRAND.name })
     .setTimestamp()
   ]});
 }

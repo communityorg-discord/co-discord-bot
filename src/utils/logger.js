@@ -12,6 +12,7 @@ import { LOG_CHANNEL_ID, MOD_LOG_CHANNEL_ID,
 } from '../config.js';
 import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent } from './botDb.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from './brand.js';
 
 // Pick a custom CO emoji for a log entry from its action text (and colour as a
 // fallback). Used to lead every log embed so they're branded, not bare.
@@ -195,7 +196,7 @@ export async function logAction(client, {
       ...fields
     )
     .setTimestamp()
-    .setFooter({ text: 'Community Organisation | Moderation Log' });
+    .setFooter({ text: `${BRAND.name} | Moderation Log` });
   const [category, type] = (logType || '').split('.');
   await logEvent(client, { embed, category, type, guildId, extraChannels: [MOD_LOG_CHANNEL_ID || LOG_CHANNEL_ID, specificChannelId] });
 }
@@ -216,6 +217,6 @@ export async function logRoleAction(client, {
       ...fields
     )
     .setTimestamp()
-    .setFooter({ text: 'Community Organisation | Role Management Log' });
+    .setFooter({ text: `${BRAND.name} | Role Management Log` });
   await logEvent(client, { embed, category: 'role_management', type: roleLogType, guildId, extraChannels: [ROLE_ALL_LOG_CHANNEL_ID, ROLE_CHANNEL_MAP[roleLogType]] });
 }

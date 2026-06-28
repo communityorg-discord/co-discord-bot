@@ -6,6 +6,7 @@ import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 // Auto-escalation thresholds for active warnings
 const THRESHOLDS = [
@@ -48,12 +49,12 @@ export async function execute(interaction) {
       embeds: [new EmbedBuilder()
         .setTitle('Warning Issued')
         .setColor(0xF59E0B)
-        .setDescription(`${E.warning} You have received a warning in **Community Organisation**.`)
+        .setDescription(`${E.warning} You have received a warning in **${BRAND.name}**.`)
         .addFields(
           { name: 'Reason', value: reason, inline: false },
           { name: 'Issued By', value: `<@${interaction.user.id}>`, inline: true },
         )
-        .setFooter({ text: 'Community Organisation | Staff Assistant' })
+        .setFooter({ text: BRAND.footer })
         .setTimestamp()
       ]
     });
@@ -100,12 +101,12 @@ export async function execute(interaction) {
           embeds: [new EmbedBuilder()
             .setTitle(`Auto-Escalation — ${escalation.label}`)
             .setColor(escalation.color)
-            .setDescription(`${E.gavel} You have been **${escalation.label.toLowerCase()}** from **Community Organisation** due to reaching **${warningCount} active warnings**.`)
+            .setDescription(`${E.gavel} You have been **${escalation.label.toLowerCase()}** from **${BRAND.name}** due to reaching **${warningCount} active warnings**.`)
             .addFields(
               { name: 'Threshold', value: `${escalation.count} warnings → ${escalation.label}`, inline: true },
               { name: 'Active Warnings', value: String(warningCount), inline: true },
             )
-            .setFooter({ text: 'Community Organisation | Moderation' })
+            .setFooter({ text: BRAND.footer })
             .setTimestamp()
           ]
         });
@@ -159,7 +160,7 @@ export async function execute(interaction) {
       { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: true },
       { name: 'Active Warnings', value: `**${warningCount}** / 3 (kick) / 5 (ban)`, inline: false },
     )
-    .setFooter({ text: 'Community Organisation | Staff Assistant' })
+    .setFooter({ text: BRAND.footer })
     .setTimestamp();
 
   if (escalation) {

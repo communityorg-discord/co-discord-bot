@@ -9,6 +9,7 @@ import OpusScript from 'opusscript';
 import googleTTS from 'google-tts-api';
 import ffmpegStatic from 'ffmpeg-static';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 const FFMPEG_PATH = ffmpegStatic;
 const RECORDINGS_DIR = '/home/vpcommunityorganisation/clawd/recordings';
@@ -282,7 +283,7 @@ async function speakRecordingNotice(connection, voiceChannel, timeline) {
   const presentList = presentMembers.length > 0 ? presentMembers.join(', ') : 'no members detected';
 
   const sentences = [
-    'This voice channel is now being recorded, in line with the Community Organisation Internal Staff Policy.',
+    `This voice channel is now being recorded, in line with the ${BRAND.name} Internal Staff Policy.`,
     `The date is ${dateStr}.`,
     `The time is ${timeStr}.`,
     `The following members are present: ${presentList}.`,
@@ -326,7 +327,7 @@ async function speakClosingNotice(connection, timeline) {
     'This concludes the recorded session.',
     `The time is ${timeStr}.`,
     `Total meeting duration: ${durationStr}.`,
-    'This recording will be processed and made available for download via the CO Staff Portal. Files are retained for seven days.',
+    `This recording will be processed and made available for download via the ${BRAND.short} Staff Portal. Files are retained for seven days.`,
     'Thank you.',
   ].map(expandForSpeech);
 

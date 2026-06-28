@@ -5,6 +5,7 @@ import { getInfractions, getActiveSuspension, getActiveInvestigation, getActiveG
 import botDb from '../utils/botDb.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 export const data = new SlashCommandBuilder()
   .setName('user')
@@ -64,7 +65,7 @@ export async function execute(interaction) {
         { name: 'Global Ban', value: gban ? `${E.cross} Yes` : `${E.check} No`, inline: true },
         ...(lastQueue?.deny_reason ? [{ name: 'Last Denial Reason', value: lastQueue.deny_reason, inline: false }] : [])
       )
-      .setFooter({ text: 'Community Organisation | Staff Portal' })
+      .setFooter({ text: BRAND.footer })
       .setTimestamp();
 
     await interaction.reply({ embeds: [embed], ephemeral: true });

@@ -4,6 +4,7 @@ import { canUseCommand } from '../utils/permissions.js';
 import { db } from '../utils/botDb.js';
 import { getUserByDiscordId } from '../db.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 // Ensure scheduled_dms table exists
 db.exec(`CREATE TABLE IF NOT EXISTS scheduled_dms (
@@ -127,7 +128,7 @@ export async function execute(interaction) {
       { name: 'Subject', value: subject || 'None', inline: true },
       { name: 'Message Preview', value: message.slice(0, 200) + (message.length > 200 ? '...' : ''), inline: false },
     )
-    .setFooter({ text: `Scheduled by ${senderName} | Community Organisation` })
+    .setFooter({ text: `Scheduled by ${senderName} | ${BRAND.name}` })
     .setTimestamp();
 
   await interaction.editReply({ embeds: [embed] });

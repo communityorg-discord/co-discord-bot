@@ -7,6 +7,7 @@ import { applyVerification } from '../utils/verifyHelper.js';
 import { logAction } from '../utils/logger.js';
 import { db } from '../utils/botDb.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 import fetch from 'node-fetch';
 
 const positionChoices = Object.keys(POSITIONS)
@@ -130,10 +131,10 @@ export async function handleModal(interaction) {
 
     await targetUser.send({ embeds: [new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle('Welcome to Community Organisation')
-      .setDescription(`${E.join} Welcome to the CO team! Your staff portal account has been set up.`)
+      .setTitle(`Welcome to ${BRAND.name}`)
+      .setDescription(`${E.join} Welcome to the ${BRAND.short} team! Your staff portal account has been set up.`)
       .addFields(...dmFields)
-      .setFooter({ text: 'Community Organisation | Keep these credentials private' })
+      .setFooter({ text: `${BRAND.name} | Keep these credentials private` })
       .setTimestamp()
     ]});
     steps.push('Credentials DM sent');

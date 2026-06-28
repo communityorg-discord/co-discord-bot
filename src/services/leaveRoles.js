@@ -2,6 +2,7 @@ import { POSITIONS, ALL_MANAGED_ROLES } from '../utils/positions.js';
 import { storeRoles, getStoredRoles, deleteStoredRoles, createActingAssignment, getActiveActingByLeave, endActingAssignment, activateActingAssignment } from '../utils/botDb.js';
 import { getUserByDiscordId } from '../db.js';
 import { logAction } from '../utils/logger.js';
+import { BRAND } from '../utils/brand.js';
 import { ALL_SERVER_IDS } from '../config.js';
 import { E } from '../lib/emoji.js';
 
@@ -87,7 +88,7 @@ export async function applyLeaveRole(client, leave, portalDb) {
       title: 'Leave Started',
       color: 0xF59E0B,
       description: `${E.break} Your **${leave.leave_type}** has started. Your Discord roles have been updated to **On Leave** across all servers.\n\nYour roles will be automatically restored when your leave ends on **${fmtLeaveDate(leave.end_date)}**.`,
-      footer: { text: 'Community Organisation | Leave Management' },
+      footer: { text: `${BRAND.name} | Leave Management` },
       timestamp: new Date().toISOString()
     }]});
   } catch {}
@@ -170,7 +171,7 @@ export async function applyActingRoles(client, actingDiscordId, position, leaveR
       title: 'Acting Position Assigned',
       color: 0x22C55E,
       description: `${E.acting} You have been assigned to act in the position of **${position}**.\n\nYour Discord roles have been updated. Your original roles will be restored when the acting period ends.`,
-      footer: { text: 'Community Organisation | Leave Management' },
+      footer: { text: `${BRAND.name} | Leave Management` },
       timestamp: new Date().toISOString()
     }]});
   } catch {}
@@ -214,7 +215,7 @@ export async function revertLeaveRole(client, leave, portalDb) {
       title: 'Welcome Back',
       color: 0x22C55E,
       description: `${E.check} Welcome back! Your Discord roles have been restored following your **${leave.leave_type}**.`,
-      footer: { text: 'Community Organisation | Leave Management' },
+      footer: { text: `${BRAND.name} | Leave Management` },
       timestamp: new Date().toISOString()
     }]});
   } catch {}
@@ -285,7 +286,7 @@ export async function processPendingActingAssignments(client, opts = {}) {
         title: 'Acting Position Assigned',
         color: 0x22C55E,
         description: `${E.acting} You have been assigned to act in the position of **${a.position}**.\n\nYour Discord roles have been updated. Your original roles will be restored when the acting period ends.`,
-        footer: { text: 'Community Organisation | Leave Management' },
+        footer: { text: `${BRAND.name} | Leave Management` },
         timestamp: new Date().toISOString()
       }]});
     } catch {}
@@ -431,7 +432,7 @@ export async function sendActingNominationRequests(client) {
             { name: 'Leave Period', value: `${fmtLeaveDate(leave.start_date)} to ${fmtLeaveDate(leave.end_date)}`, inline: true },
             { name: 'Your Position', value: leave.position, inline: true },
           ],
-          footer: { text: 'You have 12 hours to respond. | Community Organisation' }
+          footer: { text: `You have 12 hours to respond. | ${BRAND.name}` }
         }]});
 
         // Collect response
@@ -501,7 +502,7 @@ export async function sendActingNominationRequests(client) {
                 { name: 'Period', value: `${fmtLeaveDate(leave.start_date)} to ${fmtLeaveDate(leave.end_date)}`, inline: true },
                 { name: 'Acting Position', value: leave.position, inline: true },
               ],
-              footer: { text: 'Your Discord roles will be updated at midnight tonight. | Community Organisation' }
+              footer: { text: `Your Discord roles will be updated at midnight tonight. | ${BRAND.name}` }
             }]});
           } catch (e) {
             console.error('[Acting] Could not DM acting person:', e.message);

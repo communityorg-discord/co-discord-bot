@@ -7,6 +7,7 @@ import db from '../utils/botDb.js';
 import { VERIFY_UNVERIFY_LOG_CHANNEL_ID, OFFICIAL_BYPASS_IDS } from '../config.js';
 import { logAction } from '../utils/logger.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 // Official account bypass IDs — can verify as CO | Official Account without portal entry
 function isOfficialBypass(discordId) {
@@ -50,7 +51,7 @@ async function sendWelcomeDM(client, discordUser, entry, approvedBy) {
   const inviteLines = await gatherWelcomeInvites(client);
   await discordUser.send({
     embeds: [new EmbedBuilder()
-      .setTitle('Welcome to the Community Organisation!')
+      .setTitle(`Welcome to ${BRAND.name}!`)
       .setColor(0x22C55E)
       .setDescription(WELCOME_DESCRIPTION)
       .addFields(
@@ -58,7 +59,7 @@ async function sendWelcomeDM(client, discordUser, entry, approvedBy) {
         { name: 'Your Position', value: entry.position, inline: true },
         { name: 'Approved By', value: `<@${approvedBy}>`, inline: true },
       )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setFooter({ text: BRAND.footer })
       .setTimestamp()
     ]
   });
@@ -618,8 +619,8 @@ export async function handleModal(interaction) {
     await user.send({
       embeds: [new EmbedBuilder()
         .setColor(0xef4444)
-        .setTitle('CO Verification Denied')
-        .setDescription(`${E.cross} Your CO staff verification request has been denied.\n\n**Reason:** ${reason}\n\nIf you believe this is an error, please contact a superuser.`)
+        .setTitle(`${BRAND.short} Verification Denied`)
+        .setDescription(`${E.cross} Your ${BRAND.short} staff verification request has been denied.\n\n**Reason:** ${reason}\n\nIf you believe this is an error, please contact a superuser.`)
         .setTimestamp()
       ]
     });

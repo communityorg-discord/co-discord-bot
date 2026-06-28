@@ -17,6 +17,7 @@ import {
     SUSPENDED_ROLE_ID, UNDER_INVESTIGATION_ROLE_ID, SUPERUSER_IDS,
 } from '../config.js';
 import { buildHome, buildCategory } from './helpUi.js';
+import { BRAND } from '../utils/brand.js';
 
 export function resolveId(token) { return String(token || '').replace(/[^0-9]/g, ''); }
 
@@ -35,7 +36,7 @@ async function applyRole(client, guildId, userId, roleId, add, reason) {
 
 export const COMMANDS = {
     // ── Moderation ────────────────────────────────────────────────
-    gban: { group: 'Moderation', usage: '.gban <@user|id> <reason>', desc: 'Global ban across every Community Organisation server.',
+    gban: { group: 'Moderation', usage: '.gban <@user|id> <reason>', desc: `Global ban across every ${BRAND.name} server.`,
         async run({ args, rest, message, client, authorId, authorName }) {
             const id = resolveId(args[0]); const reason = rest.replace(args[0], '').trim();
             if (!id || !reason) throw new Error('Usage: `.gban <@user> <reason>`');
@@ -50,7 +51,7 @@ export const COMMANDS = {
             addInfraction(id, 'global_ban', reason, authorId, authorName, null, 1);
             addGlobalBan(id, reason, authorId, 1);
             return { title: 'Global ban issued', target: id, icon: E.gban,
-                note: `<@${id}> has been globally banned from the Community Organisation network.`,
+                note: `<@${id}> has been globally banned from the ${BRAND.name} network.`,
                 fields: [
                     { name: 'Servers', value: `${E.shield} **${banned}** banned`, inline: true },
                     { name: 'Reason', value: reason, inline: false },
@@ -140,7 +141,7 @@ export const COMMANDS = {
             const id = resolveId(args[0]); const text = rest.replace(args[0], '').trim();
             if (!id || !text) throw new Error('Usage: `.dm <@user> <message>`');
             const u = await client.users.fetch(id).catch(() => null); if (!u) throw new Error('Could not find that user.');
-            await u.send({ embeds: [new EmbedBuilder().setColor(0x5865F2).setAuthor({ name: 'Community Organisation' }).setDescription(text.slice(0, 4000)).setTimestamp()] });
+            await u.send({ embeds: [new EmbedBuilder().setColor(0x5865F2).setAuthor({ name: BRAND.name }).setDescription(text.slice(0, 4000)).setTimestamp()] });
             return { title: 'Direct message sent', target: id, icon: E.dm,
                 note: `Delivered your message to <@${id}>.`,
                 fields: [{ name: 'Message', value: text.slice(0, 1024), inline: false }] };
@@ -197,7 +198,7 @@ export const COMMANDS = {
             ];
             if (inv) fields.push({ name: 'Investigation', value: `${E.investigate} Open`, inline: true });
             return { title: u?.display_name || `Member ${id}`, target: id, icon: E.id,
-                note: `Community Organisation profile for <@${id}>.`, fields };
+                note: `${BRAND.name} profile for <@${id}>.`, fields };
         } },
     infractions: { group: 'Lookup', usage: '.infractions <@user|id>', desc: "List a member's infractions.",
         async run({ args }) {

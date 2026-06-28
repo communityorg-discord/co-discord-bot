@@ -6,6 +6,7 @@ import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 function parseDuration(str) {
   if (!str) return null;
@@ -125,14 +126,14 @@ async function handleAddTimeout(interaction) {
       embeds: [new EmbedBuilder()
         .setTitle('You Have Been Timed Out')
         .setColor(0xF59E0B)
-        .setDescription(`${E.suspend} You have been timed out in **Community Organisation**.`)
+        .setDescription(`${E.suspend} You have been timed out in **${BRAND.name}**.`)
         .addFields(
           { name: 'Reason', value: reason, inline: false },
           { name: 'Duration', value: durationDisplay, inline: true },
           { name: 'Expires', value: `<t:${Math.floor(expiresAt.getTime() / 1000)}:R>`, inline: true },
           { name: 'Issued By', value: `<@${interaction.user.id}>`, inline: true },
         )
-        .setFooter({ text: 'Community Organisation | Staff Assistant' })
+        .setFooter({ text: BRAND.footer })
         .setTimestamp()
       ]
     });
@@ -168,7 +169,7 @@ async function handleAddTimeout(interaction) {
         { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: true },
         { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },
       )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setFooter({ text: BRAND.footer })
       .setTimestamp()
     ]
   });
@@ -204,12 +205,12 @@ async function handleRemoveTimeout(interaction) {
       embeds: [new EmbedBuilder()
         .setTitle('Timeout Removed')
         .setColor(0x22C55E)
-        .setDescription(`${E.check} Your timeout in **Community Organisation** has been removed.`)
+        .setDescription(`${E.check} Your timeout in **${BRAND.name}** has been removed.`)
         .addFields(
           { name: 'Removed By', value: `<@${interaction.user.id}>`, inline: true },
           ...(reason !== 'Not specified' ? [{ name: 'Reason', value: reason, inline: false }] : []),
         )
-        .setFooter({ text: 'Community Organisation | Staff Assistant' })
+        .setFooter({ text: BRAND.footer })
         .setTimestamp()
       ]
     });
@@ -240,7 +241,7 @@ async function handleRemoveTimeout(interaction) {
         { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: true },
         ...(reason !== 'Not specified' ? [{ name: 'Reason', value: reason, inline: false }] : []),
       )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setFooter({ text: BRAND.footer })
       .setTimestamp()
     ]
   });

@@ -6,6 +6,7 @@ import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import { addInfraction } from '../utils/botDb.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 export const data = new SlashCommandBuilder()
   .setName('untimeout')
@@ -50,12 +51,12 @@ export async function execute(interaction) {
       embeds: [new EmbedBuilder()
         .setTitle('Timeout Removed')
         .setColor(0x22C55E)
-        .setDescription(`${E.check} Your timeout in **Community Organisation** has been removed.`)
+        .setDescription(`${E.check} Your timeout in **${BRAND.name}** has been removed.`)
         .addFields(
           { name: 'Removed By', value: `<@${interaction.user.id}>`, inline: true },
           ...(reason !== 'Not specified' ? [{ name: 'Reason', value: reason, inline: false }] : []),
         )
-        .setFooter({ text: 'Community Organisation | Staff Assistant' })
+        .setFooter({ text: BRAND.footer })
         .setTimestamp()
       ]
     });
@@ -88,7 +89,7 @@ export async function execute(interaction) {
         ...(reason !== 'Not specified' ? [{ name: 'Reason', value: reason, inline: false }] : []),
         { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },
       )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setFooter({ text: BRAND.footer })
       .setTimestamp()
     ]
   });

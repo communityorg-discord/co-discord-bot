@@ -3,6 +3,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import db, { getUserByDiscordId } from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 export const data = new SlashCommandBuilder()
   .setName('case')
@@ -76,7 +77,7 @@ export async function execute(interaction) {
 
     const base = process.env.PORTAL_URL || 'https://portal.communityorg.co.uk';
     embed.setURL(`${base}/management/cases/${row.id}`)
-      .setFooter({ text: 'Community Organisation | Case Management' })
+      .setFooter({ text: `${BRAND.name} | Case Management` })
       .setTimestamp(new Date(row.created_at));
 
     await interaction.reply({ embeds: [embed], ephemeral: true });

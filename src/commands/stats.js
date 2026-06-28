@@ -5,6 +5,7 @@ import { getUserByDiscordId } from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
 import Database from 'better-sqlite3';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 export const data = new SlashCommandBuilder()
   .setName('stats')
@@ -58,7 +59,7 @@ export async function execute(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('CO Organisation Statistics')
+    .setTitle(`${BRAND.short} Organisation Statistics`)
     .setDescription(`${E.info} Real-time data from the portal, bot, and Discord.\n\u200b`)
     .addFields(
       { name: 'Staff', value: [
@@ -87,7 +88,7 @@ export async function execute(interaction) {
         `**Bot Uptime:** <t:${Math.floor((Date.now() - interaction.client.uptime) / 1000)}:R>`,
       ].join('\n'), inline: true },
     )
-    .setFooter({ text: 'Community Organisation | Staff Assistant' })
+    .setFooter({ text: BRAND.footer })
     .setTimestamp();
 
   await interaction.editReply({ embeds: [embed] });

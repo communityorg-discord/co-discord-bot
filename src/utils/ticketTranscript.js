@@ -1,5 +1,6 @@
 import { randomBytes } from 'crypto';
 import { E } from '../lib/emoji.js';
+import { BRAND } from './brand.js';
 
 // HTML-escape any user/attachment-derived text before interpolating into the
 // transcript. The transcript is served same-origin on the staff portal, so an
@@ -210,7 +211,7 @@ export async function closeTicketWithTranscript(ticket, ticketChannel, panel, cl
               { name: 'Closed By', value: `${closerInteraction.user} (<@${closerInteraction.user.id}>)`, inline: true },
               { name: 'Messages', value: String(sortedMessages.length), inline: true },
             )
-            .setFooter({ text: 'Community Organisation | Ticket System' })
+            .setFooter({ text: `${BRAND.name} | Ticket System` })
             .setTimestamp();
 
           await transcriptChannel.send({ content: transcriptUrl, embeds: [transcriptEmbed] }).catch(e => console.error('[ticket close] failed to send transcript:', e.message));

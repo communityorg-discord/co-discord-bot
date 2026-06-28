@@ -7,6 +7,7 @@ import {
 } from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 const STATUS_EMOJI = {
   open: '🟢',
@@ -60,7 +61,7 @@ export async function execute(interaction) {
   if (!portalUser) {
     return interaction.reply({
       ephemeral: true,
-      content: `${E.cross} Your Discord account is not linked to a CO Staff Portal account. Contact IT to link it.`,
+      content: `${E.cross} Your Discord account is not linked to a ${BRAND.short} Staff Portal account. Contact IT to link it.`,
     });
   }
 

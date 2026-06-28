@@ -6,6 +6,7 @@ import { db } from '../utils/botDb.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { logAction } from '../utils/logger.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 function parseDuration(input) {
   if (!input) return null;
@@ -164,7 +165,7 @@ export async function execute(interaction) {
     await logAction(interaction.client, {
       action: `${sub === 'global' ? 'Global' : 'Server'} Lockdown ${action === 'lock' ? 'Applied' : 'Lifted'}`,
       moderator: { discordId: interaction.user.id, name: interaction.user.username },
-      target: { discordId: 'ALL', name: sub === 'global' ? 'All CO Servers' : interaction.guild.name },
+      target: { discordId: 'ALL', name: sub === 'global' ? `All ${BRAND.servers}` : interaction.guild.name },
       reason,
       color: action === 'lock' ? 0xEF4444 : 0x22C55E,
       fields: [{ name: 'Guilds', value: String(lockedCount), inline: true }]

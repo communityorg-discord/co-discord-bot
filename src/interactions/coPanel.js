@@ -12,6 +12,7 @@ import {
   EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle,
   ModalBuilder, TextInputBuilder, TextInputStyle,
 } from 'discord.js';
+import { BRAND } from '../utils/brand.js';
 
 const COLOR = 0x5865F2;
 
@@ -52,7 +53,7 @@ function navRow(active) {
 }
 
 export function buildHome() {
-  const e = new EmbedBuilder().setColor(COLOR).setTitle('USGRP Utilities')
+  const e = new EmbedBuilder().setColor(COLOR).setTitle(`${BRAND.name} Utilities`)
     .setDescription('Pick a section from the **Go to…** menu below, then click a command to run it.\n\n' +
       SECTIONS.map(([, s]) => `${s.emoji} **${s.label}** — ${s.blurb}`).join('\n'))
     .setFooter({ text: 'Moderation & network commands stay as direct / commands.' });

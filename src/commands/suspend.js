@@ -7,6 +7,7 @@ import { logAction } from '../utils/logger.js';
 import { SUSPEND_UNSUSPEND_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 function formatDuration(ms) {
   if (!ms) return 'Indefinite';
@@ -69,14 +70,14 @@ export async function execute(interaction) {
       embeds: [new EmbedBuilder()
         .setTitle('You Have Been Suspended')
         .setColor(0xEF4444)
-        .setDescription(`${E.suspend} You have been suspended from **Community Organisation**.\n\nIf you believe this is an error, you may appeal in the Appeals Server.`)
+        .setDescription(`${E.suspend} You have been suspended from **${BRAND.name}**.\n\nIf you believe this is an error, you may appeal in the Appeals Server.`)
         .addFields(
           { name: 'Reason', value: reason, inline: false },
           { name: 'Duration', value: durationDisplay, inline: true },
           { name: 'Expires', value: expiresDisplay, inline: true },
           { name: 'Actioned By', value: `<@${interaction.user.id}>`, inline: true },
         )
-        .setFooter({ text: 'Community Organisation | Staff Assistant' })
+        .setFooter({ text: BRAND.footer })
         .setTimestamp()
       ]
     });
@@ -120,8 +121,8 @@ export async function execute(interaction) {
           embeds: [new EmbedBuilder()
             .setTitle('Suspension Lifted')
             .setColor(0x22C55E)
-            .setDescription(`${E.check} Your suspension from **Community Organisation** has ended and your roles have been restored.`)
-            .setFooter({ text: 'Community Organisation | Staff Assistant' })
+            .setDescription(`${E.check} Your suspension from **${BRAND.name}** has ended and your roles have been restored.`)
+            .setFooter({ text: BRAND.footer })
             .setTimestamp()
           ]
         });
@@ -147,14 +148,14 @@ export async function execute(interaction) {
     embeds: [new EmbedBuilder()
       .setTitle('Staff Suspended')
       .setColor(0xEF4444)
-      .setDescription(`${E.suspend} **${targetName}** has been suspended from Community Organisation.`)
+      .setDescription(`${E.suspend} **${targetName}** has been suspended from ${BRAND.name}.`)
       .addFields(
         { name: 'Reason', value: reason, inline: false },
         { name: 'Duration', value: durationDisplay, inline: true },
         { name: 'Expires', value: expiresDisplay, inline: true },
         { name: 'Actioned By', value: `<@${interaction.user.id}>`, inline: true },
       )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setFooter({ text: BRAND.footer })
       .setTimestamp()
     ]
   });

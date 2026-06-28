@@ -9,6 +9,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'disc
 import { COMMANDS } from './registry.js';
 import { E } from '../lib/emoji.js';
 import { SUPERUSER_IDS } from '../config.js';
+import { BRAND } from '../utils/brand.js';
 
 const SUPERUSERS = new Set(SUPERUSER_IDS);
 
@@ -56,7 +57,7 @@ export function buildHome() {
     const total = Object.values(groups).reduce((n, a) => n + a.length, 0);
     const e = new EmbedBuilder()
         .setColor(ACCENT)
-        .setAuthor({ name: 'Community Organisation' })
+        .setAuthor({ name: BRAND.name })
         .setTitle('Admin Command Reference')
         .setDescription(
             `${E.seal} **${total}** admin commands across **${ordered.length}** categories. ` +
@@ -74,7 +75,7 @@ export function buildCategory(group) {
     const cmds = groups[key];
     const e = new EmbedBuilder()
         .setColor(ACCENT)
-        .setAuthor({ name: 'Community Organisation' })
+        .setAuthor({ name: BRAND.name })
         .setTitle(`${key} — ${cmds.length} command${cmds.length === 1 ? '' : 's'}`)
         .setDescription(cmds.map((c) => `\`${c.usage}\`\n${c.desc}`).join('\n\n').slice(0, 4000))
         .setFooter({ text: 'Admin only · Dion + Evan' });

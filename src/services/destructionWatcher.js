@@ -16,6 +16,7 @@
 
 import { Events, AuditLogEvent, EmbedBuilder } from 'discord.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 import { emitToLogsBot } from './logsBotClient.js';
 
 const ALERT_USER_IDS = ['723199054514749450', '415922272956710912'];
@@ -63,7 +64,7 @@ async function alert(client, body) {
   const embed = new EmbedBuilder()
     .setColor(0xEF4444)
     .setDescription(`${E.warning} **Security alert · admin-only (you + Evan)**\n\n` + body.slice(0, 4000))
-    .setFooter({ text: 'Security alert · admin-only · Community Organisation' })
+    .setFooter({ text: `Security alert · admin-only · ${BRAND.name}` })
     .setTimestamp();
   // Route the security-alert DMs through the central USGRP | Logs bot; direct-DM
   // fallback if it's unreachable / not-yet-invited.

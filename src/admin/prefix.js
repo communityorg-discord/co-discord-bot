@@ -6,6 +6,7 @@ import { Events, EmbedBuilder } from 'discord.js';
 import { COMMANDS } from './registry.js';
 import { E } from '../lib/emoji.js';
 import { SUPERUSER_IDS, MOD_LOG_CHANNEL_ID } from '../config.js';
+import { BRAND } from '../utils/brand.js';
 
 const PREFIX = '.';
 const SUPERUSERS = new Set(SUPERUSER_IDS);
@@ -32,8 +33,8 @@ async function handleUnauthorized(client, message, name) {
     const who = message.author;
     await dm(client, who.id, {
         embeds: [new EmbedBuilder().setColor(0xef4444).setTitle('Not authorised')
-            .setDescription(`${E.cross} Admin commands are restricted to Community Organisation directors.\n\nYou can only use **slash commands** — type \`/\` to see what's available.`)
-            .setFooter({ text: 'Community Organisation · this attempt has been logged' })],
+            .setDescription(`${E.cross} Admin commands are restricted to ${BRAND.name} directors.\n\nYou can only use **slash commands** — type \`/\` to see what's available.`)
+            .setFooter({ text: `${BRAND.name} · this attempt has been logged` })],
     });
     const alert = new EmbedBuilder().setColor(0xf59e0b).setTitle('Unauthorised admin attempt')
         .setDescription(`${who} (\`${who.id}\`) tried to run \`.${name}\`.`)
@@ -78,13 +79,13 @@ export function setupAdminPrefix(client) {
 
             const embed = new EmbedBuilder().setTimestamp();
             if (!ok) {
-                embed.setColor(0xEF4444).setAuthor({ name: 'Community Organisation' }).setTitle(`Couldn't run .${name}`)
+                embed.setColor(0xEF4444).setAuthor({ name: BRAND.name }).setTitle(`Couldn't run .${name}`)
                     .setDescription(`${E.cross} ${result}`.slice(0, 4000)).setFooter({ text: `.${name} · attempted by ${message.author.username}` });
             } else {
                 const r = (typeof result === 'string') ? { note: result } : (result || {});
                 const theme = THEME[cmd.group] || { color: 0x5865F2, icon: E.check };
                 const icon = r.icon || theme.icon || E.check;
-                embed.setColor(theme.color).setAuthor({ name: 'Community Organisation' }).setTitle(r.title || `.${name}`)
+                embed.setColor(theme.color).setAuthor({ name: BRAND.name }).setTitle(r.title || `.${name}`)
                     .setDescription(`${icon} ${r.note || 'Done.'}`.slice(0, 4000)).setFooter({ text: `.${name} · run by ${message.author.username}` });
                 if (Array.isArray(r.fields) && r.fields.length) embed.addFields(r.fields.slice(0, 25));
                 if (r.target) { const u = await client.users.fetch(r.target).catch(() => null); if (u) embed.setThumbnail(u.displayAvatarURL({ size: 128 })); }

@@ -4,6 +4,7 @@ import { canUseCommand } from '../utils/permissions.js';
 import { ALL_SERVER_IDS, MASS_UNBAN_LOG_CHANNEL_ID } from '../config.js';
 import { logAction } from '../utils/logger.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 export const data = new SlashCommandBuilder()
   .setName('mass-unban')
@@ -90,7 +91,7 @@ export async function execute(interaction) {
         { name: 'Reason', value: reason, inline: false },
         { name: 'Per-Server Results', value: lines.join('\n') || 'None', inline: false }
       )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setFooter({ text: BRAND.footer })
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
@@ -139,7 +140,7 @@ export async function execute(interaction) {
         { name: 'Failed', value: String(failed), inline: true },
         { name: 'Reason', value: reason, inline: false }
       )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setFooter({ text: BRAND.footer })
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });

@@ -7,6 +7,7 @@ import { getUserByDiscordId } from '../db.js';
 import { logAction } from '../utils/logger.js';
 import { INFRACTIONS_CASES_LOG_CHANNEL_ID } from '../config.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 const PAGE_SIZE = 10;
 
@@ -19,7 +20,7 @@ function buildInfractionsPage(infractions, page, total, target, includeDeleted, 
   const embed = new EmbedBuilder()
     .setTitle(`Infractions — ${portalUser?.display_name || target.username}`)
     .setColor(infractions.length ? 0xEF4444 : 0x22C55E)
-    .setFooter({ text: `Community Organisation | Page ${page} of ${totalPages}` });
+    .setFooter({ text: `${BRAND.name} | Page ${page} of ${totalPages}` });
 
   if (infractions.length === 0) {
     embed.setDescription(`${E.check} No active infractions.`);
@@ -101,7 +102,7 @@ export async function execute(interaction) {
         .setColor(0x22C55E)
         .setDescription(`${E.check} Infraction #${id} has been deleted and moved to deleted history.`)
         .addFields({ name: 'Deleted By', value: interaction.user.username, inline: true })
-        .setFooter({ text: 'Community Organisation' })
+        .setFooter({ text: BRAND.name })
         .setTimestamp()
       ], ephemeral: true });
       return;

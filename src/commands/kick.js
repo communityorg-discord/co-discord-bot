@@ -6,6 +6,7 @@ import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 export const data = new SlashCommandBuilder()
   .setName('kick')
@@ -60,7 +61,7 @@ export async function execute(interaction) {
           { name: 'Server', value: interaction.guild.name, inline: true },
           { name: 'Kicked By', value: `<@${interaction.user.id}>`, inline: true },
         )
-        .setFooter({ text: 'Community Organisation | Staff Assistant' })
+        .setFooter({ text: BRAND.footer })
         .setTimestamp()
       ]
     });
@@ -93,7 +94,7 @@ export async function execute(interaction) {
         { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: true },
         { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },
       )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setFooter({ text: BRAND.footer })
       .setTimestamp()
     ]
   });

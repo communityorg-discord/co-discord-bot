@@ -4,6 +4,7 @@ import { logAction } from '../utils/logger.js';
 import { setLogChannel, getLogChannel, getAllLogConfig, getGlobalLogChannel, setGlobalLogChannel } from '../utils/botDb.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 // Per-type log categories — same structure as logspanel
 const CATEGORIES = {
@@ -143,9 +144,9 @@ function buildOverviewEmbed() {
   return new EmbedBuilder()
     .setTitle('Organisation-Wide Log Channels')
     .setColor(0xf59e0b)
-    .setDescription(`${E.logs} These channels receive logs from **every CO server** — not just this one.\nSelect a category below to configure.`)
+    .setDescription(`${E.logs} These channels receive logs from **every ${BRAND.name} server** — not just this one.\nSelect a category below to configure.`)
     .addFields(fields)
-    .setFooter({ text: 'Community Organisation | Use /logspanel for per-server logs' })
+    .setFooter({ text: `${BRAND.name} | Use /logspanel for per-server logs` })
     .setTimestamp();
 }
 
@@ -229,7 +230,7 @@ export async function execute(interaction) {
   const row = buildCategorySelect();
 
   await interaction.editReply({
-    content: '**Organisation Logs** — These channels receive events from **all CO servers**.\nSelect a category to configure:',
+    content: `**Organisation Logs** — These channels receive events from **all ${BRAND.servers}**.\nSelect a category to configure:`,
     embeds: [embed],
     components: [row]
   });
@@ -248,7 +249,7 @@ export async function handleSelect(interaction) {
     const embed = buildOverviewEmbed();
     const row = buildCategorySelect();
     await interaction.update({
-      content: '**Organisation Logs** — These channels receive events from **all CO servers**.\nSelect a category to configure:',
+      content: `**Organisation Logs** — These channels receive events from **all ${BRAND.servers}**.\nSelect a category to configure:`,
       embeds: [embed],
       components: [row]
     });
@@ -270,9 +271,9 @@ export async function handleSelect(interaction) {
       const embed = new EmbedBuilder()
         .setTitle('Organisation Catch-All Channels')
         .setColor(0xf59e0b)
-        .setDescription(`${E.logs} Catch-all channels receive **all logs of a type** from **every CO server** in one channel. Individual type bindings take priority when set.`)
+        .setDescription(`${E.logs} Catch-all channels receive **all logs of a type** from **every ${BRAND.name} server** in one channel. Individual type bindings take priority when set.`)
         .addFields({ name: 'Catch-All Bindings', value: catchallLines.join('\n'), inline: false })
-        .setFooter({ text: 'Community Organisation | Organisation-Wide Logs' })
+        .setFooter({ text: `${BRAND.name} | Organisation-Wide Logs` })
         .setTimestamp();
 
       const selectRow = buildCatchallSelect();
@@ -301,9 +302,9 @@ export async function handleSelect(interaction) {
     const catEmbed = new EmbedBuilder()
       .setTitle(`${cat.label} — Organisation Bindings`)
       .setColor(0xf59e0b)
-      .setDescription(`${E.logs} These apply to logs from **all CO servers**.`)
+      .setDescription(`${E.logs} These apply to logs from **all ${BRAND.servers}**.`)
       .addFields({ name: '​', value: typeRows.join('\n'), inline: false })
-      .setFooter({ text: 'Community Organisation | Organisation-Wide Logs' })
+      .setFooter({ text: `${BRAND.name} | Organisation-Wide Logs` })
       .setTimestamp();
 
     const typeRow = buildTypeSelect(categoryKey);

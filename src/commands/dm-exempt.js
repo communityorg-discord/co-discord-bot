@@ -3,6 +3,7 @@ import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder } fr
 import { canUseCommand } from '../utils/permissions.js';
 import { getDmExemptions } from '../utils/botDb.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 export const data = new SlashCommandBuilder()
   .setName('dm-exempt')
@@ -23,7 +24,7 @@ export async function execute(interaction) {
           .setTitle('DM Exemptions')
           .setColor(0x5865F2)
           .setDescription(`${E.dm} No users are currently exempt from mass/team DMs.`)
-          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setFooter({ text: BRAND.footer })
           .setTimestamp();
       }
 
@@ -36,7 +37,7 @@ export async function execute(interaction) {
           value: `<@${e.discord_id}>\nAdded by: ${e.exempted_by} · <t:${Math.floor(new Date(e.created_at).getTime() / 1000)}:R>`,
           inline: true,
         })))
-        .setFooter({ text: 'Community Organisation | Staff Assistant' })
+        .setFooter({ text: BRAND.footer })
         .setTimestamp();
     };
 

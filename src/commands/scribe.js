@@ -6,6 +6,7 @@ import { randomBytes } from 'crypto';
 import { logAction } from '../utils/logger.js';
 import { PURGE_SCRIBE_LOG_CHANNEL_ID } from '../config.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 function esc(s) {
   return String(s)
@@ -126,7 +127,7 @@ function generateHTML(messages, channel, guild, requestedBy, limit) {
  <div class="meta-item"><div class="label">Limit</div><div class="value">${limit}</div></div>
  <div class="meta-item"><div class="label">Generated</div><div class="value">${new Date().toLocaleString('en-GB', { timeZone: 'UTC' })} UTC</div></div>
  </div>
- <a href="https://portal.communityorg.co.uk" class="portal-badge">CO Staff Portal</a>
+ <a href="https://portal.communityorg.co.uk" class="portal-badge">${BRAND.short} Staff Portal</a>
  <span class="scribe-badge">📜 Read-Only Transcript</span>
 </div>
 <div class="messages">
@@ -262,7 +263,7 @@ export async function execute(interaction) {
         { name: 'Transcript', value: `[View at portal.communityorg.co.uk](${transcriptUrl})`, inline: false },
         { name: 'Expires', value: 'After 1 year', inline: true },
       )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setFooter({ text: BRAND.footer })
       .setTimestamp()
     ]});
 

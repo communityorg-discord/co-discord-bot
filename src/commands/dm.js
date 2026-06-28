@@ -9,6 +9,7 @@ import { getUserByDiscordId } from '../db.js';
 import { isDmExempt } from '../utils/botDb.js';
 import portalDb from '../db.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 const TEAMS = {
   'executive_operations_board': 'Executive Operations Board',
@@ -75,7 +76,7 @@ export async function execute(interaction) {
   const message = interaction.options.getString('message');
   const mass = interaction.options.getBoolean('mass');
   const team = interaction.options.getString('team');
-  const subject = interaction.options.getString('subject') || 'Message from CO Staff Management';
+  const subject = interaction.options.getString('subject') || `Message from ${BRAND.short} Staff Management`;
   const emailConfirm = interaction.options.getBoolean('email') || false;
   const senderPortalUser = getUserByDiscordId(interaction.user.id);
 
@@ -109,8 +110,8 @@ export async function execute(interaction) {
     .setTitle(`${subject}`)
     .setColor(0x5865F2)
     .setDescription(`${E.inbox} ${message}`)
-    .addFields({ name: 'From', value: `${senderPortalUser?.display_name || interaction.user.username} — via CO Staff Management`, inline: false })
-    .setFooter({ text: 'Community Organisation | Staff Assistant' })
+    .addFields({ name: 'From', value: `${senderPortalUser?.display_name || interaction.user.username} — via ${BRAND.short} Staff Management`, inline: false })
+    .setFooter({ text: BRAND.footer })
     .setTimestamp();
 
   // Single user DM
@@ -132,8 +133,8 @@ export async function execute(interaction) {
           .setTitle(`${subject}`)
           .setColor(0x5865F2)
           .setDescription(`**${E.dm} Please check your email for important information.**\n\n${message}`)
-          .addFields({ name: 'From', value: `${senderPortalUser?.display_name || interaction.user.username} — via CO Staff Management`, inline: false })
-          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .addFields({ name: 'From', value: `${senderPortalUser?.display_name || interaction.user.username} — via ${BRAND.short} Staff Management`, inline: false })
+          .setFooter({ text: BRAND.footer })
           .setTimestamp()
         ];
       }
@@ -177,7 +178,7 @@ export async function execute(interaction) {
             { name: 'Recipient', value: `<@${target.id}>`, inline: true },
             ...(emailConfirm ? [{ name: 'Email Confirm', value: 'Yes', inline: true }] : []),
           )
-          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setFooter({ text: BRAND.footer })
           .setTimestamp()
         ]
       });
@@ -188,7 +189,7 @@ export async function execute(interaction) {
           .setTitle('Failed to Send')
           .setColor(0xef4444)
           .setDescription(`${E.cross} Could not deliver message to **${portalUser?.display_name || target.username}**. They may have DMs disabled.`)
-          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setFooter({ text: BRAND.footer })
           .setTimestamp()
         ]
       }).catch(() => {});
@@ -236,8 +237,8 @@ export async function execute(interaction) {
           .setTitle(`${subject}`)
           .setColor(0x5865F2)
           .setDescription(`**${E.dm} Please check your email for important information.**\n\n${message}`)
-          .addFields({ name: 'From', value: `${senderPortalUser?.display_name || interaction.user.username} — via CO Staff Management`, inline: false })
-          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .addFields({ name: 'From', value: `${senderPortalUser?.display_name || interaction.user.username} — via ${BRAND.short} Staff Management`, inline: false })
+          .setFooter({ text: BRAND.footer })
           .setTimestamp()
         ];
         msgPayload.components = [new ActionRowBuilder().addComponents(
@@ -292,7 +293,7 @@ export async function execute(interaction) {
     .setColor(failed === 0 ? 0x22c55e : 0xf59e0b)
     .setDescription(
       `${E.check} ` +
-      (mass ? `Message sent to all active CO staff.` : `Message sent to **${TEAMS[team]}**.`) +
+      (mass ? `Message sent to all active ${BRAND.short} staff.` : `Message sent to **${TEAMS[team]}**.`) +
       exemptNote +
       (emailConfirm ? `\n\n${E.dm} All recipients must click **Acknowledge & Confirm Read** in their DM.` : '')
     )
@@ -303,7 +304,7 @@ export async function execute(interaction) {
       ...(emailConfirm ? [{ name: 'Email Confirm', value: 'Yes — all recipients must acknowledge', inline: true }] : []),
       ...(failedUsers.length > 0 ? [{ name: 'Failed Recipients', value: failedUsers.slice(0, 10).join(', ') + (failedUsers.length > 10 ? ` +${failedUsers.length - 10} more` : ''), inline: false }] : [])
     )
-    .setFooter({ text: 'Community Organisation | Staff Assistant' })
+    .setFooter({ text: BRAND.footer })
     .setTimestamp()
   ]});
 }

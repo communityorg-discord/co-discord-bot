@@ -7,6 +7,7 @@ import { logAction } from '../utils/logger.js';
 import { OFFICIAL_BYPASS_IDS } from '../config.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 export const data = new SlashCommandBuilder()
   .setName('force-verify')
@@ -46,7 +47,7 @@ export async function execute(interaction) {
     } else {
       portalUser = await getPortalUser(discordId);
       if (!portalUser) {
-        return interaction.editReply({ content: `${E.cross} <@${discordId}> is not found in the CO Staff Portal. They must be an active staff member to verify.` });
+        return interaction.editReply({ content: `${E.cross} <@${discordId}> is not found in the ${BRAND.short} Staff Portal. They must be an active staff member to verify.` });
       }
       position = portalUser.position;
       if (!position || !POSITIONS[position]) {

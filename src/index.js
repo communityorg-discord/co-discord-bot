@@ -9,6 +9,7 @@ import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent, logAtlasBot
 import { sendToWatchedUsers, logEvent } from './utils/logger.js';
 import { getUserByDiscordId } from './db.js';
 import { canUseCommand } from './utils/permissions.js';
+import { BRAND } from './utils/brand.js';
 import * as brag from './commands/brag.js';
 import * as leave from './commands/leave.js';
 import * as staff from './commands/staff.js';
@@ -188,7 +189,7 @@ const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLo
 // CO-only commands (HR / activity / CO verify / leave / cases). Hidden when the
 // bot runs as USGRP; restored automatically in CO mode (ACTIVE_NETWORK=co).
 const CO_ONLY_COMMANDS = [
-  'dm', 'dm-exempt', 'brag', 'leave', 'staff', 'cases', 'case', 'aps', 'helpdesk',
+  'dm', 'dm-exempt', 'brag', 'leave', 'staff', 'cases', 'case', 'caseopen', 'aps', 'helpdesk',
   'nid', 'suspend', 'unsuspend', 'investigate', 'terminate', 'infractions',
   'verify', 'unverify', 'authorisation-override', 'inbox', 'assign', 'acting',
   'onboard', 'eliminate', 'stats', 'sync-roles', 'sync-all-roles', 'whois',
@@ -370,7 +371,7 @@ client.once('clientReady', async () => {
           await unsuspendAcrossGuilds(client, sus.discord_id);
           liftSuspension(sus.discord_id);
           const user = await client.users.fetch(sus.discord_id).catch(() => null);
-          if (user) await user.send({ embeds: [new EmbedBuilder().setTitle('Suspension Lifted').setColor(0x22C55E).setDescription(`${E.check} Your suspension from **Community Organisation** has ended and your roles have been restored.`).setFooter({ text: 'Community Organisation | Staff Assistant' }).setTimestamp()] }).catch(() => {});
+          if (user) await user.send({ embeds: [new EmbedBuilder().setTitle('Suspension Lifted').setColor(0x22C55E).setDescription(`${E.check} Your suspension from **${BRAND.name}** has ended and your roles have been restored.`).setFooter({ text: BRAND.footer }).setTimestamp()] }).catch(() => {});
           const { logAction } = await import('./utils/logger.js');
           await logAction(client, { action: 'Suspension Lifted (Auto)', moderator: { discordId: 'SYSTEM', name: 'Automated' }, target: { discordId: sus.discord_id, name: sus.discord_id }, reason: 'Suspension duration expired', color: 0x22C55E });
         } catch (e) { console.error('[C-05 suspension lift error]', e.message); }
@@ -416,7 +417,7 @@ client.once('clientReady', async () => {
         await unsuspendAcrossGuilds(client, sus.discord_id);
         liftSuspension(sus.discord_id);
         const user = await client.users.fetch(sus.discord_id).catch(() => null);
-        if (user) await user.send({ embeds: [new EmbedBuilder().setTitle('Suspension Lifted').setColor(0x22C55E).setDescription(`${E.check} Your suspension has ended.`).setFooter({ text: 'Community Organisation | Staff Assistant' }).setTimestamp()] }).catch(() => {});
+        if (user) await user.send({ embeds: [new EmbedBuilder().setTitle('Suspension Lifted').setColor(0x22C55E).setDescription(`${E.check} Your suspension has ended.`).setFooter({ text: BRAND.footer }).setTimestamp()] }).catch(() => {});
       }
       const expiredBans = db.prepare("SELECT * FROM banned_users WHERE unban_at IS NOT NULL AND active = 1 AND unban_at <= ?").all(new Date(now).toISOString());
       for (const ban of expiredBans) {
@@ -511,7 +512,7 @@ client.once('clientReady', async () => {
                 { name: 'Assignment', value: a.title, inline: false },
                 { name: 'Overdue By', value: `${Math.round(hoursOverdue)} hour(s)`, inline: true },
               )
-              .setFooter({ text: `ASN-${a.id} | Community Organisation` })
+              .setFooter({ text: `ASN-${a.id} | ${BRAND.name}` })
               .setTimestamp()
             ]});
           } catch {}
@@ -586,7 +587,7 @@ client.once('clientReady', async () => {
                 { name: 'Assignment', value: a.title, inline: false },
                 { name: 'Overdue By', value: `${Math.round(hoursOverdue)} hours`, inline: true },
               )
-              .setFooter({ text: `ASN-${a.id} | Community Organisation` })
+              .setFooter({ text: `ASN-${a.id} | ${BRAND.name}` })
               .setTimestamp()
             ]});
           } catch {}
@@ -703,7 +704,7 @@ client.once('clientReady', async () => {
               { name: 'Quick Wins', value: 'Send some messages, join voice for 30 min, or submit a tasks/co-work claim from the Performance page.', inline: false },
               { name: 'Open', value: '[portal.communityorg.co.uk/performance](https://portal.communityorg.co.uk/performance?tab=activity)', inline: false },
             )
-            .setFooter({ text: 'Community Organisation | Activity Points' })
+            .setFooter({ text: `${BRAND.name} | Activity Points` })
             .setTimestamp()
           ]});
           await new Promise(r => setTimeout(r, 500));
@@ -1698,7 +1699,7 @@ client.once('clientReady', async () => {
             .setTitle('Reminder')
             .setDescription(`${E.pending} ` + reminder.message)
             .addFields(requesterUser ? [{ name: 'Set by', value: `<@${requesterUser.id}>`, inline: true }] : [])
-            .setFooter({ text: 'Community Organisation | Reminder' })
+            .setFooter({ text: `${BRAND.name} | Reminder` })
             .setTimestamp()
           ]});
         } catch (e) {
@@ -1808,7 +1809,7 @@ client.once('clientReady', async () => {
               .setColor(0x5865F2)
               .setDescription(`${E.dm} ` + scheduled.message)
               .addFields({ name: 'From', value: `${senderName} (<@${scheduled.sender_id}>)`, inline: true })
-              .setFooter({ text: 'Community Organisation | Scheduled DM' })
+              .setFooter({ text: `${BRAND.name} | Scheduled DM` })
               .setTimestamp();
 
             await recipient.send({ embeds: [embed] });
@@ -1918,7 +1919,7 @@ client.once('clientReady', async () => {
           { name: 'Assignments Completed', value: `${E.logs} ${String(assignmentsCompleted)}`, inline: true },
           { name: 'Staff Verified', value: `${E.check} ${String(staffVerified)}`, inline: true },
         )
-        .setFooter({ text: 'Community Organisation | Weekly Report' })
+        .setFooter({ text: `${BRAND.name} | Weekly Report` })
         .setTimestamp();
 
       // Post to leaderboard channel
@@ -1946,7 +1947,7 @@ client.once('clientReady', async () => {
           .setColor(0x22C55E)
           .setDescription(`${E.check} The CO Staff Portal (\`localhost:3016\`) is back online.`)
           .setTimestamp()
-          .setFooter({ text: 'Community Organisation | Health Monitor' });
+          .setFooter({ text: `${BRAND.name} | Health Monitor` });
         await sendToWatchedUsers(client, embed);
       }
     } catch (e) {
@@ -1959,7 +1960,7 @@ client.once('clientReady', async () => {
           .setDescription(`${E.cross} The CO Staff Portal (\`localhost:3016\`) is not responding.`)
           .addFields({ name: 'Error', value: String(e.message).slice(0, 1024), inline: false })
           .setTimestamp()
-          .setFooter({ text: 'Community Organisation | Health Monitor' });
+          .setFooter({ text: `${BRAND.name} | Health Monitor` });
         await sendToWatchedUsers(client, embed);
       }
     }
@@ -2008,7 +2009,7 @@ client.on('interactionCreate', async interaction => {
           color: 0xE53935,
           title: '⚠️ Please use the bot-commands channel',
           description: `You've now run bot commands outside <#${requiredCmdChannel}> more than once. Running commands in general channels clutters them for everyone.\n\nPlease keep all bot commands in <#${requiredCmdChannel}>. Network Administration staff are exempt.`,
-          footer: { text: 'Community Organisation' },
+          footer: { text: BRAND.name },
         }] }).catch(() => {});
       }
       cmdChannelOffenses.set(uid, rec);
@@ -2029,12 +2030,12 @@ client.on('interactionCreate', async interaction => {
         const embed = new EmbedBuilder()
           .setTitle('Bot Maintenance In Progress')
           .setColor(0xC9A84C)
-          .setDescription(`${E.bot} ` + (maint.description || 'The CO Discord Bot is undergoing scheduled maintenance. Commands are restricted to superusers until the window closes.'))
+          .setDescription(`${E.bot} ` + (maint.description || `The ${BRAND.short} bot is undergoing scheduled maintenance. Commands are restricted to superusers until the window closes.`))
           .addFields(
             { name: 'Window', value: `<t:${Math.floor(new Date(maint.starts_at + 'Z').getTime()/1000)}:f> → <t:${Math.floor(new Date(maint.ends_at + 'Z').getTime()/1000)}:f>`, inline: false },
             { name: 'Status', value: 'See portal.communityorg.co.uk/status', inline: false },
           )
-          .setFooter({ text: 'Community Organisation | CO Discord Bot' })
+          .setFooter({ text: BRAND.footer })
           .setTimestamp();
         return interaction.reply({ embeds: [embed], ephemeral: true });
       }
@@ -2102,7 +2103,7 @@ client.on('interactionCreate', async interaction => {
             ...(options ? [{ name: 'Options', value: options, inline: false }] : []),
             ...(errorMsg ? [{ name: 'Error', value: String(errorMsg).slice(0, 500), inline: false }] : []),
           )
-          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setFooter({ text: BRAND.footer })
           .setTimestamp();
         await logChannel.send({ embeds: [embed] }).catch(() => {});
       }
@@ -2560,7 +2561,7 @@ client.on('interactionCreate', async interaction => {
           .setColor(0x22c55e)
           .setDescription(`${E.logs} Users exempt from staff DM logging.`)
           .addFields({ name: 'Exempt Users', value: (exempts.length > 0 ? rows.join('\n\n') : 'No users are currently exempt.').slice(0, 1024), inline: false })
-          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setFooter({ text: BRAND.footer })
           .setTimestamp()
         ],
         components: [
@@ -2587,7 +2588,7 @@ client.on('interactionCreate', async interaction => {
           .setColor(0x5865F2)
           .setDescription(`${E.logs} Users exempt from staff DM logging.`)
           .addFields({ name: 'Exempt Users', value: (exempts.length > 0 ? rows.join('\n\n') : 'No users are currently exempt.').slice(0, 1024), inline: false })
-          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setFooter({ text: BRAND.footer })
           .setTimestamp()
         ],
         components: [
@@ -2748,7 +2749,7 @@ client.on('interactionCreate', async interaction => {
           .setColor(0x22c55e)
           .setDescription(`${E.logs} Users exempt from staff DM logging.`)
           .addFields({ name: 'Exempt Users', value: (exempts.length > 0 ? rows.join('\n\n') : 'No users are currently exempt.').slice(0, 1024), inline: false })
-          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setFooter({ text: BRAND.footer })
           .setTimestamp()
         ],
         components: [
@@ -2789,7 +2790,7 @@ client.on('interactionCreate', async interaction => {
           .setColor(0x22c55e)
           .setDescription(`${E.logs} Users exempt from staff DM logging.`)
           .addFields({ name: 'Exempt Users', value: (exempts.length > 0 ? rows.join('\n\n') : 'No users are currently exempt.').slice(0, 1024), inline: false })
-          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setFooter({ text: BRAND.footer })
           .setTimestamp()
         ],
         components: [
@@ -2856,7 +2857,7 @@ client.on('guildMemberAdd', async (member) => {
         { name: 'Member', value: `${E.member} ${member.user.username} (<@${member.user.id}>)`, inline: true },
         { name: 'Server', value: member.guild?.name || '—', inline: true },
         { name: 'Account age', value: member.user.createdTimestamp ? `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>` : '—', inline: true },
-      ).setTimestamp().setFooter({ text: 'Community Organisation | Member Log' });
+      ).setTimestamp().setFooter({ text: `${BRAND.name} | Member Log` });
     await logEvent(client, { embed, category: 'membership', type: 'member_join', guildId: member.guild?.id });
   } catch (e) { console.error('[memberJoin log]', e.message); }
 });
@@ -2885,7 +2886,7 @@ client.on('guildMemberRemove', async (member) => {
         { name: 'Member', value: `${E.member} ${member.user?.username || 'Unknown'} (<@${member.user?.id || member.id}>)`, inline: true },
         { name: 'User ID', value: `\`${member.user?.id || member.id}\``, inline: true },
         { name: 'Server', value: member.guild?.name || '—', inline: true },
-      ).setTimestamp().setFooter({ text: 'Community Organisation | Member Log' });
+      ).setTimestamp().setFooter({ text: `${BRAND.name} | Member Log` });
     await logEvent(client, { embed, category: 'membership', type: 'member_leave', guildId: member.guild?.id });
   } catch (e) { console.error('[memberLeave log]', e.message); }
 });
@@ -3327,7 +3328,7 @@ client.on('messageDelete', async (message) => {
             { name: 'Content', value: String(contentSummary).slice(0, 1024), inline: false },
           )
           .setTimestamp()
-          .setFooter({ text: 'CO | Log Hub Audit Trail' })
+          .setFooter({ text: `${BRAND.short} | Log Hub Audit Trail` })
         ]});
       }
     } catch (e) {
@@ -3355,7 +3356,7 @@ client.on('messageDelete', async (message) => {
         { name: 'Server', value: message.guild?.name || 'DM', inline: true },
         { name: 'Content', value: content + attachments + jumpLink, inline: false },
       )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setFooter({ text: BRAND.footer })
       .setTimestamp();
 
     logMessageEvent({ guildId, channelName: message.channel?.name, authorId: message.author.id, authorTag: message.author.tag || message.author.username, type: 'delete', content: message.content || '' });
@@ -3430,7 +3431,7 @@ client.on('inviteCreate', async (invite) => {
           .setTitle('Invite Deleted')
           .setColor(0xef4444)
           .setDescription(`${E.cross} Your invite to **${invite.guild.name}** was automatically deleted. ${deptMode ? 'Only the department head, the FSA team, or a superuser can create invites for this server.' : 'Only superusers can create invites for internal CO servers.'}`)
-          .setFooter({ text: 'Community Organisation' })
+          .setFooter({ text: BRAND.name })
           .setTimestamp()
         ]
       }).catch(() => {});
@@ -3490,7 +3491,7 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
         { name: 'Before', value: oldContent, inline: false },
         { name: 'After', value: newContent + jumpLink, inline: false },
       )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setFooter({ text: BRAND.footer })
       .setTimestamp();
 
     logMessageEvent({ guildId, channelName: newMessage.channel?.name, authorId: newMessage.author.id, authorTag: newMessage.author.tag || newMessage.author.username, type: 'edit', before: oldMessage.content || '', after: newMessage.content || '' });

@@ -3,6 +3,7 @@ import { simpleParser } from 'mailparser';
 import fetch from 'node-fetch';
 import { readFileSync } from 'fs';
 import Database from 'better-sqlite3';
+import { BRAND } from '../utils/brand.js';
 import { GoogleAuth } from 'google-auth-library';
 import { google } from 'googleapis';
 
@@ -325,7 +326,7 @@ export async function sendEmailViaBrevo(options, senderCoEmail, fromEmail = null
   // Inbox replies use a "re:" heading and keep the footer neutral so the
   // recipient understands this is a real reply (not an automated pager).
   const { wrapEmail } = await import('../lib/emailLayout.js');
-  const senderDisplay = senderName || (senderCoEmail ? senderCoEmail.split('@')[0] : 'Community Organisation');
+  const senderDisplay = senderName || (senderCoEmail ? senderCoEmail.split('@')[0] : BRAND.name);
   const heading = isReply
     ? `Re: ${String(originalSubject || subject).replace(/^(re:\s*)+/i, '')}`
     : subject;
@@ -337,7 +338,7 @@ export async function sendEmailViaBrevo(options, senderCoEmail, fromEmail = null
     footerNote: isReply
       ? 'This is a real reply — you can respond directly to this email and it will reach the sender.'
       : 'Sent from the CO Staff Portal.',
-    signature: { name: senderDisplay, role: null, team: 'Community Organisation' },
+    signature: { name: senderDisplay, role: null, team: BRAND.name },
   });
 
   const payload = {

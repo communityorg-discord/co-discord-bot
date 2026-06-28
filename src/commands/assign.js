@@ -6,6 +6,7 @@ import { getUserByDiscordId, getTeamMembers } from '../db.js';
 import { logAction } from '../utils/logger.js';
 import fetch from 'node-fetch';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 const ASSIGNMENTS_CHANNEL_ID = '1487630065008115824';
 const SUPERUSER_IDS = ['723199054514749450', '415922272956710912', '1355367209249148928', '878775920180228127'];
@@ -132,7 +133,7 @@ export function buildAssignmentEmbed(assignment, assignerName, assigneeName, opt
       { name: 'Created', value: formatDateShort(assignment.created_at || new Date().toISOString()), inline: true },
       { name: 'Status', value: statusLabels[status] || status, inline: true },
     )
-    .setFooter({ text: `Assignment ID: ${opts.assignmentNumber || 'ASN-????-???'} | Community Organisation` })
+    .setFooter({ text: `Assignment ID: ${opts.assignmentNumber || 'ASN-????-???'} | ${BRAND.name}` })
     .setTimestamp();
 
   // Team member tracking — two phases: acknowledge → confirm
@@ -394,7 +395,7 @@ export async function execute(interaction) {
           { name: 'Assigned By', value: assignerPortal.display_name, inline: true },
           { name: 'Details', value: `<#${ASSIGNMENTS_CHANNEL_ID}>`, inline: true },
         )
-        .setFooter({ text: `Assignment: ${assignmentNumber} | Community Organisation` })
+        .setFooter({ text: `Assignment: ${assignmentNumber} | ${BRAND.name}` })
         .setTimestamp()
       ]});
     } catch {}
@@ -414,7 +415,7 @@ export async function execute(interaction) {
               { name: 'Due', value: formatDate(dueDate), inline: true },
               { name: 'Assigned By', value: assignerPortal.display_name, inline: true },
             )
-            .setFooter({ text: `Assignment: ${assignmentNumber} | Community Organisation` })
+            .setFooter({ text: `Assignment: ${assignmentNumber} | ${BRAND.name}` })
             .setTimestamp()
           ]}).catch(() => {});
         }
@@ -535,7 +536,7 @@ export async function handleButton(interaction) {
               { name: 'Team', value: assignment.team, inline: true },
               { name: 'Assignment', value: `ASN-${assignmentId}`, inline: true },
             )
-            .setFooter({ text: 'Community Organisation | Staff Assistant' })
+            .setFooter({ text: BRAND.footer })
             .setTimestamp()
           ],
           components: [new ActionRowBuilder().addComponents(
@@ -833,7 +834,7 @@ export async function handleModal(interaction) {
             { name: 'Completed At', value: formatDate(new Date()), inline: true },
             { name: 'Notes', value: completionNotes || 'None provided', inline: false },
           )
-          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setFooter({ text: BRAND.footer })
           .setTimestamp()
         ],
         components: [new ActionRowBuilder().addComponents(
@@ -896,7 +897,7 @@ export async function handleModal(interaction) {
           { name: 'Task', value: assignment.title, inline: false },
           { name: 'Reason', value: rejectReason, inline: false },
         )
-        .setFooter({ text: 'Community Organisation | Staff Assistant' })
+        .setFooter({ text: BRAND.footer })
         .setTimestamp()
       ]});
     } catch {}
@@ -1010,7 +1011,7 @@ export async function handleModal(interaction) {
           { name: 'Delegated By', value: delegatorName, inline: true },
           { name: 'Reason', value: delegateReason, inline: false },
         )
-        .setFooter({ text: `Assignment: ${assignmentNumber} | Community Organisation` })
+        .setFooter({ text: `Assignment: ${assignmentNumber} | ${BRAND.name}` })
         .setTimestamp()
       ]});
     } catch {}

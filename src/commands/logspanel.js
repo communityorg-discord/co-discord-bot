@@ -4,6 +4,7 @@ import { logAction } from '../utils/logger.js';
 import { getLogConfig, setLogChannel, getGlobalLogChannel, setGlobalLogChannel, getLogChannel, getAllLogConfig, getAssignmentStats } from '../utils/botDb.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 // Per-guild log categories and their types
 const CATEGORIES = {
@@ -114,7 +115,7 @@ function buildInfoEmbed(guildId) {
     .setColor(0x5865F2)
     .setDescription(`${E.logs} Configure where different types of logs are sent **in this server**.\n\nUse the selectors below to set a channel for each log type. For organisation-wide logs across all servers, use \`/orglogs\`.`)
     .addFields(...fields)
-    .setFooter({ text: 'Community Organisation | Staff Assistant' })
+    .setFooter({ text: BRAND.footer })
     .setTimestamp();
 }
 
@@ -261,7 +262,7 @@ export async function handleSelect(interaction) {
         .setColor(0x5865F2)
         .setDescription(`${E.logs} ` + 'Catch-all log channels for **this server only**. These receive all events of a type happening in this server.')
         .addFields({ name: 'Bindings', value: serverBindings.join('\n').slice(0, 1024), inline: false })
-        .setFooter({ text: 'Community Organisation | Staff Assistant' })
+        .setFooter({ text: BRAND.footer })
         .setTimestamp();
 
       const serverRow = buildServerTypeSelect();
@@ -292,7 +293,7 @@ export async function handleSelect(interaction) {
       .setTitle(`${cat.label} — Log Bindings`)
       .setColor(0x5865F2)
       .addFields({ name: '​', value: typeRows.join('\n'), inline: false })
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setFooter({ text: BRAND.footer })
       .setTimestamp();
 
     const typeRow = buildTypeSelect(categoryKey);

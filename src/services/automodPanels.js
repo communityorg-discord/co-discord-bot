@@ -4,6 +4,7 @@ import { automod } from './automod.js';
 import { isSuperuser, canRunCommand } from '../utils/permissions.js';
 import { randomBytes } from 'crypto';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 const MODULES = [
   { key: 'spam', label: 'Spam', emoji: '💬' },
@@ -60,7 +61,7 @@ function buildStatusEmbed(guildId) {
 
   return new EmbedBuilder()
     .setColor(config.enabled ? 0x22C55E : 0xEF4444)
-    .setTitle('CO | AUTOMOD CONTROL CENTRE')
+    .setTitle(`${BRAND.short} | AUTOMOD CONTROL CENTRE`)
     .setDescription(`${E.shield} Click the buttons below to manage AutoMod.`)
     .addFields(
       { name: 'Status', value: config.enabled ? `${E.check} ACTIVE` : `${E.cross} DISABLED`, inline: true },

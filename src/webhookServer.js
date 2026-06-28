@@ -11,6 +11,7 @@ import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent, logAtlasBot
 import { sendToWatchedUsers, logEvent } from './utils/logger.js';
 import { getUserByDiscordId } from './db.js';
 import { isSuperuser } from './utils/permissions.js';
+import { BRAND } from './utils/brand.js';
 import * as brag from './commands/brag.js';
 import * as leave from './commands/leave.js';
 import * as staff from './commands/staff.js';
@@ -268,7 +269,7 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
           const embed = new EmbedBuilder()
             .setColor(0x0B1F3A)
             .setDescription(String(message).slice(0, 4000))
-            .setFooter({ text: 'Community Organisation · Atlas' })
+            .setFooter({ text: `${BRAND.name} · Atlas` })
             .setTimestamp();
           const sent = await user.send({ embeds: [embed] });
           logAtlasBotAction({ action, target_id: user_discord_id, payload: { message_len: String(message).length }, result_status: 'sent', message_id: sent.id });
@@ -511,7 +512,7 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
               color: 0xc9a84c,
               title,
               description: body,
-              footer: { text: 'Community Organisation · Staff Portal' },
+              footer: { text: `${BRAND.name} · Staff Portal` },
               timestamp: new Date().toISOString(),
             }],
           });
@@ -1860,9 +1861,9 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
               embeds: [{
                 color: 0xc9a84c,
                 title: `Please welcome ${display_name}`,
-                description: `${display_name} has completed their onboarding and is now a fully paid-up member of Community Organisation. Say hello!`,
+                description: `${display_name} has completed their onboarding and is now a fully paid-up member of ${BRAND.name}. Say hello!`,
                 fields,
-                footer: { text: 'Community Organisation · Staff Portal' },
+                footer: { text: `${BRAND.name} · Staff Portal` },
                 timestamp: new Date().toISOString(),
               }],
             });
@@ -1922,7 +1923,7 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
               color: 0xc9a84c,
               title,
               description: body,
-              footer: { text: 'Community Organisation · Staff Portal' },
+              footer: { text: `${BRAND.name} · Staff Portal` },
               timestamp: new Date().toISOString(),
             }],
             files: [attachment],
@@ -1992,14 +1993,14 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
           await user.send({ embeds: [new EmbedBuilder()
             .setTitle('You Have Been Suspended')
             .setColor(0xEF4444)
-            .setDescription(`${E.suspend} You have been suspended from **Community Organisation**. If you believe this is an error, you may appeal in the Appeals Server.`)
+            .setDescription(`${E.suspend} You have been suspended from **${BRAND.name}**. If you believe this is an error, you may appeal in the Appeals Server.`)
             .addFields(
               { name: 'Reason', value: `${E.info} ${reason || 'No reason provided'}`, inline: false },
               { name: 'Duration', value: `${E.calendar} ${durationDisplay}`, inline: true },
               { name: 'Expires', value: `${E.pending} ${expiresDisplay}`, inline: true },
               { name: 'Actioned By', value: `${E.staff} ${moderatorName || 'Staff Management'}`, inline: true },
             )
-            .setFooter({ text: 'Community Organisation | Staff Assistant' })
+            .setFooter({ text: BRAND.footer })
             .setTimestamp()
           ]});
         }
@@ -2052,9 +2053,9 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
           if (user) await user.send({ embeds: [new EmbedBuilder()
             .setTitle('Suspension Lifted')
             .setColor(0x22C55E)
-            .setDescription(`${E.check} Your suspension from **Community Organisation** has ended and your roles have been restored.`)
+            .setDescription(`${E.check} Your suspension from **${BRAND.name}** has ended and your roles have been restored.`)
             .addFields({ name: 'Actioned By', value: `${E.staff} ${moderatorName || 'Staff Management'}`, inline: true })
-            .setFooter({ text: 'Community Organisation | Staff Assistant' })
+            .setFooter({ text: BRAND.footer })
             .setTimestamp()
           ]});
         } catch {}
@@ -2117,7 +2118,7 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
           .setTitle('Task Deadline Extended')
           .setColor(0x22C55E)
           .setDescription(`${E.calendar} Your task deadline for **"${assignment.title}"** has been extended to **<t:${Math.floor(new Date(new_due_date).getTime()/1000)}:F>** following an approved performance adjustment.`)
-          .setFooter({ text: 'Community Organisation | Staff Assistant' })
+          .setFooter({ text: BRAND.footer })
           .setTimestamp()
         ]});
       } catch {}
@@ -2415,7 +2416,7 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
               { name: 'Your code', value: '```\n' + code + '\n```', inline: false },
               { name: 'Expires in', value: '10 minutes', inline: true },
             ],
-            footer: { text: 'Community Organisation · Appeal Portal' },
+            footer: { text: `${BRAND.name} · Appeal Portal` },
             timestamp: new Date().toISOString(),
           }],
         });
@@ -2457,7 +2458,7 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
               ...(request_number ? [{ name: 'Request', value: '`' + request_number + '`', inline: true }] : []),
               { name: 'Details', value: '```\n' + body + '\n```', inline: false },
             ],
-            footer: { text: 'Community Organisation · GDPR Portal' },
+            footer: { text: `${BRAND.name} · GDPR Portal` },
             timestamp: new Date().toISOString(),
           }],
         });
@@ -2546,7 +2547,7 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
               { name: 'Your code', value: '```\n' + code + '\n```', inline: false },
               { name: 'Expires in', value: '10 minutes', inline: true },
             ],
-            footer: { text: 'Community Organisation · Testing Portal' },
+            footer: { text: `${BRAND.name} · Testing Portal` },
             timestamp: new Date().toISOString(),
           }],
         });
@@ -3158,8 +3159,8 @@ export function startWebhookServer(client, commands, getBragWeekKey) {
             if (user) await user.send({ embeds: [new EmbedBuilder()
               .setTitle('Suspension Lifted')
               .setColor(0x22C55E)
-              .setDescription(`${E.check} Your suspension from **Community Organisation** has ended and your roles have been restored.`)
-              .setFooter({ text: 'Community Organisation | Staff Assistant' })
+              .setDescription(`${E.check} Your suspension from **${BRAND.name}** has ended and your roles have been restored.`)
+              .setFooter({ text: BRAND.footer })
               .setTimestamp()
             ]});
           } catch {}

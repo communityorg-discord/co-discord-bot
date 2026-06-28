@@ -6,6 +6,7 @@ import { logAction } from '../utils/logger.js';
 import { MOD_LOG_CHANNEL_ID } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 function parseDuration(str) {
   if (!str) return null;
@@ -126,7 +127,7 @@ export async function execute(interaction) {
           ...(isTempBan ? [{ name: 'Duration', value: formatDuration(durationMs), inline: true }, { name: 'Expires', value: `<t:${Math.floor((Date.now() + durationMs) / 1000)}:R>`, inline: true }] : []),
           { name: 'Banned By', value: `<@${interaction.user.id}>`, inline: true },
         )
-        .setFooter({ text: 'Community Organisation | Staff Assistant' })
+        .setFooter({ text: BRAND.footer })
         .setTimestamp()
       ]
     });
@@ -167,7 +168,7 @@ export async function execute(interaction) {
         { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },
         ...(isTempBan ? [{ name: 'Auto-Unban', value: `<t:${unbanTs}:R>`, inline: true }] : []),
       )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setFooter({ text: BRAND.footer })
       .setTimestamp()
     ]
   });

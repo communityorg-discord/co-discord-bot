@@ -5,6 +5,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getUserByDiscordId } from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 const PORTAL_HTTP = process.env.PORTAL_HTTP || 'http://localhost:3016';
 const PORTAL_URL  = process.env.PORTAL_URL  || 'https://portal.communityorg.co.uk';
@@ -74,7 +75,7 @@ export async function execute(interaction) {
         { name: 'Status', value: 'Open · Intake', inline: true },
         { name: 'View',   value: `[Open in portal](${PORTAL_URL}/cases/${resp.id})`, inline: false },
       )
-      .setFooter({ text: 'Community Organisation · Case Management' })
+      .setFooter({ text: `${BRAND.name} · Case Management` })
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });

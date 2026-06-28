@@ -8,6 +8,7 @@ import { randomBytes } from 'crypto';
 import { logAction } from '../utils/logger.js';
 import { PURGE_SCRIBE_LOG_CHANNEL_ID } from '../config.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 function escapeHtml(str) {
   return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -81,7 +82,7 @@ function generateHTML(messages, channel, guild, moderator, reason) {
  <div class="meta-item"><div class="label">Reason</div><div class="value">${safeReason}</div></div>
  <div class="meta-item"><div class="label">Date</div><div class="value">${new Date().toLocaleString('en-GB', { timeZone: 'UTC' })} UTC</div></div>
  </div>
- <a href="https://portal.communityorg.co.uk" class="portal-badge">CO Staff Portal</a>
+ <a href="https://portal.communityorg.co.uk" class="portal-badge">${BRAND.short} Staff Portal</a>
 </div>
 <div class="messages">
  <div class="count">${messages.length} message(s) — oldest first</div>
@@ -289,7 +290,7 @@ export async function execute(interaction) {
         ...(targetUser ? [{ name: 'Filtered User', value: `<@${targetUser.id}>`, inline: true }] : []),
         ...(tooOld > 0 ? [{ name: 'Skipped', value: `${tooOld} older than 14 days`, inline: false }] : [])
       )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setFooter({ text: BRAND.footer })
       .setTimestamp();
 
     const summaryMsg = await channel.send({ embeds: [summaryEmbed] });
@@ -330,7 +331,7 @@ export async function execute(interaction) {
         { name: 'Transcript', value: `[View at portal.communityorg.co.uk](${transcriptUrl})`, inline: false },
         ...(tooOld > 0 ? [{ name: 'Note', value: `${tooOld} message(s) skipped — older than 14 days.`, inline: false }] : [])
       )
-      .setFooter({ text: 'Community Organisation | Staff Assistant' })
+      .setFooter({ text: BRAND.footer })
       .setTimestamp()
     ]});
 

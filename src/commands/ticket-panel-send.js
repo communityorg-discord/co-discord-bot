@@ -5,6 +5,7 @@ import { getTicketPanelByName, getAllTicketPanels } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { closeTicketWithTranscript } from '../utils/ticketTranscript.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 // ── Shared transcript HTML generator ─────────────────────────────────────────
 
@@ -147,7 +148,7 @@ export async function execute(interaction) {
     .setTitle(`${panel.name}`)
     .setColor(0x5865F2)
     .setDescription(`${E.ticket} If you wish to make a ticket, please click the button below.`)
-    .setFooter({ text: 'Community Organisation | Ticket System' })
+    .setFooter({ text: `${BRAND.name} | Ticket System` })
     .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
@@ -234,7 +235,7 @@ export async function handleTicketButton(interaction) {
         { name: 'Ticket #', value: String(ticketNumber), inline: true },
         { name: 'Status', value: `${E.check} Open`, inline: true },
       )
-      .setFooter({ text: 'Community Organisation | Ticket System' })
+      .setFooter({ text: `${BRAND.name} | Ticket System` })
       .setTimestamp();
 
     const ticketRow = new ActionRowBuilder().addComponents(
@@ -309,7 +310,7 @@ export async function handleTicketChannelButton(interaction) {
         { name: 'Claimed By', value: `<@${interaction.user.id}>`, inline: true },
         { name: 'Status', value: `${E.pending} Claimed`, inline: true },
       )
-      .setFooter({ text: 'Community Organisation | Ticket System' })
+      .setFooter({ text: `${BRAND.name} | Ticket System` })
       .setTimestamp();
 
     const claimerRow = new ActionRowBuilder().addComponents(

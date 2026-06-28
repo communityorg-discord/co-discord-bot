@@ -5,6 +5,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { SUPERUSER_IDS } from '../config.js';
 import { createEmergencyCode } from '../utils/botDb.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 export const data = new SlashCommandBuilder()
   .setName('emergency')
@@ -24,6 +25,6 @@ export async function execute(interaction) {
       { name: 'Uses', value: 'Single use', inline: true },
       { name: 'Expires', value: `<t:${Math.floor(expiresAt / 1000)}:R>`, inline: true },
     )
-    .setFooter({ text: 'Community Organisation · emergency override' });
+    .setFooter({ text: `${BRAND.name} · emergency override` });
   return interaction.reply({ embeds: [embed], flags: 64 });
 }

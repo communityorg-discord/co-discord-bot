@@ -3,6 +3,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getUserByDiscordId, getStaffByName } from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 export const data = new SlashCommandBuilder()
   .setName('staff')
@@ -38,7 +39,7 @@ export async function execute(interaction) {
     )
     .setFooter({ text: results.length > SHOWN
       ? `Showing ${SHOWN} of ${results.length} matches — refine your search to narrow down`
-      : 'Community Organisation | Staff Directory' })
+      : `${BRAND.name} | Staff Directory` })
   );
 
   await interaction.reply({ embeds, ephemeral: true });

@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -66,7 +67,7 @@ export async function execute(interaction) {
   const maintainerLines = MAINTAINERS.map(id => `<@${id}>`).join(' · ');
 
   const embed = new EmbedBuilder()
-    .setTitle('CO Bot — system info')
+    .setTitle(`${BRAND.short} Bot — system info`)
     .setColor(0x5865F2)
     .setThumbnail(client.user.displayAvatarURL())
     .addFields(
@@ -79,7 +80,7 @@ export async function execute(interaction) {
       { name: 'Top servers', value: guildList + moreGuilds, inline: false },
       { name: 'Maintainers', value: maintainerLines, inline: false },
     )
-    .setFooter({ text: 'Community Organisation · Staff Assistant' })
+    .setFooter({ text: BRAND.footer })
     .setTimestamp();
 
   await interaction.editReply({ embeds: [embed] });

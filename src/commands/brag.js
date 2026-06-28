@@ -5,6 +5,7 @@ import { getUserByDiscordId, getBragStatus } from '../db.js';
 import portalDb from '../db.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 function getWeekKey(date = new Date()) {
   const d = new Date(date);
@@ -129,7 +130,7 @@ export async function execute(interaction) {
         { name: 'Current Grade', value: `${(currentGrade || 'N/A').toUpperCase()}`, inline: true },
         { name: 'Categories met', value: String(currentWeekRecord?.categories_met ?? '—'), inline: true },
       )
-      .setFooter({ text: 'Community Organisation | Staff Assistant — try /aps for the live tier breakdown' })
+      .setFooter({ text: `${BRAND.footer} — try /aps for the live tier breakdown` })
       .setTimestamp();
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
