@@ -34,8 +34,8 @@ const STOP_FILE = `${LOCK_DIR}/STOP`;            // written by either bot's Stop
 const SESS_FILE = `${LOCK_DIR}/sessions.json`;
 const CHAN_FILE = `${LOCK_DIR}/channels.json`;
 const API = 'https://discord.com/api/v10';
-const TIMEOUT_MS = 20 * 60_000;
-const LOCK_TTL_MS = TIMEOUT_MS + 90_000;         // a lock older than this MUST be dead → reclaim (self-heal)
+const TIMEOUT_MS = 60 * 60_000;                  // hard wall for a single run (big "fix everything" jobs need room; reply-to-continue resumes if it's still not enough)
+const LOCK_TTL_MS = TIMEOUT_MS + 90_000;         // a lock older than this MUST be dead → reclaim (self-heal). Derived, so it tracks TIMEOUT_MS automatically.
 const CHAN_RESUME_TTL_MS = 45 * 60_000;          // only resume a channel session this fresh
 
 const CHANNEL = process.env.CR_CHANNEL;
@@ -262,7 +262,7 @@ function cleanup() {
     const term = (reason) => {
       if (terminated) return; terminated = true;
       if (reason.stop) stoppedBy = reason.stop;
-      if (reason.timeout) { isErr = true; finalText = 'timed out after 20 minutes'; }
+      if (reason.timeout) { isErr = true; finalText = `timed out after ${Math.round(TIMEOUT_MS / 60_000)} minutes`; }
       try { child.kill('SIGKILL'); } catch { }
     };
     const killer = setTimeout(() => term({ timeout: true }), TIMEOUT_MS);
