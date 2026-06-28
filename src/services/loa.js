@@ -20,7 +20,7 @@ import { parseLoaIntent, aiAvailable } from '../serverAccess/ai.js';
 import {
   createLoaRequest, getLoa, getActiveLoaForUser, getPendingLoaForUser, getOpenLoaForUser,
   setLoaRequestMessage, approveLoaRow, scheduleLoaRow, activateLoaRow, declineLoaRow, endLoaRow,
-  getExpiredActiveLoas, getDueScheduledLoas, getBotConfig, setBotConfig,
+  getExpiredActiveLoas, getDueScheduledLoas, deleteLoaRow, getBotConfig, setBotConfig,
 } from '../utils/botDb.js';
 
 const LOA_ROLE_NAME = 'LOA';
@@ -335,24 +335,27 @@ export async function handleAiText(interaction, rawText) {
   }
 
   clearDraft(uid);
+  let createdId = null;
   try {
     const durationText = durLabelFromDays(parsed.duration_days);
     const channel = (await resolveLoaChannel(interaction.client)) || interaction.channel;
     const displayName = interaction.member?.displayName || interaction.user.username;
-    const id = createLoaRequest({ discordId: uid, displayName, reason: parsed.reason, durationText, startAt: parsed.start_at, channelId: channel?.id });
-    const loa = getLoa(id);
+    createdId = createLoaRequest({ discordId: uid, displayName, reason: parsed.reason, durationText, startAt: parsed.start_at, channelId: channel?.id });
+    const loa = getLoa(createdId);
 
     const payload = buildPendingEmbed(loa);
     const fsaRole = channel?.guild?.roles?.cache?.find(r => /^FSA\b/i.test(r.name) || /Federal Server Administration/i.test(r.name));
     const content = fsaRole ? `${fsaRole} — new LOA request` : undefined;
 
     const msg = await channel.send({ ...payload, content, allowedMentions: fsaRole ? { roles: [fsaRole.id] } : { parse: [] } });
-    setLoaRequestMessage(id, channel.id, msg.id);
+    setLoaRequestMessage(createdId, channel.id, msg.id);
     const summary = parsed.summary ? `\n\n> ${parsed.summary}` : '';
-    return interaction.editReply({ content: `${E.check} Your LOA request (#${id}) has been sent to ${channel} for FSA review.${summary}\n\nYou'll be DM'd when it's decided.`, components: [] });
+    return interaction.editReply({ content: `${E.check} Your LOA request (#${createdId}) has been sent to ${channel} for FSA review.${summary}\n\nYou'll be DM'd when it's decided.`, components: [] });
   } catch (e) {
     console.error('[LOA] post request error:', e.message);
-    return interaction.editReply({ content: `${E.cross} Something went wrong filing your request — ping an admin. (${String(e.message).slice(0, 100)})`, components: [] });
+    // Roll back the half-created request so it doesn't orphan + block re-requests.
+    if (createdId) { try { deleteLoaRow(createdId); } catch {} }
+    return interaction.editReply({ content: `${E.cross} Something went wrong filing your request — give it another go, or ping an admin. (${String(e.message).slice(0, 100)})`, components: [] });
   }
 }
 

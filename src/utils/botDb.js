@@ -1424,6 +1424,11 @@ export function endLoaRow(id, endReason) {
 export function getExpiredActiveLoas(nowIso) {
   return db.prepare("SELECT * FROM loa_requests WHERE status = 'active' AND ends_at IS NOT NULL AND ends_at <= ?").all(nowIso);
 }
+// Roll back a just-created request that never made it to #loa (post failed),
+// so it doesn't orphan as a blocking 'pending' with no embed to action.
+export function deleteLoaRow(id) {
+  db.prepare("DELETE FROM loa_requests WHERE id = ? AND status = 'pending' AND request_message_id IS NULL").run(id);
+}
 export function getDueScheduledLoas(nowIso) {
   return db.prepare("SELECT * FROM loa_requests WHERE status = 'scheduled' AND start_at IS NOT NULL AND start_at <= ?").all(nowIso);
 }
