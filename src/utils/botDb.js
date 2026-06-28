@@ -1330,6 +1330,80 @@ export function deleteStoredRoles(id) {
   db.prepare('DELETE FROM stored_roles WHERE id = ?').run(id);
 }
 
+// ── Generic bot config (key/value) ───────────────────────────────────────────
+// Small persisted settings that aren't per-guild (e.g. the resolved #loa
+// channel id + panel message id). Reuses the existing bot_config table.
+export function getBotConfig(key) {
+  const row = db.prepare('SELECT value FROM bot_config WHERE key = ?').get(String(key));
+  return row ? row.value : null;
+}
+export function setBotConfig(key, value) {
+  db.prepare(`INSERT INTO bot_config (key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(String(key), value == null ? null : String(value));
+}
+
+// ── Leave of Absence (LOA) ───────────────────────────────────────────────────
+// Self-service staff LOA: request → FSA approve/decline → LOA role + "Name | LOA"
+// nickname across every server → ends on cancel (owner/FSA) or duration expiry.
+// status: pending | active | declined | cancelled | ended
+db.exec(`CREATE TABLE IF NOT EXISTS loa_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  discord_id TEXT NOT NULL,
+  display_name TEXT,
+  reason TEXT NOT NULL,
+  duration_text TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  decided_at DATETIME,
+  decided_by TEXT,
+  started_at DATETIME,
+  ends_at DATETIME,
+  ended_at DATETIME,
+  end_reason TEXT,
+  channel_id TEXT,
+  request_message_id TEXT,
+  nick_snapshot TEXT,
+  loa_nick TEXT
+)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_loa_status ON loa_requests(status)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_loa_user ON loa_requests(discord_id, status)`);
+
+export function createLoaRequest({ discordId, displayName, reason, durationText, channelId }) {
+  return db.prepare(`INSERT INTO loa_requests (discord_id, display_name, reason, duration_text, channel_id, status)
+    VALUES (?, ?, ?, ?, ?, 'pending')`).run(
+    String(discordId), displayName || null, reason, durationText || null, channelId || null
+  ).lastInsertRowid;
+}
+export function getLoa(id) {
+  return db.prepare('SELECT * FROM loa_requests WHERE id = ?').get(id);
+}
+export function getActiveLoaForUser(discordId) {
+  return db.prepare("SELECT * FROM loa_requests WHERE discord_id = ? AND status = 'active'").get(String(discordId));
+}
+export function getPendingLoaForUser(discordId) {
+  return db.prepare("SELECT * FROM loa_requests WHERE discord_id = ? AND status = 'pending'").get(String(discordId));
+}
+export function setLoaRequestMessage(id, channelId, messageId) {
+  db.prepare('UPDATE loa_requests SET channel_id = ?, request_message_id = ? WHERE id = ?').run(channelId || null, messageId || null, id);
+}
+export function approveLoaRow(id, { decidedBy, endsAt, nickSnapshot, loaNick }) {
+  db.prepare(`UPDATE loa_requests
+    SET status = 'active', decided_at = CURRENT_TIMESTAMP, decided_by = ?, started_at = CURRENT_TIMESTAMP,
+        ends_at = ?, nick_snapshot = ?, loa_nick = ?
+    WHERE id = ?`).run(String(decidedBy), endsAt || null, nickSnapshot ? JSON.stringify(nickSnapshot) : null, loaNick || null, id);
+}
+export function declineLoaRow(id, decidedBy) {
+  db.prepare(`UPDATE loa_requests SET status = 'declined', decided_at = CURRENT_TIMESTAMP, decided_by = ? WHERE id = ?`)
+    .run(String(decidedBy), id);
+}
+export function endLoaRow(id, endReason) {
+  db.prepare(`UPDATE loa_requests SET status = 'ended', ended_at = CURRENT_TIMESTAMP, end_reason = ? WHERE id = ?`)
+    .run(endReason || 'ended', id);
+}
+export function getExpiredActiveLoas(nowIso) {
+  return db.prepare("SELECT * FROM loa_requests WHERE status = 'active' AND ends_at IS NOT NULL AND ends_at <= ?").all(nowIso);
+}
+
 // ── Acting Assignments ───────────────────────────────────────────────────────
 
 export function createActingAssignment({ leaveRequestId, onLeaveDiscordId, onLeaveUserId, actingDiscordId, position, rolesApplied, originalRoles, originalNickname, assignedBy }) {

@@ -86,6 +86,9 @@ import { emitToLogsBot } from './services/logsBotClient.js';
 import { networkVerifyApi } from './utils/aspireInternal.js';
 import * as panicBotCmd from './commands/panic-bot.js';
 import * as panelCmd from './commands/panel.js';
+import * as loaCmd from './commands/loa.js';
+import * as loaPanelCmd from './commands/loaPanel.js';
+import * as loaService from './services/loa.js';
 import * as coPanel from './interactions/coPanel.js';
 import * as officeSetup from './commands/officeSetup.js';
 import * as counting from './commands/counting.js';
@@ -182,7 +185,7 @@ const welcomeTracker     = new Map(); // discord_id → count this week
 const ATLAS_DISCORD_USER_ID = '1465559216172568812';
 const ATLAS_GATE_NOTICE_COOLDOWN_MS = 5 * 60_000; // 5m per user
 const atlasGateNoticeCooldown = new Map(); // discord_id → last notice ms
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, info, unban, verify, unverify, networkVerify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, ban, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm, serverHealth, syncRoles, accessCmd, whois, leaderboard, myroles, roleInfo, serverinfo, channelInfo, syncAllRoles, findUser, auditLog, botPerms, feedback, embedCmd, whoIsHere, quote, snippet, ping, staffOnline, timezone, randomPick, standup, thanks, kudosLeaderboard, todoCmd, reminders, myKudos, links, breakCmd, idea, panicBotCmd, logsCmd, emergencyCmd, panelCmd];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, info, unban, verify, unverify, networkVerify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, ban, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm, serverHealth, syncRoles, accessCmd, whois, leaderboard, myroles, roleInfo, serverinfo, channelInfo, syncAllRoles, findUser, auditLog, botPerms, feedback, embedCmd, whoIsHere, quote, snippet, ping, staffOnline, timezone, randomPick, standup, thanks, kudosLeaderboard, todoCmd, reminders, myKudos, links, breakCmd, idea, panicBotCmd, logsCmd, emergencyCmd, panelCmd, loaCmd, loaPanelCmd];
 // The CO Staff Network is suspended, so its CO-specific commands are HIDDEN —
 // the command files are kept, they're just not registered with Discord or routed.
 // Moderation, tickets, office, network-verify and general utility stay live.
@@ -431,6 +434,8 @@ client.once('clientReady', async () => {
       if (expiredSuspensions.length > 0 || expiredBans.length > 0) {
         console.log('[C-05 safety net] Processed', expiredSuspensions.length, 'suspensions and', expiredBans.length, 'bans');
       }
+      // End any LOAs whose duration has elapsed.
+      try { await loaService.sweepExpiredLOAs(client); } catch (e) { console.error('[loa sweep]', e.message); }
       // Also sweep temp_bans (serverban.js) — catches any whose remaining time
       // exceeded MAX_TIMEOUT_MS at boot (armTempBanTimer skips those) and also
       // re-arms timers for bans that have now come within the safe setTimeout
@@ -449,6 +454,9 @@ client.once('clientReady', async () => {
   // Startup sweep for serverban temp_bans — re-arms in-process timers for all
   // pending temp bans and immediately fires any whose unban_at is already past.
   await serverban.init(client);
+
+  // LOA — post the standing "How to request an LOA" panel into #loa (idempotent).
+  try { await loaService.ensurePanel(client); } catch (e) { console.error('[loa panel init]', e.message); }
 
   await setupEmailNotificationChannels(client);
 
@@ -1993,11 +2001,14 @@ client.on('interactionCreate', async interaction => {
     // USGRP Network Administration exempt). /verify is allowed in the verification
     // channel too. Buttons / select menus / modals are NOT gated — only commands.
     const isVerifyInVerificationChannel = interaction.commandName === 'verify' && interaction.channelId === VERIFICATION_CHANNEL_ID;
+    // /loa is self-service from the #loa channel — exempt from the bot-commands gate.
+    const isLoaCommand = interaction.commandName === 'loa';
     const requiredCmdChannel = COMMAND_CHANNELS[interaction.guildId];
     const hasNetAdmin = !!interaction.member?.roles?.cache?.has?.(NETADMIN_ROLE_ID);
     if (requiredCmdChannel && interaction.channelId !== requiredCmdChannel
         && !COMMAND_SUPERUSERS.includes(interaction.user.id)
         && !isVerifyInVerificationChannel
+        && !isLoaCommand
         && !hasNetAdmin) {
       // 2nd+ wrong-channel attempt → CO Utilities DMs a warning (rate-limited).
       const uid = interaction.user.id;
@@ -2136,6 +2147,8 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId?.startsWith('copanel:')) { try { if (await coPanel.handleButton(interaction)) return; } catch (e) { console.error('[coPanel button]', e.message); } return; }
     // USGRP network server-access buttons (invite confirm, reason, terminate, extend)
     if (interaction.customId?.startsWith('acc:')) { try { if (await accessEvents.handleButton(interaction)) return; } catch (e) { console.error('[access button]', e.message); } return; }
+    // LOA — request / approve / decline / cancel
+    if (interaction.customId?.startsWith('loa:')) { try { if (await loaService.handleButton(interaction)) return; } catch (e) { console.error('[loa button]', e.message); } return; }
     // Claude bridge: Stop the running detached session (founders only).
     // Writes the STOP file the runner polls — works regardless of which
     // bot spawned the run, and survives bot restarts like the runner does.
@@ -2629,6 +2642,8 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId?.startsWith('copanel:')) { try { if (await coPanel.handleModal(interaction)) return; } catch (e) { console.error('[coPanel modal]', e.message); } return; }
     // USGRP network access — menu/reason/terminate modals
     if (interaction.customId?.startsWith('acc:')) { try { if (await accessEvents.handleModal(interaction)) return; } catch (e) { console.error('[access modal]', e.message); } return; }
+    // LOA request form
+    if (interaction.customId === 'loa_modal') { try { await loaService.handleModalSubmit(interaction); } catch (e) { console.error('[loa modal]', e.message); } return; }
     // Network Staff role-offer decline → notify Dion + Evan, with optional reason.
     if (interaction.customId === 'roleoffer_decline_modal') {
       let reason = '';
