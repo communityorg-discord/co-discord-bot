@@ -388,6 +388,7 @@ async function handleApprove(interaction, id) {
   if (!await isFSA(interaction.user.id)) return interaction.reply({ content: `${E.cross} Only a member of the **FSA** can approve LOAs.`, ephemeral: true });
   const loa = getLoa(id);
   if (!loa || loa.status !== 'pending') return interaction.reply({ content: `${E.cross} This request isn't pending anymore.`, ephemeral: true });
+  if (String(interaction.user.id) === String(loa.discord_id)) return interaction.reply({ content: `${E.cross} You can't approve your own LOA — another member of the FSA needs to review it.`, ephemeral: true });
   await interaction.deferUpdate();
 
   const durMs = await durationToMs(loa.duration_text);
