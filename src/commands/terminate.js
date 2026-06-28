@@ -19,11 +19,24 @@ import { BRAND } from '../utils/brand.js';
 export const data = new SlashCommandBuilder()
   .setName('terminate')
   .setDescription('Terminate a staff member — strip roles, remove from servers + the hierarchy')
-  .addUserOption(opt => opt.setName('user').setDescription('Staff member to terminate').setRequired(true))
-  .addStringOption(opt => opt.setName('reason').setDescription('Reason for termination').setRequired(true));
+  // reason is required, so it must come before the optional user/userid options.
+  .addStringOption(opt => opt.setName('reason').setDescription('Reason for termination').setRequired(true))
+  .addUserOption(opt => opt.setName('user').setDescription('Staff member (if still in a server)').setRequired(false))
+  .addStringOption(opt => opt.setName('userid').setDescription('Their Discord ID — use if they have left the server').setRequired(false));
 
 export async function execute(interaction) {
   return IS_USGRP ? executeNetwork(interaction) : executeCO(interaction);
+}
+
+// Resolve the target from either the user picker or a raw ID (for people who
+// have already left every server). Returns { id, user } (user may be null).
+async function resolveTarget(interaction) {
+  const picked = interaction.options.getUser('user');
+  if (picked) return { id: picked.id, user: picked };
+  const raw = (interaction.options.getString('userid') || '').replace(/[^0-9]/g, '');
+  if (!raw) return { id: null, user: null };
+  const user = await interaction.client.users.fetch(raw).catch(() => null);
+  return { id: raw, user };
 }
 
 // ── USGRP: full network termination ──────────────────────────────────────────
@@ -31,32 +44,37 @@ async function executeNetwork(interaction) {
   if (!await isFSA(interaction.user.id)) {
     return interaction.reply({ content: `${E.cross} Only a member of the **FSA** can terminate network staff.`, ephemeral: true });
   }
-  const target = interaction.options.getUser('user');
+  const { id: targetId, user: targetUser } = await resolveTarget(interaction);
   const reason = interaction.options.getString('reason');
-  if (requiresSuperuserWarning(target.id)) {
-    return interaction.reply({ content: `${E.cross} <@${target.id}> is a Superuser and cannot be terminated.`, ephemeral: true });
+  if (!targetId) {
+    return interaction.reply({ content: `${E.cross} Give me who to terminate — pick a **user**, or paste their **userid** if they've already left the server.`, ephemeral: true });
+  }
+  if (requiresSuperuserWarning(targetId)) {
+    return interaction.reply({ content: `${E.cross} <@${targetId}> is a Superuser and cannot be terminated.`, ephemeral: true });
   }
 
   await interaction.deferReply();
 
-  // DM the member first (before we strip everything).
-  try {
-    await target.send({ embeds: [new EmbedBuilder()
-      .setColor(0xB91C1C)
-      .setTitle('Removed from the network')
-      .setDescription(`${E.terminate} You have been removed from the ${BRAND.name} network staff team.`)
-      .addFields(
-        { name: 'Reason', value: String(reason).slice(0, 1024) },
-        { name: 'Effective', value: `<t:${Math.floor(Date.now() / 1000)}:F>` },
-      )
-      .setFooter({ text: BRAND.footer })
-      .setTimestamp()
-    ] });
-  } catch {}
+  // DM the member first (before we strip everything) — only if reachable.
+  if (targetUser) {
+    try {
+      await targetUser.send({ embeds: [new EmbedBuilder()
+        .setColor(0xB91C1C)
+        .setTitle('Removed from the network')
+        .setDescription(`${E.terminate} You have been removed from the ${BRAND.name} network staff team.`)
+        .addFields(
+          { name: 'Reason', value: String(reason).slice(0, 1024) },
+          { name: 'Effective', value: `<t:${Math.floor(Date.now() / 1000)}:F>` },
+        )
+        .setFooter({ text: BRAND.footer })
+        .setTimestamp()
+      ] });
+    } catch {}
+  }
 
   const { doTermination } = await import('../serverAccess/actions.js');
   const r = await doTermination(interaction.client, {
-    userId: target.id, byId: interaction.user.id, byName: interaction.user.username, reason,
+    userId: targetId, byId: interaction.user.id, byName: interaction.user.username, reason,
   });
 
   // Refresh the #structure org-chart messages (the verified-list removal already
@@ -71,7 +89,7 @@ async function executeNetwork(interaction) {
   })();
 
   const lines = [
-    `${E.terminate} **<@${target.id}> has been terminated from the network.**`,
+    `${E.terminate} **<@${targetId}> (\`${targetId}\`) has been terminated from the network.**`,
     `${E.server} Kicked from **${r.kicked.length}** server(s)${r.kickFailed.length ? ` — couldn't kick from: ${r.kickFailed.join(', ')}` : ''}.`,
     `${E.role} Roles stripped in **${r.stripped.length}** server(s).`,
     `${r.unverified ? E.check : E.warning} ${r.unverified ? 'Removed from the network verified list + hierarchy.' : 'Could not remove from the verified list — check manually.'}`,
@@ -91,39 +109,45 @@ async function executeCO(interaction) {
   const perm = await canUseCommand('terminate', interaction);
   if (!perm.allowed) return interaction.reply({ content: `${E.cross} ${perm.reason}`, ephemeral: true });
 
-  const target = interaction.options.getUser('user');
+  const { id: targetId, user: targetUser } = await resolveTarget(interaction);
   const reason = interaction.options.getString('reason');
-
-  if (requiresSuperuserWarning(target.id)) {
-    return interaction.reply({ content: `${E.cross} <@${target.id}> is a Superuser and cannot be terminated.`, ephemeral: true });
+  if (!targetId) {
+    return interaction.reply({ content: `${E.cross} Give me who to terminate — pick a **user**, or paste their **userid** if they've left.`, ephemeral: true });
   }
 
-  const portalUser = getUserByDiscordId(target.id);
+  if (requiresSuperuserWarning(targetId)) {
+    return interaction.reply({ content: `${E.cross} <@${targetId}> is a Superuser and cannot be terminated.`, ephemeral: true });
+  }
+
+  const portalUser = getUserByDiscordId(targetId);
+  const displayName = portalUser?.display_name || targetUser?.username || targetId;
   await interaction.deferReply();
 
-  try {
-    await target.send({
-      embeds: [new EmbedBuilder()
-        .setTitle('Employment Terminated')
-        .setColor(0xEF4444)
-        .setDescription(`${E.terminate} Your employment with ${BRAND.name} has been terminated.`)
-        .addFields(
-          { name: 'Reason', value: reason },
-          { name: 'Effective', value: `<t:${Math.floor(Date.now() / 1000)}:F>` }
-        )
-        .setFooter({ text: BRAND.name })
-        .setTimestamp()
-      ]
-    });
-  } catch {}
+  if (targetUser) {
+    try {
+      await targetUser.send({
+        embeds: [new EmbedBuilder()
+          .setTitle('Employment Terminated')
+          .setColor(0xEF4444)
+          .setDescription(`${E.terminate} Your employment with ${BRAND.name} has been terminated.`)
+          .addFields(
+            { name: 'Reason', value: reason },
+            { name: 'Effective', value: `<t:${Math.floor(Date.now() / 1000)}:F>` }
+          )
+          .setFooter({ text: BRAND.name })
+          .setTimestamp()
+        ]
+      });
+    } catch {}
+  }
 
-  await terminateAcrossGuilds(interaction.client, target.id, botDb);
-  const inf = addInfraction(target.id, 'termination', reason, interaction.user.id, interaction.user.username, null, 0);
+  await terminateAcrossGuilds(interaction.client, targetId, botDb);
+  const inf = addInfraction(targetId, 'termination', reason, interaction.user.id, interaction.user.username, null, 0);
 
   await logAction(interaction.client, {
     action: 'Staff Terminated',
     moderator: { discordId: interaction.user.id, name: interaction.user.username },
-    target: { discordId: target.id, name: portalUser?.display_name || target.username },
+    target: { discordId: targetId, name: displayName },
     reason, color: 0x7F1D1D,
     specificChannelId: TERMINATE_LOG_CHANNEL_ID,
     guildId: interaction.guildId,
@@ -133,7 +157,7 @@ async function executeCO(interaction) {
   await interaction.editReply({ embeds: [new EmbedBuilder()
     .setTitle('Staff Terminated')
     .setColor(0x7F1D1D)
-    .setDescription(`${E.terminate} **${portalUser?.display_name || target.username}** has been terminated.`)
+    .setDescription(`${E.terminate} **${displayName}** has been terminated.`)
     .addFields(
       { name: 'Reason', value: reason, inline: false },
       { name: 'Moderator', value: interaction.user.username, inline: true },
