@@ -1,4 +1,4 @@
-// COMMAND_PERMISSION_FALLBACK: everyone
+// COMMAND_PERMISSION_FALLBACK: fsa
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { logAction } from '../utils/logger.js';
 import { setLogChannel, getLogChannel, getAllLogConfig, getGlobalLogChannel, setGlobalLogChannel } from '../utils/botDb.js';

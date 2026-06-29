@@ -12,7 +12,11 @@
 // Fallback kinds supported:
 //   superuser_only           — only SUPERUSER_IDS
 //   everyone                 — anyone in any guild the bot is in
-//   auth_level >= N          — portal-linked users with auth_level >= N
+//   fsa                      — the FSA division (any rank) + founders (USGRP;
+//                              resolved from the netadmin record)
+//   auth_level >= N          — on USGRP, netadmin RANK power >= N
+//                              (3 all-staff · 4 mods · 5 senior-mods · 7 admins);
+//                              on CO, portal-linked users with auth_level >= N
 //   role:<discord role name> — members with a role of that exact name
 //                              in their current guild
 //   role_id:<id>             — members with that role id (any guild)
@@ -22,7 +26,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SUPERUSER_IDS, IS_USGRP } from '../config.js';
 import { getUserByDiscordId } from '../db.js';
-import { usgrpHasRank } from './usgrpAuthority.js';
+import { usgrpHasRank, isFSA } from './usgrpAuthority.js';
 import { commandHasAnyRows, commandPermitsUser } from './botDb.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -132,6 +136,10 @@ async function applyFallback(commandKey, interaction, discordId) {
   const f = fallback.toLowerCase().trim();
   if (f === 'superuser_only') return false; // already short-circuited above
   if (f === 'everyone' || f === 'public') return true;
+  // FSA tier — the whole Federal Server Administration division (any FSA rank)
+  // plus founders. Resolved from the netadmin record (works on every server),
+  // not a Discord role. On CO mode this gate denies (no FSA concept there).
+  if (f === 'fsa') return IS_USGRP ? await isFSA(discordId) : false;
   const lvlMatch = f.match(/^auth_level\s*>=\s*(\d+)$/);
   if (lvlMatch) {
     const n = Number(lvlMatch[1]);

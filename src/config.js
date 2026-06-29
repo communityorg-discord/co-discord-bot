@@ -27,6 +27,26 @@ export const ACTIVE_NETWORK = (process.env.ACTIVE_NETWORK || 'usgrp').toLowerCas
 export const IS_USGRP = ACTIVE_NETWORK !== 'co';
 export const IS_CO = ACTIVE_NETWORK === 'co';
 
+// CO-only commands — hidden from the USGRP surface (slash registration, the
+// /panel hub, and the permissions doc all read this) but kept in code so
+// ACTIVE_NETWORK=co restores the full CO toolkit. Single source of truth.
+// Covers the original CO HR/activity surface PLUS the CO staff utilities (email,
+// transcripts/voice, counting, reminders, polls, snippets, etc.) that aren't
+// part of the USGRP network/moderation surface.
+export const CO_ONLY_COMMANDS = [
+  // HR / activity / CO verify / cases / leave
+  'dm', 'dm-exempt', 'brag', 'leave', 'staff', 'cases', 'case', 'caseopen', 'aps', 'helpdesk',
+  'nid', 'suspend', 'unsuspend', 'investigate', 'infractions',
+  'verify', 'unverify', 'authorisation-override', 'inbox', 'assign', 'acting',
+  'onboard', 'eliminate', 'stats', 'sync-roles', 'sync-all-roles', 'whois',
+  'find-user', 'leaderboard', 'myroles', 'staff-online', 'standup', 'thanks',
+  'kudos-leaderboard', 'my-kudos', 'links',
+  // CO staff utilities — not part of the USGRP network/moderation surface
+  'compose', 'setup-email', 'inbox-reply', 'scribe', 'record', 'counting',
+  'schedule-dm', 'poll', 'feedback', 'idea', 'snippet', 'todo', 'remind',
+  'reminders', 'quote', 'break', 'random-pick', 'timezone', 'embed',
+];
+
 export const STAFF_HQ_ID = process.env.STAFF_HQ_ID;
 export const NETWORK_SERVER_IDS = (process.env.NETWORK_SERVER_IDS || '').split(',').filter(Boolean);
 export const ALL_SERVER_IDS = [

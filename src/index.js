@@ -4,7 +4,7 @@ import multer from 'multer';
 import { Client, GatewayIntentBits, Collection, REST, Routes, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Partials, AuditLogEvent } from 'discord.js';
 import { E } from './lib/emoji.js';
 import { config } from 'dotenv';
-import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID, IS_USGRP, ACTIVE_NETWORK } from './config.js';
+import { COMMAND_LOG_CHANNEL_ID, MESSAGE_DELETE_LOG_CHANNEL_ID, MESSAGE_EDIT_LOG_CHANNEL_ID, FULL_MESSAGE_LOGS_CHANNEL_ID, IS_USGRP, ACTIVE_NETWORK, CO_ONLY_COMMANDS } from './config.js';
 import { getLogChannel, getGlobalLogChannel, getLogChannelsForEvent, logAtlasBotAction, logMessageEvent, isDmRelay, getActiveUltimatums, getUltimatum, setUltimatumStatus, setUltimatumNextReminder } from './utils/botDb.js';
 import { sendToWatchedUsers, logEvent } from './utils/logger.js';
 import { getUserByDiscordId } from './db.js';
@@ -189,16 +189,9 @@ const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLo
 // The CO Staff Network is suspended, so its CO-specific commands are HIDDEN —
 // the command files are kept, they're just not registered with Discord or routed.
 // Moderation, tickets, office, network-verify and general utility stay live.
-// CO-only commands (HR / activity / CO verify / leave / cases). Hidden when the
-// bot runs as USGRP; restored automatically in CO mode (ACTIVE_NETWORK=co).
-const CO_ONLY_COMMANDS = [
-  'dm', 'dm-exempt', 'brag', 'leave', 'staff', 'cases', 'case', 'caseopen', 'aps', 'helpdesk',
-  'nid', 'suspend', 'unsuspend', 'investigate', 'infractions',
-  'verify', 'unverify', 'authorisation-override', 'inbox', 'assign', 'acting',
-  'onboard', 'eliminate', 'stats', 'sync-roles', 'sync-all-roles', 'whois',
-  'find-user', 'leaderboard', 'myroles', 'staff-online', 'standup', 'thanks',
-  'kudos-leaderboard', 'my-kudos', 'links',
-];
+// CO-only commands are now defined once in config.js (CO_ONLY_COMMANDS) so the
+// slash registration, the /panel hub and the permissions doc all agree. Hidden
+// when the bot runs as USGRP; restored automatically in CO mode.
 const HIDDEN_COMMANDS = new Set(IS_USGRP ? CO_ONLY_COMMANDS : []);
 // Less-used commands pulled OUT of the slash-command picker and reached via the
 // /panel hub instead (gov-bot style). Their modules stay loaded and their

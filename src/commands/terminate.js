@@ -1,4 +1,4 @@
-// COMMAND_PERMISSION_FALLBACK: auth_level >= 7
+// COMMAND_PERMISSION_FALLBACK: fsa
 // Network-aware termination.
 //   USGRP  → full network removal (FSA-gated): kick from every network server,
 //            strip verified roles in the main server, remove from the network

@@ -1,4 +1,4 @@
-// COMMAND_PERMISSION_FALLBACK: auth_level >= 6
+// COMMAND_PERMISSION_FALLBACK: fsa
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { logAction } from '../utils/logger.js';

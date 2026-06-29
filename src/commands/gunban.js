@@ -1,4 +1,4 @@
-// COMMAND_PERMISSION_FALLBACK: superuser_only
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 7
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { ALL_SERVER_IDS, APPEALS_SERVER_ID } from '../config.js';

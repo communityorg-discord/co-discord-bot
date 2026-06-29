@@ -13,6 +13,7 @@ import {
   ModalBuilder, TextInputBuilder, TextInputStyle,
 } from 'discord.js';
 import { BRAND } from '../utils/brand.js';
+import { IS_USGRP, CO_ONLY_COMMANDS } from '../config.js';
 
 const COLOR = 0x5865F2;
 
@@ -29,6 +30,12 @@ const SECTIONS = [
   ['system',   { label: 'Voice & System', emoji: '🎙️', blurb: 'Voice recording/office and emergency controls.',
     commands: ['record', 'office', 'emergency', 'panic-bot'] }],
 ];
+// Under USGRP, drop CO-only commands from each section and remove any section
+// that ends up empty — so the panel only ever offers the USGRP surface.
+const HIDDEN = new Set(IS_USGRP ? CO_ONLY_COMMANDS : []);
+for (const [, sec] of SECTIONS) sec.commands = sec.commands.filter(c => !HIDDEN.has(c));
+const VISIBLE_SECTIONS = SECTIONS.filter(([, sec]) => sec.commands.length > 0);
+SECTIONS.length = 0; SECTIONS.push(...VISIBLE_SECTIONS);
 const SECTION_MAP = new Map(SECTIONS);
 
 // Nicer button labels than the raw command name where it helps.
