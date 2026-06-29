@@ -283,6 +283,28 @@ export async function handleButton(interaction) {
       .setFooter({ text: 'USGRP · Network Verification' }).setTimestamp();
     const targetUser = await interaction.client.users.fetch(targetId).catch(() => null);
     if (targetUser) await targetUser.send({ embeds: [dm] }).catch(() => {});
+
+    // Provision their USGRP email account + DM the login details.
+    try {
+      const { createMailbox } = await import('../utils/usgrpMail.js');
+      const mb = await createMailbox(targetId, r.nickname || targetUser?.globalName || targetUser?.username);
+      if (targetUser && mb?.address) {
+        const mailDm = new EmbedBuilder().setColor(0x2563EB)
+          .setTitle('Your USGRP email account')
+          .setDescription([
+            `You've been given a USGRP network email address.`,
+            ``,
+            `**Email:** \`${mb.address}\``,
+            `**Password:** ||${mb.password}||  _(change it after first login)_`,
+            ``,
+            `Read it in the browser at **${mb.webmail}**, or add it to any mail app:`,
+            `• **IMAP** \`${mb.imap.host}\` port \`${mb.imap.port}\` (${mb.imap.security})`,
+            `• **SMTP** \`${mb.smtp.host}\` port \`${mb.smtp.port}\` (${mb.smtp.security})`,
+          ].join('\n'))
+          .setFooter({ text: 'USGRP · Network Email' }).setTimestamp();
+        await targetUser.send({ embeds: [mailDm] }).catch(() => {});
+      }
+    } catch (e) { console.error('[netverify] mail provision failed:', e?.message); }
   }
   // A long apply (≈19 guilds) can make the interaction webhook flaky by the time
   // it returns — fall back to a direct message edit (works now the card isn't

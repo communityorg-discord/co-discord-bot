@@ -77,6 +77,16 @@ async function executeNetwork(interaction) {
     userId: targetId, byId: interaction.user.id, byName: interaction.user.username, reason,
   });
 
+  // Disable their USGRP email account (keeps the mailbox; blocks login).
+  let mailDisabled = false;
+  try {
+    const { disableMailbox } = await import('../utils/usgrpMail.js');
+    const dr = await disableMailbox(targetId);
+    mailDisabled = !!dr?.ok;
+  } catch (e) {
+    if (e?.message !== 'no_account_for_user') console.error('[terminate] mail disable failed:', e?.message);
+  }
+
   // Refresh the #structure org-chart messages (the verified-list removal already
   // vacated their seat in structure.json via the verify engine). Background.
   (async () => {
@@ -93,6 +103,7 @@ async function executeNetwork(interaction) {
     `${E.server} Kicked from **${r.kicked.length}** server(s)${r.kickFailed.length ? ` — couldn't kick from: ${r.kickFailed.join(', ')}` : ''}.`,
     `${E.role} Roles stripped in **${r.stripped.length}** server(s).`,
     `${r.unverified ? E.check : E.warning} ${r.unverified ? 'Removed from the network verified list + hierarchy.' : 'Could not remove from the verified list — check manually.'}`,
+    `${mailDisabled ? E.check : E.warning} ${mailDisabled ? 'USGRP email account disabled.' : 'No USGRP email account to disable (or disable failed).'}`,
   ];
   await interaction.editReply({ embeds: [new EmbedBuilder()
     .setColor(0x7F1D1D)
