@@ -18,6 +18,10 @@ const ROLE_NAME = 'Authorisation Level 99';
 const ALERT_USER_IDS = ['723199054514749450', '415922272956710912']; // Dion, Evan
 const SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 const USGRP_RE = /USGRP|United States Government Roleplay/i;
+// De-spam: a guild where the grant can't succeed (e.g. the role sits above the
+// bot in the hierarchy) would log the same warning every sweep. Log it ONCE per
+// guild+reason; cleared on a successful grant so a fix re-arms the log.
+const _warnedGrant = new Set();
 
 async function dmAlert(client, body) {
   const embed = new EmbedBuilder().setColor(0xF59E0B).setTitle('Admin auto-grant')
@@ -43,9 +47,14 @@ async function grant(guild, member) {
     const me = guild.members.me;
     if (!me?.permissions?.has('ManageRoles')) return 'cant';
     await member.roles.add(role, 'Admin auto-grant watcher');
+    _warnedGrant.delete(`${guild.id}:error`); // recovered → re-arm
     return 'granted';
   } catch (e) {
-    console.warn(`[adminAutoGrant] grant failed in ${guild.name}: ${e.message}`);
+    const k = `${guild.id}:error`;
+    if (!_warnedGrant.has(k)) {
+      console.warn(`[adminAutoGrant] grant failed in ${guild.name}: ${e.message} (suppressing repeats — usually means the bot's role is below "${ROLE_NAME}")`);
+      _warnedGrant.add(k);
+    }
     return 'error';
   }
 }
@@ -59,7 +68,10 @@ async function sweep(client, label) {
       if (!member) continue;
       const r = await grant(guild, member);
       if (r === 'granted') granted.push(`${guild.name} → <@${uid}>`);
-      else if (r === 'cant' || r === 'no-role') console.warn(`[adminAutoGrant] ${r} for ${uid} in ${guild.name}`);
+      else if (r === 'cant' || r === 'no-role') {
+        const k = `${guild.id}:${r}`;
+        if (!_warnedGrant.has(k)) { console.warn(`[adminAutoGrant] ${r} for ${uid} in ${guild.name} (suppressing repeats)`); _warnedGrant.add(k); }
+      }
     }
   }
   if (granted.length) {
