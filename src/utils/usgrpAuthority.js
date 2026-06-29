@@ -52,7 +52,11 @@ export function powerFromRecord(rec) {
     else if (has(/Senior Admin(istrator)?/i)) lvl = 8;
     else if (has(/Junior Admin(istrator)?/i)) lvl = 6;
     else if (has(/Deputy Admin/i)) lvl = 6;
-    else if (has(/Admin(istrator)?/i)) lvl = 7;            // Administrator / DSA Admin / SSA Admin
+    // DSA/SSA division admins sit BELOW the FSA Administrator (federal admin):
+    // "Admin+" (>=7) commands — gunban, ticket panels, server-health — are the
+    // federal server's, not the department/state divisions'. (6 = deputy tier.)
+    else if (/\b(DSA|SSA)\b/i.test(p) && /Admin/i.test(p)) lvl = 6;
+    else if (has(/Admin(istrator)?/i)) lvl = 7;            // FSA Administrator only
     else if (has(/Deputy Head Moderator/i)) lvl = 6;
     else if (has(/Head Moderator/i)) lvl = 7;
     else if (has(/Senior Moderator/i)) lvl = 5;

@@ -11,7 +11,7 @@ import { BRAND } from '../utils/brand.js';
 
 export const data = new SlashCommandBuilder()
   .setName('gunban')
-  .setDescription('Remove a global ban — Superuser only')
+  .setDescription('Remove a global ban (Administrators and above)')
   .addStringOption(opt => opt.setName('userid').setDescription('Discord User ID').setRequired(true))
   .addStringOption(opt => opt.setName('reason').setDescription('Reason for unbanning').setRequired(true));
 
