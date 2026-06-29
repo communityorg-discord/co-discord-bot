@@ -366,5 +366,5 @@ async function resolveApprove(interaction, client, requestId, officeChannelId) {
   await logAction(client, { action: 'Office Request Approved', moderator: { discordId: interaction.user.id, name: interaction.user.tag }, target: { discordId: req.requester_id, name: req.requester_tag }, reason: `Brought into ${office.channel_name}`, color: 0x22C55E, logType: 'moderation.office', guildId: guild.id }).catch(() => {});
 }
 
-// periodic key expiry sweep
-setInterval(() => { try { db.prepare('DELETE FROM office_keys WHERE expires_at <= ?').run(Date.now()); } catch {} }, 60_000);
+// periodic key expiry sweep — gated by the CO crons kill-switch
+if (process.env.CO_CRONS_DISABLED === '0') setInterval(() => { try { db.prepare('DELETE FROM office_keys WHERE expires_at <= ?').run(Date.now()); } catch {} }, 60_000);

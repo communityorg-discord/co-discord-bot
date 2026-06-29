@@ -142,6 +142,20 @@ if (!process.env.BOT_WEBHOOK_SECRET) {
   process.exit(1);
 }
 
+// ── CO automation kill-switch (founder directive: stop ALL CO crons) ──────────
+// EVERY scheduled background job in this bot is off by default now: activity-point
+// syncs, daily/weekly activity + bonuses + awards, grade DMs, brag reminders,
+// staff-cache refresh, all leaderboards, automod sweeps, suspension-expiry,
+// office-key cleanup, status rotation, the hayden/admin-auto-grant sweeps and the
+// server-access crons. Shadowing setInterval kills every interval-based cron in
+// this module in one place; scheduleAtTime() and the external cron starters are
+// gated below; webhookServer.js + officeManager.js check the same env var.
+// To bring CO automation back, set CO_CRONS_DISABLED=0 and restart.
+const CO_CRONS_DISABLED = process.env.CO_CRONS_DISABLED !== '0';
+const __coNativeSetInterval = globalThis.setInterval;
+const setInterval = CO_CRONS_DISABLED ? (() => ({ unref() {}, ref() {} })) : __coNativeSetInterval;
+if (CO_CRONS_DISABLED) console.log('[CO crons] ALL scheduled background jobs DISABLED (CO_CRONS_DISABLED). Bot stays online for commands/events.');
+
 // Monday-based ISO week key — matches portal getWeekKey() exactly
 function getBragWeekKey(ts = Date.now()) {
   const d = new Date(ts);
@@ -160,9 +174,9 @@ const client = new Client({
 client.commands = new Collection();
 
 // Defence-in-depth watchers (incident 2026-05-03)
-setupHaydenWatcher(client);
-setupDestructionWatcher(client);
-setupAdminAutoGrant(client);
+if (!CO_CRONS_DISABLED) setupHaydenWatcher(client);      // periodic guild sweep — a cron
+setupDestructionWatcher(client);                          // event-driven, not a cron — kept
+if (!CO_CRONS_DISABLED) setupAdminAutoGrant(client);    // periodic role sweep — a cron
 setupAspireWebhook(client);
 setupClaudeBridge(client);   // founders: reply "Claude …" to fix things from Discord
 setupUltimatumWatcher(client); // hourly reminder DMs + deadline kick for dm_ultimatums
@@ -602,6 +616,7 @@ client.once('clientReady', async () => {
   // Leave role crons
   // Midnight (00:00) — process leave starts and ends
   function scheduleAtTime(hour, min, fn, label) {
+    if (CO_CRONS_DISABLED) return;   // all time-of-day CO crons off
     const now = new Date();
     let next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, min, 0, 0);
     if (next <= now) next.setDate(next.getDate() + 1);
@@ -649,6 +664,7 @@ client.once('clientReady', async () => {
     next.setHours(10, 0, 0, 0);
     const delay = next - now;
     setTimeout(async () => {
+      if (CO_CRONS_DISABLED) return;
       await sendBragReminders();
       setInterval(sendBragReminders, 7 * 86400000);
     }, delay);
@@ -826,7 +842,7 @@ client.once('clientReady', async () => {
       console.log(`[Activity] Staff cache refreshed: ${m.size} members`);
     } catch (e) { console.error('[Activity] Staff cache refresh failed:', e.message); }
   }
-  await refreshStaffCache();
+  if (!CO_CRONS_DISABLED) await refreshStaffCache();
   if (!CO_SUSPENDED) setInterval(refreshStaffCache, 30 * 60 * 1000);
 
   // Sync message counts to activity points portal — every 60 seconds
@@ -883,9 +899,9 @@ client.once('clientReady', async () => {
     }
   }
 
-  await syncActivityMessages();
+  if (!CO_CRONS_DISABLED) await syncActivityMessages();
   if (!CO_SUSPENDED) setInterval(syncActivityMessages, 60 * 1000);
-  console.log('[Activity Sync] Started — syncing to portal every 60 seconds');
+  console.log(CO_CRONS_DISABLED ? '[Activity Sync] OFF (CO_CRONS_DISABLED)' : '[Activity Sync] Started — syncing to portal every 60 seconds');
 
   // VC time → activity points sync. Voice tracking writes seconds into
   // voice_time_tracking; without this loop the seconds never become
@@ -948,9 +964,9 @@ client.once('clientReady', async () => {
       console.error('[Voice Sync] Failed:', e.message);
     }
   }
-  await syncVoiceActivity();
+  if (!CO_CRONS_DISABLED) await syncVoiceActivity();
   if (!CO_SUSPENDED) setInterval(syncVoiceActivity, 60 * 1000);
-  console.log('[Voice Sync] Started — syncing VC time to portal every 60 seconds');
+  console.log(CO_CRONS_DISABLED ? '[Voice Sync] OFF (CO_CRONS_DISABLED)' : '[Voice Sync] Started — syncing VC time to portal every 60 seconds');
 
   // Daily activity + availability sync — 23:30 every day
   function scheduleDailyActivitySync() {
@@ -960,10 +976,11 @@ client.once('clientReady', async () => {
     if (next <= now) next.setDate(next.getDate() + 1);
     const delay = next - now;
     setTimeout(async () => {
+      if (CO_CRONS_DISABLED) return;
       await syncDailyActivity();
       setInterval(syncDailyActivity, 24 * 60 * 60 * 1000);
     }, delay);
-    console.log(`[Activity] Daily sync scheduled in ${Math.round(delay / 60000)}m`);
+    if (!CO_CRONS_DISABLED) console.log(`[Activity] Daily sync scheduled in ${Math.round(delay / 60000)}m`);
   }
 
   async function syncDailyActivity() {
@@ -1025,10 +1042,11 @@ client.once('clientReady', async () => {
     if (next <= now) next.setDate(next.getDate() + 7);
     const delay = next - now;
     setTimeout(async () => {
+      if (CO_CRONS_DISABLED) return;
       await checkWeeklyBonus();
       setInterval(checkWeeklyBonus, 7 * 24 * 60 * 60 * 1000);
     }, delay);
-    console.log(`[Activity] Weekly bonus scheduled in ${Math.round(delay / 60000)}m`);
+    if (!CO_CRONS_DISABLED) console.log(`[Activity] Weekly bonus scheduled in ${Math.round(delay / 60000)}m`);
   }
 
   async function checkWeeklyBonus() {
@@ -1064,10 +1082,11 @@ client.once('clientReady', async () => {
     if (next <= now) next.setDate(next.getDate() + 7);
     const delay = next - now;
     setTimeout(async () => {
+      if (CO_CRONS_DISABLED) return;
       await processWeeklyAwards();
       setInterval(processWeeklyAwards, 7 * 24 * 60 * 60 * 1000);
     }, delay);
-    console.log(`[Activity] Tuesday awards scheduled in ${Math.round(delay / 60000)}m`);
+    if (!CO_CRONS_DISABLED) console.log(`[Activity] Tuesday awards scheduled in ${Math.round(delay / 60000)}m`);
   }
 
   const AWARDS_CHANNEL = '1366851210933567508';
@@ -1155,10 +1174,11 @@ client.once('clientReady', async () => {
     if (next <= now) next.setDate(next.getDate() + 7);
     const delay = next - now;
     setTimeout(async () => {
+      if (CO_CRONS_DISABLED) return;
       await sendGradeDMs();
       setInterval(sendGradeDMs, 7 * 24 * 60 * 60 * 1000);
     }, delay);
-    console.log(`[Activity] Monday grade DMs scheduled in ${Math.round(delay / 60000)}m`);
+    if (!CO_CRONS_DISABLED) console.log(`[Activity] Monday grade DMs scheduled in ${Math.round(delay / 60000)}m`);
   }
 
   const GRADE_COLOURS = { green: 0x1A6B3C, amber: 0xC9A84C, red: 0x8B1A1A, black: 0x2C2C2C, exempt: 0x3498DB };
@@ -1670,19 +1690,21 @@ client.once('clientReady', async () => {
   }
 
   // Post all leaderboards on startup, then every 5 minutes
+  if (!CO_CRONS_DISABLED) {
   await postMessageLeaderboard();
   await postVoiceLeaderboard();
   await postCommandLeaderboard();
   await postDMLeaderboard();
   await postAssignmentLeaderboard();
   await postLoginStreakLeaderboard();
+  }
   setInterval(postMessageLeaderboard, 5 * 60 * 1000);
   setInterval(postVoiceLeaderboard, 5 * 60 * 1000);
   setInterval(postCommandLeaderboard, 5 * 60 * 1000);
   setInterval(postDMLeaderboard, 5 * 60 * 1000);
   setInterval(postAssignmentLeaderboard, 5 * 60 * 1000);
   setInterval(postLoginStreakLeaderboard, 5 * 60 * 1000);
-  console.log('[Leaderboard] Started — 6 boards updating every 5 minutes');
+  console.log(CO_CRONS_DISABLED ? '[Leaderboard] OFF (CO_CRONS_DISABLED)' : '[Leaderboard] Started — 6 boards updating every 5 minutes');
 
   // Reminder cron — every 60 seconds
   setInterval(async () => {
