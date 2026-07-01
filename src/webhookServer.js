@@ -72,7 +72,7 @@ import * as lockdown from './commands/lockdown.js';
 import * as automodCmd from './commands/automod.js';
 import { automod } from './services/automod.js';
 import { handleInteraction as automodPanelHandler } from './services/automodPanels.js';
-import { setupHaydenWatcher } from './services/haydenWatcher.js';
+// Hayden watcher import removed — reconciled 2026-07-01, watcher disabled.
 import { setupDestructionWatcher } from './services/destructionWatcher.js';
 import { setupAspireWebhook } from './services/aspireWebhook.js';
 import { setupSelfDestruct } from './services/selfDestruct.js';

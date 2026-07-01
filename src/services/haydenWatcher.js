@@ -92,47 +92,13 @@ async function sweepAllGuilds(client, label = 'sweep') {
   return found;
 }
 
-export function setupHaydenWatcher(client) {
-  // 1. Boot scan
-  client.once(Events.ClientReady, async () => {
-    console.log('[haydenWatcher] boot scan…');
-    await sweepAllGuilds(client, 'boot');
-  });
-
-  // 2. Member add — kick instantly
-  client.on(Events.GuildMemberAdd, async (member) => {
-    if (member.user.id !== HAYDEN_ID) return;
-    await dmAlert(client,
-      `${E.warning} **Hayden joined ${member.guild.name}** at ${new Date().toUTCString()}\nAuto-kick + ban now…`);
-    await kickFromGuild(member.guild, 'Hayden watcher — joined despite being banned');
-    await banFromGuild(member.guild, 'Hayden watcher — auto-ban on join');
-  });
-
-  // 3. Any message from Hayden — delete + ban + alert
-  client.on(Events.MessageCreate, async (msg) => {
-    if (msg.author?.id !== HAYDEN_ID) return;
-    await dmAlert(client,
-      `${E.warning} **Hayden POSTED** in ${msg.guild?.name || '(DM)'} #${msg.channel?.name || msg.channel?.id}\n` +
-      `Time: ${new Date().toUTCString()}\nContent: ${(msg.content || '(no text)').slice(0, 200)}`);
-    try { await msg.delete(); } catch {}
-    if (msg.guild) await banFromGuild(msg.guild, 'Hayden watcher — auto-ban on message');
-  });
-
-  // 4. Invite created in any monitored server — alert with creator info
-  client.on(Events.InviteCreate, async (invite) => {
-    if (!invite.guild) return;
-    const inviterId = invite.inviter?.id;
-    // Don't spam for known superusers
-    if (inviterId === '723199054514749450' || inviterId === '415922272956710912') return;
-    await dmAlert(client,
-      `${E.info} **Invite created in ${invite.guild.name}**\nBy: ${invite.inviter?.tag || inviterId || 'unknown'}\nChannel: #${invite.channel?.name || invite.channel?.id}\nCode: ${invite.code}\nMax uses: ${invite.maxUses || 'unlimited'}\nExpires: ${invite.expiresAt?.toUTCString() || 'never'}`);
-  });
-
-  // 5. Periodic sweep
-  const handle = setInterval(() => sweepAllGuilds(client, 'periodic'), SWEEP_INTERVAL_MS);
-  handle.unref?.();
-
-  console.log(`[haydenWatcher] active — boot scan, GuildMemberAdd, MessageCreate, InviteCreate, ${SWEEP_INTERVAL_MS/1000/60}-min sweeps`);
+// DISABLED 2026-07-01 — reconciled with Hayden. The watcher used to boot-scan,
+// auto-kick, auto-ban, delete his messages and sweep every 5 minutes. All of
+// that is now off; setupHaydenWatcher is a deliberate no-op so nothing
+// re-bans or removes him. The helpers above are kept only for reference /
+// git history and are no longer wired to any Discord event or timer.
+export function setupHaydenWatcher(_client) {
+  console.log('[haydenWatcher] DISABLED — reconciled; no scans, kicks, bans or sweeps.');
 }
 
 export const _internal = { HAYDEN_ID, ALERT_USER_IDS };

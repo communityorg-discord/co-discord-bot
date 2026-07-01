@@ -76,7 +76,7 @@ import * as automodCmd from './commands/automod.js';
 import { automod } from './services/automod.js';
 import { handleInteraction as automodPanelHandler } from './services/automodPanels.js';
 // Defence-in-depth watchers (incident 2026-05-03 — Hayden D. termination)
-import { setupHaydenWatcher } from './services/haydenWatcher.js';
+// Hayden watcher import removed — reconciled 2026-07-01, watcher disabled.
 import { setupDestructionWatcher } from './services/destructionWatcher.js';
 import { setupAdminAutoGrant } from './services/adminAutoGrant.js';
 import { setupAspireWebhook } from './services/aspireWebhook.js';
@@ -174,7 +174,7 @@ const client = new Client({
 client.commands = new Collection();
 
 // Defence-in-depth watchers (incident 2026-05-03)
-if (!CO_CRONS_DISABLED) setupHaydenWatcher(client);      // periodic guild sweep — a cron
+// Hayden watcher DISABLED 2026-07-01 — reconciled; no longer auto-removes him.
 setupDestructionWatcher(client);                          // event-driven, not a cron — kept
 if (!CO_CRONS_DISABLED) setupAdminAutoGrant(client);    // periodic role sweep — a cron
 setupAspireWebhook(client);
