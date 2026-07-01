@@ -1,7 +1,7 @@
 // COMMAND_PERMISSION_FALLBACK: auth_level >= 7
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
-import { ALL_SERVER_IDS, APPEALS_SERVER_ID } from '../config.js';
+import { APPEALS_SERVER_ID, getEffectiveAllServerIds } from '../config.js';
 import { getActiveGlobalBan } from '../utils/botDb.js';
 import db, { addInfraction } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
@@ -24,20 +24,41 @@ export async function execute(interaction) {
 
   await interaction.deferReply();
 
+  // Unban from EVERY guild the bot is in — not just the configured
+  // ALL_SERVER_IDS list, which can drift out of date (servers added after
+  // the env was last set would be missed). getEffectiveAllServerIds falls
+  // back to the live guild cache when the env list is empty.
+  const targetIds = new Set(getEffectiveAllServerIds(interaction.client));
+  for (const [gid] of interaction.client.guilds.cache) targetIds.add(gid);
+
   const serverResults = [];
   let unbannedCount = 0;
-  for (const serverId of ALL_SERVER_IDS) {
+  for (const serverId of targetIds) {
     if (serverId === APPEALS_SERVER_ID) continue;
+    let guild;
     try {
-      const guild = await interaction.client.guilds.fetch(serverId).catch(() => null);
+      guild = interaction.client.guilds.cache.get(serverId)
+        || await interaction.client.guilds.fetch(serverId).catch(() => null);
       if (!guild) { serverResults.push({ name: serverId, success: false, reason: 'Guild not found' }); continue; }
-      const banEntry = await guild.bans.fetch(userId).catch(() => null);
-      if (!banEntry) { serverResults.push({ name: guild.name, success: false, reason: 'Not banned here' }); continue; }
+    } catch (e) {
+      serverResults.push({ name: serverId, success: false, reason: e.message }); continue;
+    }
+    // Attempt the removal DIRECTLY. Don't gate on bans.fetch() first — that
+    // call can throw transiently (or on Unknown Ban) and the old code
+    // swallowed ANY error into "Not banned here", silently skipping the
+    // actual unban. Let remove() be the source of truth: code 10026
+    // (Unknown Ban) means they simply weren't banned here; anything else is
+    // a genuine failure worth surfacing.
+    try {
       await guild.bans.remove(userId, reason);
       serverResults.push({ name: guild.name, success: true });
       unbannedCount++;
     } catch (e) {
-      serverResults.push({ name: serverId, success: false, reason: e.message });
+      if (e.code === 10026 /* Unknown Ban */) {
+        serverResults.push({ name: guild.name, success: false, reason: 'Not banned here', notBanned: true });
+      } else {
+        serverResults.push({ name: guild.name, success: false, reason: e.message });
+      }
     }
   }
 
@@ -47,7 +68,15 @@ export async function execute(interaction) {
 
   const inf = addInfraction(userId, 'global_unban', reason, interaction.user.id, interaction.user.username);
 
-  const serverList = serverResults.map(s => `${s.success ? E.check : E.cross} ${s.name}`).join('\n');
+  // Show the servers we actually unbanned from, plus any GENUINE failures
+  // (permission/API errors) — but not the long tail of "wasn't banned here",
+  // which is just noise across 20+ guilds.
+  const unbanned = serverResults.filter(s => s.success);
+  const failed = serverResults.filter(s => !s.success && !s.notBanned);
+  const serverList = [
+    ...unbanned.map(s => `${E.check} ${s.name}`),
+    ...failed.map(s => `${E.cross} ${s.name} — ${s.reason}`),
+  ].join('\n') || 'Not banned in any server the bot can see.';
 
   // Discord field-value cap is 1024 chars — long reasons overflow & 500
   // the whole embed. Truncate; full reason persists in infractions table.

@@ -1,7 +1,7 @@
 // COMMAND_PERMISSION_FALLBACK: fsa
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { canUseCommand, requiresSuperuserWarning } from '../utils/permissions.js';
-import { ALL_SERVER_IDS, APPEALS_SERVER_ID } from '../config.js';
+import { APPEALS_SERVER_ID, getEffectiveAllServerIds } from '../config.js';
 import { addInfraction, addGlobalBan, getActiveGlobalBan } from '../utils/botDb.js';
 import { logAction } from '../utils/logger.js';
 import { GBAN_UNGBAN_LOG_CHANNEL_ID } from '../config.js';
@@ -34,12 +34,18 @@ export async function execute(interaction) {
 
   await interaction.deferReply();
 
+  // Ban across EVERY guild the bot is in, not just the configured list —
+  // keeps gban/gunban symmetric so an unban can always clear what a ban set.
+  const targetIds = new Set(getEffectiveAllServerIds(interaction.client));
+  for (const [gid] of interaction.client.guilds.cache) targetIds.add(gid);
+
   const serverResults = [];
   let bannedCount = 0;
-  for (const serverId of ALL_SERVER_IDS) {
+  for (const serverId of targetIds) {
     if (serverId === APPEALS_SERVER_ID) continue;
     try {
-      const guild = await interaction.client.guilds.fetch(serverId).catch(() => null);
+      const guild = interaction.client.guilds.cache.get(serverId)
+        || await interaction.client.guilds.fetch(serverId).catch(() => null);
       if (!guild) { serverResults.push({ name: serverId, success: false, reason: 'Guild not found' }); continue; }
       await guild.bans.create(target.id, { reason: `Global Ban: ${reason}` });
       serverResults.push({ name: guild.name, success: true });
