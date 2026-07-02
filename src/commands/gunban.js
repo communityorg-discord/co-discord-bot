@@ -97,17 +97,23 @@ export async function execute(interaction) {
     logType: 'moderation.gban_ungban',
   });
 
+  // Try to show the unbanned member's avatar as the embed thumbnail (best-effort).
+  const targetUser = await interaction.client.users.fetch(userId).catch(() => null);
+  const serverWord = `${unbannedCount} server${unbannedCount === 1 ? '' : 's'}`;
+
   await interaction.editReply({ embeds: [new EmbedBuilder()
-    .setTitle('Global Unban')
-    .setColor(0x22C55E)
-    .setDescription(`${E.unban} Global ban removed from <@${userId}>.`)
+    .setColor(BRAND.accent)
+    .setAuthor({ name: 'Global Unban', iconURL: BRAND.logo })
+    .setThumbnail(targetUser ? targetUser.displayAvatarURL() : null)
+    .setDescription(`${E.unban} The global ban on <@${userId}> has been lifted — they can rejoin ${BRAND.servers}.`)
     .addFields(
-      { name: 'Unbanned From', value: String(unbannedCount), inline: true },
-      { name: 'Reason', value: reason, inline: false },
-      { name: 'Moderator', value: interaction.user.username, inline: true },
-      { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true }
+      { name: `${E.member} Member`, value: `<@${userId}>`, inline: true },
+      { name: `${E.check} Restored to`, value: serverWord, inline: true },
+      { name: `${E.id} Case`, value: `#${inf.lastInsertRowid}`, inline: true },
+      { name: `${E.gavel} Reason`, value: reason.length > 1000 ? reason.slice(0, 1000) + '…' : reason, inline: false },
+      { name: `${E.staff} Actioned by`, value: `<@${interaction.user.id}>`, inline: true },
     )
-    .setFooter({ text: BRAND.name })
+    .setFooter({ text: BRAND.footer, iconURL: BRAND.logo })
     .setTimestamp()
   ]});
 }
