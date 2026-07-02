@@ -2042,6 +2042,18 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply({ content: `${E.cross} Bot commands can only be used in <#${requiredCmdChannel}>.`, ephemeral: true });
     }
 
+    // USGRP status-console maintenance (shared maintenance.json) — if this bot's
+    // scope is under maintenance from status.usgrp.xyz/staff, only Dion & Evan run
+    // commands. This is separate from the CO system_maintenance table checked below.
+    try {
+      const { botMaintenanceBlocked } = await import('../../aspire-shared/maintenanceGate.js');
+      const msg = botMaintenanceBlocked('co-bot', interaction.user.id);
+      if (msg) {
+        await interaction.reply({ content: `🔧 **Under maintenance** — ${msg}\n\nCommands are paused for now; please try again once maintenance is over.`, flags: 64 }).catch(() => {});
+        return;
+      }
+    } catch { /* shared gate unavailable → fall through to the CO table check */ }
+
     // Maintenance gate — during an active bot-maintenance window, only superusers may run commands
     try {
       const portalDb = (await import('./db.js')).default;
