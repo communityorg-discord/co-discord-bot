@@ -99,17 +99,19 @@ export async function execute(interaction) {
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()
-    .setTitle('Global Ban')
     .setColor(0x7F1D1D)
-    .setDescription(`${E.gban} **${target.username}** has been globally banned.`)
+    .setAuthor({ name: 'Global Ban', iconURL: BRAND.logo })
+    .setThumbnail(target.displayAvatarURL())
+    .setDescription(`${E.gban} **${target.username}** has been globally banned from ${BRAND.servers}.`)
     .addFields(
-      { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },
-      { name: 'Banned', value: String(bannedCount), inline: true },
-      { name: 'Reason', value: reason, inline: false },
-      { name: 'Appealable', value: appealable ? 'Yes' : 'No', inline: true },
-      { name: 'Moderator', value: interaction.user.username, inline: true }
+      { name: `${E.member} Member`, value: `<@${target.id}>`, inline: true },
+      { name: `${E.gban} Banned from`, value: `${bannedCount} server${bannedCount === 1 ? '' : 's'}`, inline: true },
+      { name: `${E.id} Case`, value: `#${inf.lastInsertRowid}`, inline: true },
+      { name: `${E.gavel} Reason`, value: reason.length > 1000 ? reason.slice(0, 1000) + '…' : reason, inline: false },
+      { name: `${E.pending} Appealable`, value: appealable ? 'Yes' : 'No', inline: true },
+      { name: `${E.staff} Actioned by`, value: `<@${interaction.user.id}>`, inline: true }
     )
-    .setFooter({ text: BRAND.name })
+    .setFooter({ text: BRAND.footer, iconURL: BRAND.logo })
     .setTimestamp()
   ]});
 }

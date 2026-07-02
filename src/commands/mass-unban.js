@@ -81,17 +81,19 @@ export async function execute(interaction) {
     );
 
     const embed = new EmbedBuilder()
-      .setTitle('Mass Unban (Global)')
       .setColor(0x22C55E)
+      .setAuthor({ name: 'Mass Unban — Global', iconURL: BRAND.logo })
+      .setThumbnail(BRAND.logo)
       .setDescription(`${E.unban} All previously banned members have been unbanned across every server.`)
       .addFields(
-        { name: 'Total Unbanned', value: String(totalUnbanned), inline: true },
-        { name: 'Total Failed', value: String(totalFailed), inline: true },
-        { name: 'Servers Processed', value: String(results.length), inline: true },
-        { name: 'Reason', value: reason, inline: false },
-        { name: 'Per-Server Results', value: lines.join('\n') || 'None', inline: false }
+        { name: `${E.check} Total unbanned`, value: String(totalUnbanned), inline: true },
+        { name: `${E.cross} Total failed`, value: String(totalFailed), inline: true },
+        { name: `${E.shield} Servers`, value: String(results.length), inline: true },
+        { name: `${E.gavel} Reason`, value: reason.length > 1000 ? reason.slice(0, 1000) + '…' : reason, inline: false },
+        { name: `${E.logs} Per-server results`, value: (lines.join('\n') || 'None').slice(0, 1000), inline: false },
+        { name: `${E.staff} Actioned by`, value: `<@${interaction.user.id}>`, inline: true }
       )
-      .setFooter({ text: BRAND.footer })
+      .setFooter({ text: BRAND.footer, iconURL: BRAND.logo })
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
@@ -131,16 +133,18 @@ export async function execute(interaction) {
     }
 
     const embed = new EmbedBuilder()
-      .setTitle('Mass Unban (Local)')
       .setColor(0x22C55E)
-      .setDescription(`${E.unban} All previously banned members have been unbanned in this server.`)
+      .setAuthor({ name: 'Mass Unban — Local', iconURL: BRAND.logo })
+      .setThumbnail(BRAND.logo)
+      .setDescription(`${E.unban} All previously banned members have been unbanned in **${guild.name}**.`)
       .addFields(
-        { name: 'Server', value: guild.name, inline: true },
-        { name: 'Unbanned', value: String(unbanned), inline: true },
-        { name: 'Failed', value: String(failed), inline: true },
-        { name: 'Reason', value: reason, inline: false }
+        { name: `${E.shield} Server`, value: guild.name, inline: true },
+        { name: `${E.check} Unbanned`, value: String(unbanned), inline: true },
+        { name: `${E.cross} Failed`, value: String(failed), inline: true },
+        { name: `${E.gavel} Reason`, value: reason.length > 1000 ? reason.slice(0, 1000) + '…' : reason, inline: false },
+        { name: `${E.staff} Actioned by`, value: `<@${interaction.user.id}>`, inline: true }
       )
-      .setFooter({ text: BRAND.footer })
+      .setFooter({ text: BRAND.footer, iconURL: BRAND.logo })
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });

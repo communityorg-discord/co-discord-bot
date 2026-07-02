@@ -146,16 +146,18 @@ export async function execute(interaction) {
   // Reply embed
   await interaction.editReply({
     embeds: [new EmbedBuilder()
-      .setTitle('Staff Suspended')
       .setColor(0xEF4444)
+      .setAuthor({ name: 'Staff Suspended', iconURL: BRAND.logo })
+      .setThumbnail(target.displayAvatarURL())
       .setDescription(`${E.suspend} **${targetName}** has been suspended from ${BRAND.name}.`)
       .addFields(
-        { name: 'Reason', value: reason, inline: false },
-        { name: 'Duration', value: durationDisplay, inline: true },
-        { name: 'Expires', value: expiresDisplay, inline: true },
-        { name: 'Actioned By', value: `<@${interaction.user.id}>`, inline: true },
+        { name: `${E.member} Member`, value: `<@${target.id}>`, inline: true },
+        { name: `${E.pending} Duration`, value: durationDisplay, inline: true },
+        { name: `${E.calendar} Expires`, value: expiresDisplay, inline: true },
+        { name: `${E.gavel} Reason`, value: reason.length > 1000 ? reason.slice(0, 1000) + '…' : reason, inline: false },
+        { name: `${E.staff} Actioned by`, value: `<@${interaction.user.id}>`, inline: true },
       )
-      .setFooter({ text: BRAND.footer })
+      .setFooter({ text: BRAND.footer, iconURL: BRAND.logo })
       .setTimestamp()
     ]
   });

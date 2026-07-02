@@ -80,16 +80,17 @@ export async function execute(interaction) {
 
   await interaction.editReply({
     embeds: [new EmbedBuilder()
-      .setTitle('Timeout Removed')
       .setColor(0x22C55E)
-      .setDescription(`${E.check} Timeout for **${targetName}** has been removed.`)
+      .setAuthor({ name: 'Timeout Removed', iconURL: BRAND.logo })
+      .setThumbnail(target.displayAvatarURL())
+      .setDescription(`${E.check} The timeout on **${targetName}** has been removed.`)
       .addFields(
-        { name: 'User', value: `<@${target.id}>`, inline: true },
-        { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: true },
-        ...(reason !== 'Not specified' ? [{ name: 'Reason', value: reason, inline: false }] : []),
-        { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },
+        { name: `${E.member} Member`, value: `<@${target.id}>`, inline: true },
+        { name: `${E.id} Case`, value: `#${inf.lastInsertRowid}`, inline: true },
+        ...(reason !== 'Not specified' ? [{ name: `${E.gavel} Reason`, value: reason.length > 1000 ? reason.slice(0, 1000) + '…' : reason, inline: false }] : []),
+        { name: `${E.staff} Actioned by`, value: `<@${interaction.user.id}>`, inline: true },
       )
-      .setFooter({ text: BRAND.footer })
+      .setFooter({ text: BRAND.footer, iconURL: BRAND.logo })
       .setTimestamp()
     ]
   });

@@ -5,6 +5,7 @@ import db, { addInfraction } from '../utils/botDb.js';
 import { canUseCommand, isSuperuser } from '../utils/permissions.js';
 import { ALL_SERVER_IDS } from '../config.js';
 import { E } from '../lib/emoji.js';
+import { BRAND } from '../utils/brand.js';
 
 // Uses ALL_SERVER_IDS from config.js
 
@@ -118,21 +119,24 @@ export async function execute(interaction) {
     const statusColor = failedGuilds.length === 0 && results.length > 0 ? 0xef4444 : 0xf59e0b;
     const unbanTs = isTempBan ? Math.floor((Date.now() + durationMs) / 1000) : null;
 
+    const bannedUser = await interaction.client.users.fetch(targetUserId).catch(() => null);
     const embed = new EmbedBuilder()
-      .setTitle(`${titlePrefix} Complete`)
       .setColor(statusColor)
+      .setAuthor({ name: `${titlePrefix} Complete`, iconURL: BRAND.logo })
+      .setThumbnail(bannedUser ? bannedUser.displayAvatarURL() : null)
+      .setDescription(`${E.ban} <@${targetUserId}> has been ${isTempBan ? 'temporarily ' : ''}banned across ${BRAND.servers}.`)
       .addFields(
-        { name: 'User', value: `${E.ban} <@${targetUserId}>`, inline: false },
-        { name: 'Scope', value: 'All Servers', inline: true },
-        { name: 'Duration', value: isTempBan ? durationStr : 'Permanent', inline: true },
-        { name: 'Banned From', value: results.join(', ') || 'None', inline: false },
-        { name: 'Already Banned', value: alreadyBanned.join(', ') || 'None', inline: false },
-        { name: 'Failed', value: failedGuilds.length > 0 ? failedGuilds.map(g => `${g.guild}: ${g.reason}`).join('\n') : 'None', inline: false },
-        { name: 'Reason', value: reason, inline: false },
-        ...(isTempBan ? [{ name: 'Auto-Unban', value: `<t:${unbanTs}:R>`, inline: true }] : []),
-        { name: 'Banned By', value: `<@${interaction.user.id}>`, inline: false },
-        { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },
+        { name: `${E.member} Member`, value: `<@${targetUserId}>`, inline: true },
+        { name: `${E.pending} Duration`, value: isTempBan ? durationStr : 'Permanent', inline: true },
+        { name: `${E.id} Case`, value: `#${inf.lastInsertRowid}`, inline: true },
+        { name: `${E.check} Banned from`, value: (results.join(', ') || 'None').slice(0, 1000), inline: false },
+        ...(alreadyBanned.length ? [{ name: `${E.info} Already banned`, value: alreadyBanned.join(', ').slice(0, 1000), inline: false }] : []),
+        ...(failedGuilds.length ? [{ name: `${E.cross} Failed`, value: failedGuilds.map(g => `${g.guild}: ${g.reason}`).join('\n').slice(0, 1000), inline: false }] : []),
+        ...(isTempBan ? [{ name: `${E.calendar} Auto-unban`, value: `<t:${unbanTs}:R>`, inline: true }] : []),
+        { name: `${E.gavel} Reason`, value: reason.length > 1000 ? reason.slice(0, 1000) + '…' : reason, inline: false },
+        { name: `${E.staff} Actioned by`, value: `<@${interaction.user.id}>`, inline: true },
       )
+      .setFooter({ text: BRAND.footer, iconURL: BRAND.logo })
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });

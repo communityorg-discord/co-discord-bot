@@ -64,16 +64,19 @@ export async function execute(interaction) {
     logType: 'moderation.ban_unban'
   });
 
+  const unbannedUser = await interaction.client.users.fetch(userId).catch(() => null);
   await interaction.editReply({ embeds: [new EmbedBuilder()
-    .setTitle('User Unbanned')
     .setColor(0x22C55E)
-    .setDescription(`${E.unban} <@${userId}> has been unbanned from this server.`)
+    .setAuthor({ name: 'User Unbanned', iconURL: BRAND.logo })
+    .setThumbnail(unbannedUser ? unbannedUser.displayAvatarURL() : null)
+    .setDescription(`${E.unban} <@${userId}> has been unbanned from **${interaction.guild.name}**.`)
     .addFields(
-      { name: 'Reason', value: reason, inline: false },
-      { name: 'Moderator', value: interaction.user.username, inline: true },
-      { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true }
+      { name: `${E.member} Member`, value: `<@${userId}>`, inline: true },
+      { name: `${E.id} Case`, value: `#${inf.lastInsertRowid}`, inline: true },
+      { name: `${E.gavel} Reason`, value: reason.length > 1000 ? reason.slice(0, 1000) + '…' : reason, inline: false },
+      { name: `${E.staff} Actioned by`, value: `<@${interaction.user.id}>`, inline: true }
     )
-    .setFooter({ text: BRAND.name })
+    .setFooter({ text: BRAND.footer, iconURL: BRAND.logo })
     .setTimestamp()
   ]});
 }

@@ -156,19 +156,20 @@ export async function execute(interaction) {
 
   await interaction.editReply({
     embeds: [new EmbedBuilder()
-      .setTitle(isTempBan ? 'User Temporarily Banned' : 'User Banned')
       .setColor(0xEF4444)
-      .setDescription(`${E.ban} **${targetName}** has been banned from this server.`)
+      .setAuthor({ name: isTempBan ? 'User Temporarily Banned' : 'User Banned', iconURL: BRAND.logo })
+      .setThumbnail(target.displayAvatarURL())
+      .setDescription(`${E.ban} **${targetName}** has been banned from **${interaction.guild.name}**.`)
       .addFields(
-        { name: 'User', value: `<@${targetId}>`, inline: true },
-        { name: 'Duration', value: isTempBan ? formatDuration(durationMs) : 'Permanent', inline: true },
-        { name: 'Messages Deleted', value: deleteDays > 0 ? `${deleteDays} day${deleteDays !== 1 ? 's' : ''}` : 'None', inline: true },
-        { name: 'Reason', value: reason, inline: false },
-        { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: true },
-        { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },
-        ...(isTempBan ? [{ name: 'Auto-Unban', value: `<t:${unbanTs}:R>`, inline: true }] : []),
+        { name: `${E.member} Member`, value: `<@${targetId}>`, inline: true },
+        { name: `${E.pending} Duration`, value: isTempBan ? formatDuration(durationMs) : 'Permanent', inline: true },
+        { name: `${E.id} Case`, value: `#${inf.lastInsertRowid}`, inline: true },
+        { name: `${E.logs} Messages deleted`, value: deleteDays > 0 ? `${deleteDays} day${deleteDays !== 1 ? 's' : ''}` : 'None', inline: true },
+        ...(isTempBan ? [{ name: `${E.calendar} Auto-unban`, value: `<t:${unbanTs}:R>`, inline: true }] : []),
+        { name: `${E.gavel} Reason`, value: reason.length > 1000 ? reason.slice(0, 1000) + '…' : reason, inline: false },
+        { name: `${E.staff} Actioned by`, value: `<@${interaction.user.id}>`, inline: true },
       )
-      .setFooter({ text: BRAND.footer })
+      .setFooter({ text: BRAND.footer, iconURL: BRAND.logo })
       .setTimestamp()
     ]
   });

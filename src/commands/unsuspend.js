@@ -46,15 +46,17 @@ export async function execute(interaction) {
   });
 
   await interaction.editReply({ embeds: [new EmbedBuilder()
-    .setTitle('Suspension Lifted')
     .setColor(0x22C55E)
-    .setDescription(`${E.check} **${portalUser?.display_name || target.username}**'s suspension has been lifted and roles restored.`)
+    .setAuthor({ name: 'Suspension Lifted', iconURL: BRAND.logo })
+    .setThumbnail(target.displayAvatarURL())
+    .setDescription(`${E.check} **${portalUser?.display_name || target.username}**'s suspension has been lifted and their roles restored.`)
     .addFields(
-      { name: 'Reason', value: reason, inline: false },
-      { name: 'Moderator', value: interaction.user.username, inline: true },
-      { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true }
+      { name: `${E.member} Member`, value: `<@${target.id}>`, inline: true },
+      { name: `${E.id} Case`, value: `#${inf.lastInsertRowid}`, inline: true },
+      { name: `${E.gavel} Reason`, value: reason.length > 1000 ? reason.slice(0, 1000) + '…' : reason, inline: false },
+      { name: `${E.staff} Actioned by`, value: `<@${interaction.user.id}>`, inline: true }
     )
-    .setFooter({ text: BRAND.name })
+    .setFooter({ text: BRAND.footer, iconURL: BRAND.logo })
     .setTimestamp()
   ]});
 }

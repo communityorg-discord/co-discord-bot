@@ -158,18 +158,19 @@ async function handleAddTimeout(interaction) {
 
   await interaction.editReply({
     embeds: [new EmbedBuilder()
-      .setTitle('User Timed Out')
       .setColor(0xF59E0B)
+      .setAuthor({ name: 'User Timed Out', iconURL: BRAND.logo })
+      .setThumbnail(target.displayAvatarURL())
       .setDescription(`${E.suspend} **${targetName}** has been timed out.`)
       .addFields(
-        { name: 'User', value: `<@${targetId}>`, inline: true },
-        { name: 'Duration', value: durationDisplay, inline: true },
-        { name: 'Expires', value: `<t:${Math.floor(expiresAt.getTime() / 1000)}:R>`, inline: true },
-        { name: 'Reason', value: reason, inline: false },
-        { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: true },
-        { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },
+        { name: `${E.member} Member`, value: `<@${targetId}>`, inline: true },
+        { name: `${E.pending} Duration`, value: durationDisplay, inline: true },
+        { name: `${E.calendar} Expires`, value: `<t:${Math.floor(expiresAt.getTime() / 1000)}:R>`, inline: true },
+        { name: `${E.id} Case`, value: `#${inf.lastInsertRowid}`, inline: true },
+        { name: `${E.gavel} Reason`, value: reason.length > 1000 ? reason.slice(0, 1000) + '…' : reason, inline: false },
+        { name: `${E.staff} Actioned by`, value: `<@${interaction.user.id}>`, inline: true },
       )
-      .setFooter({ text: BRAND.footer })
+      .setFooter({ text: BRAND.footer, iconURL: BRAND.logo })
       .setTimestamp()
     ]
   });

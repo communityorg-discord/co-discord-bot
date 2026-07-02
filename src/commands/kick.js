@@ -85,16 +85,17 @@ export async function execute(interaction) {
 
   await interaction.editReply({
     embeds: [new EmbedBuilder()
-      .setTitle('User Kicked')
       .setColor(0xEF4444)
-      .setDescription(`${E.gavel} **${targetName}** has been kicked from the server.`)
+      .setAuthor({ name: 'User Kicked', iconURL: BRAND.logo })
+      .setThumbnail(target.displayAvatarURL())
+      .setDescription(`${E.gavel} **${targetName}** has been kicked from **${interaction.guild.name}**.`)
       .addFields(
-        { name: 'User', value: `<@${targetId}>`, inline: true },
-        { name: 'Reason', value: reason, inline: false },
-        { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: true },
-        { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },
+        { name: `${E.member} Member`, value: `<@${targetId}>`, inline: true },
+        { name: `${E.id} Case`, value: `#${inf.lastInsertRowid}`, inline: true },
+        { name: `${E.gavel} Reason`, value: reason.length > 1000 ? reason.slice(0, 1000) + '…' : reason, inline: false },
+        { name: `${E.staff} Actioned by`, value: `<@${interaction.user.id}>`, inline: true },
       )
-      .setFooter({ text: BRAND.footer })
+      .setFooter({ text: BRAND.footer, iconURL: BRAND.logo })
       .setTimestamp()
     ]
   });

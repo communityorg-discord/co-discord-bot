@@ -107,10 +107,15 @@ async function executeNetwork(interaction) {
   ];
   await interaction.editReply({ embeds: [new EmbedBuilder()
     .setColor(0x7F1D1D)
-    .setTitle('Network Staff Terminated')
+    .setAuthor({ name: 'Network Staff Terminated', iconURL: BRAND.logo })
+    .setThumbnail(targetUser ? targetUser.displayAvatarURL() : null)
     .setDescription(lines.join('\n'))
-    .addFields({ name: 'Reason', value: String(reason).slice(0, 1024), inline: false })
-    .setFooter({ text: BRAND.footer })
+    .addFields(
+      { name: `${E.member} Member`, value: `<@${targetId}>`, inline: true },
+      { name: `${E.staff} Actioned by`, value: `<@${interaction.user.id}>`, inline: true },
+      { name: `${E.gavel} Reason`, value: String(reason).slice(0, 1024), inline: false }
+    )
+    .setFooter({ text: BRAND.footer, iconURL: BRAND.logo })
     .setTimestamp()
   ] });
 }

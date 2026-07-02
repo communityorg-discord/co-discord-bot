@@ -151,16 +151,18 @@ export async function execute(interaction) {
 
   // Build reply embed
   const replyEmbed = new EmbedBuilder()
-    .setTitle('Warning Issued')
     .setColor(escalation ? escalation.color : 0xF59E0B)
+    .setAuthor({ name: 'Warning Issued', iconURL: BRAND.logo })
+    .setThumbnail(target.displayAvatarURL())
     .setDescription(`${E.warning} **${targetName}** has been warned.`)
     .addFields(
-      { name: 'Case ID', value: `#${inf.lastInsertRowid}`, inline: true },
-      { name: 'Reason', value: reason, inline: false },
-      { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: true },
-      { name: 'Active Warnings', value: `**${warningCount}** / 3 (kick) / 5 (ban)`, inline: false },
+      { name: `${E.member} Member`, value: `<@${targetId}>`, inline: true },
+      { name: `${E.id} Case`, value: `#${inf.lastInsertRowid}`, inline: true },
+      { name: `${E.warning} Active warnings`, value: `**${warningCount}** / 3 (kick) / 5 (ban)`, inline: true },
+      { name: `${E.gavel} Reason`, value: reason.length > 1000 ? reason.slice(0, 1000) + '…' : reason, inline: false },
+      { name: `${E.staff} Actioned by`, value: `<@${interaction.user.id}>`, inline: true },
     )
-    .setFooter({ text: BRAND.footer })
+    .setFooter({ text: BRAND.footer, iconURL: BRAND.logo })
     .setTimestamp();
 
   if (escalation) {
