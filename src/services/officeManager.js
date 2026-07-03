@@ -260,16 +260,21 @@ async function postWaitingRequest(client, guild, wrVc, requestId, requester, off
     const msg = await target.send({ content: `<@${requester.id}>`, embeds: [embed], components: rows, allowedMentions: { users: [requester.id] } }).catch(() => null);
     if (msg) setRequestMessage(requestId, msg.id);
   } else {
-    // Nothing staffed → still post so an owner who shows up can act, but ping
-    // no-one (the old behaviour blasted every office-owner role into the channel).
+    // Nothing staffed → post the Allow/Deny card AND ping the offices' owner ROLES
+    // so someone actually comes to let them in (Dion: "ping them outside"). We
+    // ping the distinct owner roles of the configured offices, deduped + capped so
+    // it's a targeted heads-up, not a blast of every role. Roles with no owner_role_id
+    // are skipped; if none have one, we post pingless (as before).
     const btns = offices.slice(0, 20).map(o => new ButtonBuilder().setCustomId(`office_bring_${requestId}_${o.channel_id}`).setLabel(`Bring to ${o.channel_name || 'office'}`.slice(0, 80)).setStyle(ButtonStyle.Success).setEmoji(ce('allow')));
     const rows = [];
     for (let i = 0; i < btns.length; i += 5) rows.push(new ActionRowBuilder().addComponents(btns.slice(i, i + 5)));
     rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`office_deny_${requestId}`).setLabel('Deny').setStyle(ButtonStyle.Danger).setEmoji(ce('deny'))));
+    const roleIds = [...new Set(offices.map(o => o.owner_role_id).filter(Boolean))].slice(0, 8);
+    const pingLine = roleIds.length ? roleIds.map(r => `<@&${r}>`).join(' ') : undefined;
     const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('Office Access Request')
       .setDescription(`${E.announce} <@${requester.id}> is in the waiting room and would like to join an office.\n\nNo office is staffed right now — an owner can bring them in, or deny.`)
       .setFooter({ text: `Request #${requestId} • expires in 10 min` }).setTimestamp();
-    const msg = await target.send({ embeds: [embed], components: rows }).catch(() => null);
+    const msg = await target.send({ content: pingLine, embeds: [embed], components: rows, allowedMentions: { roles: roleIds } }).catch(() => null);
     if (msg) setRequestMessage(requestId, msg.id);
   }
 
