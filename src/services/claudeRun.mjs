@@ -259,11 +259,22 @@ function cleanup() {
     const env = { ...process.env, HOME, PATH: `${process.env.PATH || ''}:${HOME}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin` };
     const child = spawn(CLAUDE, args, { cwd: REPO, env });
     let buf = '', finalText = null, sessionId = resumeId, isErr = false, cost = 0, turns = 0, stderr = '', stoppedBy = null, terminated = false;
+    // Resolve as soon as the run is truly finished — don't block on the stdout
+    // pipe closing. If the Claude session spawned a BACKGROUNDED child (e.g. a
+    // run_in_background bash), that child inherits stdout and keeps the pipe open
+    // long after Claude emitted its `result` and exited — so waiting on
+    // child.on('close') would leave the reply stuck on the last phase ("Thinking
+    // it through…") until the 60-min timeout. `doneResolve` finalises the moment
+    // we have everything (the result event, a stop, or the process exiting).
+    let doneResolve;
+    const done = new Promise(res => { doneResolve = res; });
+    const finish = () => { try { doneResolve(); } catch {} };
     const term = (reason) => {
       if (terminated) return; terminated = true;
       if (reason.stop) stoppedBy = reason.stop;
       if (reason.timeout) { isErr = true; finalText = `timed out after ${Math.round(TIMEOUT_MS / 60_000)} minutes`; }
       try { child.kill('SIGKILL'); } catch { }
+      finish();
     };
     const killer = setTimeout(() => term({ timeout: true }), TIMEOUT_MS);
     // Stop button → kill sessions that were running when it was clicked (we
@@ -289,10 +300,21 @@ function cleanup() {
           const toolBlocks = ev.message.content.filter(b => b.type === 'tool_use');
           if (toolBlocks.length) { const tb = toolBlocks[toolBlocks.length - 1]; pushPhase(phaseFor(tb.name, tb.input)); setStatus(); }
           else if (ev.message.content.some(b => b.type === 'text' && b.text)) { pushPhase('think'); setStatus(); }
-        } else if (ev.type === 'result' && !terminated) { finalText = ev.result; sessionId = ev.session_id || sessionId; isErr = !!ev.is_error; cost = ev.total_cost_usd || 0; turns = ev.num_turns || 0; }
+        } else if (ev.type === 'result' && !terminated) {
+          finalText = ev.result; sessionId = ev.session_id || sessionId; isErr = !!ev.is_error; cost = ev.total_cost_usd || 0; turns = ev.num_turns || 0;
+          // The result event IS the definitive end of the turn — finalise now so a
+          // backgrounded child holding stdout open can't stall the reply. Kill the
+          // child (and its group) so any such leaked pipe is released.
+          try { child.kill('SIGKILL'); } catch {}
+          finish();
+        }
       }
     });
-    await new Promise(res => child.on('close', res)).catch(() => { });
+    // Also finalise if the process exits/closes without a result event (crash,
+    // early EOF) — whichever comes first wins; both are idempotent.
+    child.on('close', finish);
+    child.on('exit', finish);
+    await done;
     clearTimeout(killer); clearInterval(stopWatch);
     return { finalText, sessionId, isErr, cost, turns, stderr, stoppedBy };
   }
