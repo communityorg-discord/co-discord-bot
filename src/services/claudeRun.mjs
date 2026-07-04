@@ -210,7 +210,9 @@ function cleanup() {
     const list = seen.slice(-8);
     return (list.length ? list : ['investigate']).map((k, i) => {
       const p = PHASES[k] || PHASES.think;
-      return i === list.length - 1 ? `${em(p.key, p.emoji)} ${p.doing}…` : `${em('tick', '✅')} ${p.done}`;
+      // The current step gets the animated processing spinner in front of it so
+      // the card visibly *moves* while it works; finished steps get a tick.
+      return i === list.length - 1 ? `${em('processing', '⏳')} ${em(p.key, p.emoji)} ${p.doing}…` : `${em('tick', '✅')} ${p.done}`;
     }).join('\n');
   };
   const renderDone = () => seen.slice(-8).map(k => `${em('tick', '✅')} ${(PHASES[k] || PHASES.think).done}`).join('\n');
@@ -231,7 +233,7 @@ function cleanup() {
     WORKER = s.name;
     const stopRef = /<:(\w+):(\d+)>/.exec(em('stop', '') || '');
     var STOP_ROW = [{ type: 1, components: [{ type: 2, style: 4, label: 'Stop all', emoji: stopRef ? { name: stopRef[1], id: stopRef[2] } : { name: '🛑' }, custom_id: 'claudebr:stop' }] }];
-    const st = await reply({ embeds: [embed(0x6c7bff, `${em('boot', '🔧')} Spinning up a session…`, foot('live'))], components: STOP_ROW });
+    const st = await reply({ embeds: [embed(0x6c7bff, `${em('processing', '⏳')} ${em('boot', '🔧')} Spinning up a session…`, foot('live'))], components: STOP_ROW });
     if (st?.id) { ACTIVE_SLOT = s.id; statusId = st.id; break; }
     releaseSlot(s.id);                          // couldn't post here → try the next worker
   }
