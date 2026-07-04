@@ -443,4 +443,70 @@ export const COMMANDS = {
             const filter = String(args[0] || '').trim();
             return { raw: filter ? buildCategory(filter) : buildHome() };
         } },
+
+    // ── Secure Network (VPN gating) — break-glass dual control over Discord ──
+    // These are the founder-only prefix commands that work even when the VPN or
+    // the control portal is unreachable (Discord is always up). They drive the
+    // SAME dual-control state machine as dev.usgrp.xyz/control → Security via the
+    // control service's loopback internal endpoint on this box.
+    setvpncode: { group: 'Server', usage: '.setvpncode <6 digits>', desc: 'Set YOUR personal 6-digit code for the disable-VPN control.',
+        async run({ args, authorId }) {
+            const pin = String(args[0] || '').replace(/\D/g, '');
+            if (!/^\d{6}$/.test(pin)) throw new Error('Give exactly 6 digits, e.g. `.setvpncode 123456`.');
+            const r = await callVpn('set-pin', authorId, { pin });
+            if (!r.ok) throw new Error(r.error || 'Failed.');
+            return { title: 'VPN code set', note: 'Your personal 6-digit code is saved. Use it to arm `.disablevpn`.', icon: E.check };
+        } },
+    disablevpn: { group: 'Server', usage: '.disablevpn <your 6-digit code>', desc: 'Arm the two-person disable of VPN-only access (both founders must run it; 24h delay).',
+        async run({ args, authorId, authorName }) {
+            const pin = String(args[0] || '').replace(/\D/g, '');
+            if (!/^\d{6}$/.test(pin)) throw new Error('Include your 6-digit code, e.g. `.disablevpn 123456`. Not set one yet? `.setvpncode <6 digits>` first.');
+            const r = await callVpn('arm', authorId, { pin });
+            if (!r.ok) throw new Error(r.message || r.error || 'Failed to arm.');
+            if (r.both || r.firesAt) {
+                const fires = r.firesAt ? `<t:${Math.floor(r.firesAt / 1000)}:R>` : 'in 24 hours';
+                return { title: '⏳ Disable armed by BOTH founders', note: `Both codes are in — VPN-only access will drop **${fires}** (dev + ops reachable anywhere, login still required). Cancel any time with \`.canceldisablevpn\`.`, icon: E.check };
+            }
+            return { title: '🔐 Your side armed', note: `You've armed it. The **other founder** must also run \`.disablevpn <their code>\` before the 24-hour timer starts. Cancel with \`.canceldisablevpn\`.`, icon: E.check };
+        } },
+    canceldisablevpn: { group: 'Server', usage: '.canceldisablevpn', desc: 'Cancel a pending disable-VPN request (either founder, any time before it fires).',
+        async run({ authorId }) {
+            const r = await callVpn('cancel', authorId, {});
+            if (!r.ok) throw new Error(r.error || 'Failed.');
+            return { title: 'Disable cancelled', note: r.cancelled ? 'The pending disable-VPN request is cancelled and both arms cleared.' : 'Nothing was pending to cancel.', icon: E.check };
+        } },
+    enablevpn: { group: 'Server', usage: '.enablevpn', desc: 'Re-enable VPN-only access after it has been disabled.',
+        async run({ authorId }) {
+            const r = await callVpn('re-enable', authorId, {});
+            if (!r.ok) throw new Error(r.error || 'Failed to re-enable.');
+            return { title: '🔒 VPN-only access restored', note: 'dev + ops are gated to the Secure Network again.', icon: E.check };
+        } },
+    vpnstatus: { group: 'Server', usage: '.vpnstatus', desc: 'Show the current disable-VPN state (armed / timer / gate).',
+        async run({ authorId }) {
+            const s = await callVpn('status', authorId, {});
+            const armed = (s.armedBy && s.armedBy.length) ? s.armedBy.join(' + ') + ` (${s.armedBy.length}/2)` : 'nobody';
+            const fires = s.firesAt ? `\n**Processes:** <t:${Math.floor(s.firesAt / 1000)}:R>` : '';
+            const gate = s.gate === 'ungated' ? '🌐 DISABLED (reachable anywhere)' : '🔒 gated (VPN-only)';
+            const pin = s.needsPin ? '\n⚠ You haven\'t set your 6-digit code yet — `.setvpncode <6 digits>`.' : '';
+            return { title: 'Secure Network — disable status', note: `**Gate:** ${gate}\n**Armed by:** ${armed}${fires}${pin}`, icon: E.seal };
+        } },
 };
+
+// Call the control service's loopback internal endpoint (works even off-VPN — the
+// bot + control service share this box). Auth = the shared internal token.
+async function callVpn(action, fid, extra) {
+    const base = process.env.USGRP_CONTROL_URL || 'http://127.0.0.1:7684/control';
+    const token = process.env.ASPIRE_INTERNAL_TOKEN || '';
+    try {
+        const r = await fetch(`${base}/internal/disable`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ action, fid: String(fid), ...extra }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok && !j.error) return { ok: false, error: `control service returned ${r.status}` };
+        return j;
+    } catch (e) {
+        return { ok: false, error: 'Control service unreachable on this box: ' + (e.message || e) };
+    }
+}
