@@ -484,11 +484,55 @@ export const COMMANDS = {
     vpnstatus: { group: 'Server', usage: '.vpnstatus', desc: 'Show the current disable-VPN state (armed / timer / gate).',
         async run({ authorId }) {
             const s = await callVpn('status', authorId, {});
-            const armed = (s.armedBy && s.armedBy.length) ? s.armedBy.join(' + ') + ` (${s.armedBy.length}/2)` : 'nobody';
-            const fires = s.firesAt ? `\n**Processes:** <t:${Math.floor(s.firesAt / 1000)}:R>` : '';
-            const gate = s.gate === 'ungated' ? '🌐 DISABLED (reachable anywhere)' : '🔒 gated (VPN-only)';
-            const pin = s.needsPin ? '\n⚠ You haven\'t set your 6-digit code yet — `.setvpncode <6 digits>`.' : '';
-            return { title: 'Secure Network — disable status', note: `**Gate:** ${gate}\n**Armed by:** ${armed}${fires}${pin}`, icon: E.seal };
+            if (s.ok === false) throw new Error(s.error || 'Could not reach the control service.');
+
+            const ungated = s.gate === 'ungated';
+            const pending = !!s.firesAt && !s.executed;
+            const armedCount = (s.armedBy || []).length;
+
+            // Colour tells the story at a glance: green = locked down & quiet,
+            // amber = a disable is armed/counting down, red = VPN gate is OFF.
+            const color = ungated ? 0xEF4444 : (pending || armedCount) ? 0xF59E0B : 0x22C55E;
+
+            const fields = [];
+            fields.push({
+                name: 'Access gate',
+                value: ungated
+                    ? '🌐 **Open** — dev + ops reachable anywhere (login still required)'
+                    : '🔒 **VPN-only** — Secure Network required',
+                inline: false,
+            });
+
+            const armedNames = armedCount ? s.armedBy.join(' + ') : '—';
+            fields.push({
+                name: `Armed by (${armedCount}/2)`,
+                value: armedCount ? armedNames : 'Nobody — no disable request pending',
+                inline: true,
+            });
+
+            fields.push({
+                name: 'Status',
+                value: ungated ? '✅ Disabled & live'
+                    : pending ? '⏳ Counting down'
+                    : armedCount ? '🔓 One founder armed'
+                    : '🛡️ Fully secured',
+                inline: true,
+            });
+
+            if (pending) {
+                const t = Math.floor(s.firesAt / 1000);
+                fields.push({ name: 'Auto-disables', value: `<t:${t}:R> · <t:${t}:f>\nCancel any time with \`.canceldisablevpn\``, inline: false });
+            }
+            if (s.needsPin) {
+                fields.push({ name: '⚠ Your 6-digit code', value: 'Not set yet — run `.setvpncode <6 digits>` before you can arm a disable.', inline: false });
+            }
+
+            const note = ungated ? 'The VPN gate is currently **off**. Restore it with `.enablevpn`.'
+                : pending ? 'A two-person disable is armed and counting down.'
+                : armedCount ? 'One founder has armed a disable — the other must confirm to start the 24h timer.'
+                : 'Everything is locked to the Secure Network. All quiet.';
+
+            return { title: 'Secure Network · disable status', note, fields, color, icon: E.seal };
         } },
 };
 

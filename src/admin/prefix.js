@@ -85,7 +85,7 @@ export function setupAdminPrefix(client) {
                 const r = (typeof result === 'string') ? { note: result } : (result || {});
                 const theme = THEME[cmd.group] || { color: 0x5865F2, icon: E.check };
                 const icon = r.icon || theme.icon || E.check;
-                embed.setColor(theme.color).setAuthor({ name: BRAND.name }).setTitle(r.title || `.${name}`)
+                embed.setColor(r.color ?? theme.color).setAuthor({ name: BRAND.name }).setTitle(r.title || `.${name}`)
                     .setDescription(`${icon} ${r.note || 'Done.'}`.slice(0, 4000)).setFooter({ text: `.${name} · run by ${message.author.username}` });
                 if (Array.isArray(r.fields) && r.fields.length) embed.addFields(r.fields.slice(0, 25));
                 if (r.target) { const u = await client.users.fetch(r.target).catch(() => null); if (u) embed.setThumbnail(u.displayAvatarURL({ size: 128 })); }
