@@ -1,7 +1,7 @@
 // AUTO-GENERATED custom Community Organisation app emojis (blurple/indigo brand).
 // Custom emojis render in embed descriptions + field VALUES (not titles/field names).
 export const E = {
-  processing: '<a:processing:1522923991508062248>',
+  processing: '<a:processing:1522927700623495328>',
   acting: '<:acting:1509040402529914880>',
   announce: '<:announce:1509040414454448299>',
   aps: '<:aps:1509040395122774027>',
