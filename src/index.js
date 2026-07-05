@@ -2209,26 +2209,34 @@ client.on('interactionCreate', async interaction => {
     // All best-effort — they always get a friendly confirmation.
     if (interaction.customId === 'tos_agree') {
       const displayName = interaction.member?.displayName || interaction.user.globalName || interaction.user.username;
-      // Portal record (Postgres). Non-blocking on failure.
+      // Portal record (Postgres) — the SINGLE arbiter of "first acceptance"
+      // across both the on-site popup and this Discord button, so the founders
+      // get exactly one DM per citizen. `portalFirstTime` is null if the portal
+      // couldn't be reached; we then fall back to the local bot-data.db check.
+      let portalFirstTime = null;
       try {
         const base = process.env.ASPIRE_PORTAL_INTERNAL_URL || 'http://localhost:3019';
         const token = process.env.ASPIRE_INTERNAL_TOKEN;
         if (token) {
-          await fetch(`${base}/api/internal/legal-consent`, {
+          const resp = await fetch(`${base}/api/internal/legal-consent`, {
             method: 'POST',
             signal: AbortSignal.timeout(5000),
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify({ discord_id: interaction.user.id, source: 'discord_dm', version: 'July 2026' }),
-          }).catch(() => {});
+          });
+          const j = await resp.json().catch(() => null);
+          if (j && typeof j.first_time === 'boolean') portalFirstTime = j.first_time;
         }
       } catch { /* never block the acknowledgement on the record write */ }
-      // Local record + first-time founder notify.
-      let firstTime = false, total = 0;
+      // Local record (for a running total) + local first-time as a fallback.
+      let localFirstTime = false, total = 0;
       try {
         const { recordLegalConsent, getLegalConsentCount } = await import('./utils/botDb.js');
-        ({ firstTime } = recordLegalConsent({ discordId: interaction.user.id, username: interaction.user.username, displayName }));
+        ({ firstTime: localFirstTime } = recordLegalConsent({ discordId: interaction.user.id, username: interaction.user.username, displayName }));
         total = getLegalConsentCount();
       } catch (e) { console.error('[tos_agree] local record', e.message); }
+      // Prefer the portal's verdict; fall back to local only if the portal was unreachable.
+      const firstTime = portalFirstTime === null ? localFirstTime : portalFirstTime;
       // Disable the button in-place so it reads "✓ Agreed" and can't re-fire.
       try {
         const msg = interaction.message;
