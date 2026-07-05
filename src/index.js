@@ -2201,6 +2201,70 @@ client.on('interactionCreate', async interaction => {
       return interaction.showModal(modal).catch(() => {});
     }
 
+    // Terms of Use + Privacy "I Agree" — the button on the consent DM broadcast.
+    // 1) Record it in the Citizen Portal (metadata.legal_consent + audit) — the
+    //    real game source of truth. 2) Record it in bot-data.db so we can count
+    //    acceptances and notify the founders the FIRST time each citizen agrees.
+    // 3) Disable the button so it can't be tapped twice, and thank the citizen.
+    // All best-effort — they always get a friendly confirmation.
+    if (interaction.customId === 'tos_agree') {
+      const displayName = interaction.member?.displayName || interaction.user.globalName || interaction.user.username;
+      // Portal record (Postgres). Non-blocking on failure.
+      try {
+        const base = process.env.ASPIRE_PORTAL_INTERNAL_URL || 'http://localhost:3019';
+        const token = process.env.ASPIRE_INTERNAL_TOKEN;
+        if (token) {
+          await fetch(`${base}/api/internal/legal-consent`, {
+            method: 'POST',
+            signal: AbortSignal.timeout(5000),
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ discord_id: interaction.user.id, source: 'discord_dm', version: 'July 2026' }),
+          }).catch(() => {});
+        }
+      } catch { /* never block the acknowledgement on the record write */ }
+      // Local record + first-time founder notify.
+      let firstTime = false, total = 0;
+      try {
+        const { recordLegalConsent, getLegalConsentCount } = await import('./utils/botDb.js');
+        ({ firstTime } = recordLegalConsent({ discordId: interaction.user.id, username: interaction.user.username, displayName }));
+        total = getLegalConsentCount();
+      } catch (e) { console.error('[tos_agree] local record', e.message); }
+      // Disable the button in-place so it reads "✓ Agreed" and can't re-fire.
+      try {
+        const msg = interaction.message;
+        const embed = msg?.embeds?.[0]?.toJSON?.() || msg?.embeds?.[0] || null;
+        const oldRow = msg?.components?.[0]?.toJSON?.() || msg?.components?.[0];
+        const link = oldRow?.components?.find(c => c.style === 5);
+        const rows = [{ type: 1, components: [
+          { type: 2, style: 3, label: '✓ Agreed', custom_id: 'tos_agreed_done', disabled: true },
+          ...(link ? [link] : []),
+        ] }];
+        await interaction.update({ embeds: embed ? [embed] : [], components: rows }).catch(() => {});
+      } catch { await interaction.deferUpdate().catch(() => {}); }
+      // Friendly ephemeral confirmation.
+      await interaction.followUp({
+        embeds: [new EmbedBuilder().setColor(0x2ecc8f)
+          .setTitle('✓ Thanks — you\'re all set')
+          .setDescription('You\'ve accepted the USGRP Terms of Use and Privacy Policy. You can read the full documents any time at citizen.usgrp.xyz/legal/terms. Welcome to USGRP!')
+          .setFooter({ text: BRAND.footer }).setTimestamp()],
+        flags: 64,
+      }).catch(() => {});
+      // First-time only: let Dion + Evan see who agreed + the running total.
+      if (firstTime) {
+        const notice = new EmbedBuilder().setColor(0x2ecc8f)
+          .setTitle('📜 Terms & Privacy accepted')
+          .setDescription(`**${displayName}** has accepted the Terms of Use and Privacy Policy.`)
+          .addFields(
+            { name: 'Citizen', value: `<@${interaction.user.id}>`, inline: true },
+            { name: 'Discord ID', value: interaction.user.id, inline: true },
+            { name: 'Total accepted', value: String(total), inline: true },
+          )
+          .setFooter({ text: BRAND.footer }).setTimestamp();
+        notifyFounders(client, notice).catch(() => {});
+      }
+      return;
+    }
+
     // Admin .help category menu — lazy-import the handler (its registry
     // import pulls in the DB, only ready after startup). Gated to
     // superusers inside the handler.

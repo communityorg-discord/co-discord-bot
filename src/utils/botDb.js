@@ -2009,4 +2009,33 @@ export function getUltimatum(userId) { return db.prepare(`SELECT * FROM dm_ultim
 export function setUltimatumStatus(userId, status) { return db.prepare(`UPDATE dm_ultimatums SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`).run(String(status), String(userId)).changes; }
 export function setUltimatumNextReminder(userId, nextReminderAt) { return db.prepare(`UPDATE dm_ultimatums SET next_reminder_at = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`).run(nextReminderAt ? String(nextReminderAt) : null, String(userId)).changes; }
 
+// ── Legal consent (Terms of Use + Privacy Policy "I Agree") ──────────────────
+// Recorded when a citizen taps "I Agree" on the consent DM the broadcast sends.
+// UNIQUE on discord_id so we keep the FIRST acceptance and repeat taps don't
+// create duplicate rows — recordLegalConsent returns { firstTime } so the caller
+// only DMs the founders the first time (no spam on re-taps).
+db.exec(`CREATE TABLE IF NOT EXISTS legal_consents (
+  discord_id   TEXT PRIMARY KEY,
+  username     TEXT,
+  display_name TEXT,
+  source       TEXT DEFAULT 'consent_dm',
+  accepted_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_legal_consents_accepted ON legal_consents(accepted_at)`);
+export function recordLegalConsent({ discordId, username, displayName, source = 'consent_dm' }) {
+  try {
+    const info = db.prepare(`INSERT OR IGNORE INTO legal_consents (discord_id, username, display_name, source)
+                             VALUES (?, ?, ?, ?)`)
+      .run(String(discordId), username ? String(username) : null, displayName ? String(displayName) : null, String(source));
+    const row = db.prepare(`SELECT * FROM legal_consents WHERE discord_id = ?`).get(String(discordId));
+    return { firstTime: info.changes > 0, row };
+  } catch (e) {
+    console.error('[legal-consent] record failed:', e.message);
+    return { firstTime: false, row: null };
+  }
+}
+export function getLegalConsentCount() {
+  try { return db.prepare(`SELECT COUNT(*) AS n FROM legal_consents`).get().n; } catch { return 0; }
+}
+
 export { db };
