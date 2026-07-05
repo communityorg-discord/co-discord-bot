@@ -175,23 +175,23 @@ export async function handleWaitingRoomJoin(client, voiceState) {
   if (!offices.length) return;
   const wrVc = guild.channels.cache.get(channelId);
 
-  // The waiting room is only for getting into an office you CAN'T already access —
-  // you can just join the ones you can directly. So we never suggest a member the
-  // offices they could already walk into; we look only at the ones they lack access
-  // to and send an access request to whichever are in use. postWaitingRequest pings
-  // the present owners (one office in use → Allow/Deny; several → asks the requester
-  // which). So if only the Ownership office is staffed, its owners get the request.
-  const requestable = offices.filter(o => !canAccessOffice(member, o));
-  if (!requestable.length) {
-    // They can already access every office — nothing to request. If exactly one is
-    // in use, drop them straight in; otherwise leave them (they can join directly).
+  // Convenience fast-path: if the member can walk into EVERY office and exactly one
+  // is in use, drop them straight in rather than making anyone click.
+  const requestableOnly = offices.filter(o => !canAccessOffice(member, o));
+  if (!requestableOnly.length) {
     const inUse = offices.filter(o => officeOccupied(guild, o));
-    if (inUse.length === 1) await moveInto(member, inUse[0], 'auto');
-    return;
+    if (inUse.length === 1) { await moveInto(member, inUse[0], 'auto'); return; }
   }
 
+  // Otherwise offer to route them into ANY configured office. We used to hide the
+  // offices the member could already access — but that meant an allowlisted guest
+  // (e.g. someone added to the Oval Office list) surfaced NO "Bring to Oval Office"
+  // button at all, so an owner/founder couldn't pull them in from the waiting room.
+  // The "Bring to X" button is owner-gated on click (only an owner/superuser can
+  // actually approve), so showing every office grants nothing — it just makes the
+  // button appear. Post the card for all offices.
   const requestId = createRequest({ guildId: guild.id, requesterId: member.id, requesterTag: member.user.tag || member.user.username, sourceChannelId: channelId });
-  await postWaitingRequest(client, guild, wrVc, requestId, member, requestable);
+  await postWaitingRequest(client, guild, wrVc, requestId, member, offices);
 }
 
 // Is anyone (a non-bot member) currently sitting in this office's voice channel?
