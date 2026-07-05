@@ -258,7 +258,10 @@ function cleanup() {
   async function runOnce(resumeId) {
     const args = ['-p', '--output-format', 'stream-json', '--verbose', '--dangerously-skip-permissions'];
     if (resumeId) args.push('--resume', resumeId);
-    const env = { ...process.env, HOME, PATH: `${process.env.PATH || ''}:${HOME}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin` };
+    // CLAUDE_AUTOMATED silences the global "Claude finished — your turn" Stop-hook
+    // DM — this bridge run posts its own rich progress card, so the generic
+    // session-end DM to Dion + Evan is just noise.
+    const env = { ...process.env, HOME, CLAUDE_AUTOMATED: '1', PATH: `${process.env.PATH || ''}:${HOME}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin` };
     const child = spawn(CLAUDE, args, { cwd: REPO, env });
     let buf = '', finalText = null, sessionId = resumeId, isErr = false, cost = 0, turns = 0, stderr = '', stoppedBy = null, terminated = false;
     // Resolve as soon as the run is truly finished — don't block on the stdout
