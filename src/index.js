@@ -3513,7 +3513,13 @@ client.on('guildMemberAdd', async (member) => {
 // Message edit log — tracked globally across all servers
 client.on('messageUpdate', async (oldMessage, newMessage) => {
   if (!oldMessage || !newMessage) return;
-  if (oldMessage.author?.bot) return;
+  // Skip ALL bot-authored edits. We check newMessage.author because on a
+  // messageUpdate the OLD message is often an uncached partial with author=null,
+  // so `oldMessage.author?.bot` silently fails to catch it. Without this, other
+  // bots' auto-refreshing embeds (e.g. USGRP | Services re-rendering the #markets
+  // / #roleplay-logs panels every ~5 min) spammed the audit log with useless
+  // "No text content" edit entries.
+  if (newMessage.author?.bot || oldMessage.author?.bot) return;
   if (newMessage.author?.id === newMessage.client.user.id) return;
   if (oldMessage.content === newMessage.content) return;
   try {
