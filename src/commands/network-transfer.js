@@ -55,11 +55,19 @@ function availLabel(p) {
 }
 const availEmoji = (p) => { const { taken, open } = posSeats(p); return open === 0 ? '🔴' : (taken === 0 ? '🟢' : '🟡'); };
 
+// Strip any leaked title/division junk (e.g. a display name already carrying
+// "Ian V.  FSA") so the prefilled name is just the person's name.
+function cleanNameGuess(raw) {
+  let n = String(raw || '').split('|')[0].replace(/[~|]/g, '');
+  let prev;
+  do { prev = n; n = n.replace(/[\s,]+(?:FSA|DSA|SSA|SAD)\s*$/i, ''); } while (n !== prev);
+  return n.replace(/\s+/g, ' ').trim();
+}
 function guessName(interaction, targetId) {
   const m = interaction.guild?.members?.cache?.get(targetId);
   const u = interaction.client.users.cache.get(targetId);
   const raw = m?.displayName || u?.globalName || u?.username || '';
-  return String(raw).split('|')[0].trim().slice(0, 24);
+  return cleanNameGuess(raw).slice(0, 24);
 }
 
 function nameModal(targetId, seatNo, position, days, prefill) {
