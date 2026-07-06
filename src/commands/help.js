@@ -12,7 +12,7 @@ import { BRAND } from '../utils/brand.js';
 // under "Other". Order here is the display order.
 const CATEGORY = {
   Moderation: ['warn', 'kick', 'timeout', 'untimeout', 'serverban', 'unban', 'purge', 'lockdown'],
-  'Network Administration': ['gban', 'gunban', 'gnick', 'mass-unban', 'ban', 'terminate', 'network-verify', 'force-verify', 'access'],
+  'Network Administration': ['gban', 'gunban', 'gnick', 'mass-unban', 'ban', 'terminate', 'network-verify', 'network-transfer', 'force-verify', 'access'],
   'Logs & Config': ['logspanel', 'orglogs', 'privatelogs', 'automod', 'server-health', 'bot-perms', 'audit-log', 'cooldown'],
   Tickets: ['create-ticket-panel', 'ticket-panel-send', 'ticket-panel-delete', 'ticket-options'],
   'Leave of Absence': ['loa', 'loa-panel'],

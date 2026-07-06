@@ -37,6 +37,8 @@ import { handleButton as unverifyButton, handleModal as unverifyModal } from './
 import * as verify from './commands/verify.js';
 import * as networkVerify from './commands/network-verify.js';
 import { handleButton as netverifyButton, handleSelect as netverifySelect, handleModal as netverifyModal } from './commands/network-verify.js';
+import * as networkTransfer from './commands/network-transfer.js';
+import { handleButton as nettransferButton, handleSelect as nettransferSelect, handleModal as nettransferModal } from './commands/network-transfer.js';
 import * as dm from './commands/dm.js';
 import * as dmExempt from './commands/dm-exempt.js';
 import * as purge from './commands/purge.js';
@@ -199,7 +201,7 @@ const welcomeTracker     = new Map(); // discord_id → count this week
 const ATLAS_DISCORD_USER_ID = '1465559216172568812';
 const ATLAS_GATE_NOTICE_COOLDOWN_MS = 5 * 60_000; // 5m per user
 const atlasGateNoticeCooldown = new Map(); // discord_id → last notice ms
-const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, info, unban, verify, unverify, networkVerify, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, ban, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm, serverHealth, syncRoles, accessCmd, whois, leaderboard, myroles, roleInfo, serverinfo, channelInfo, syncAllRoles, findUser, auditLog, botPerms, feedback, embedCmd, whoIsHere, quote, snippet, ping, staffOnline, timezone, randomPick, standup, thanks, kudosLeaderboard, todoCmd, reminders, myKudos, links, breakCmd, idea, panicBotCmd, logsCmd, emergencyCmd, panelCmd, loaCmd, loaPanelCmd];
+const commands = [dm, dmExempt, purge, scribe, brag, leave, staff, cases, caseLookup, aps, helpdeskCmd, nid, suspend, unsuspend, investigate, terminate, gban, gunban, infractions, user, botInfo, info, unban, verify, unverify, networkVerify, networkTransfer, authorisationOverride, cooldown, massUnban, logspanel, orglogs, privatelogs, createTicketPanel, ticketPanelSend, deleteTicketPanel, ticketOptions, warn, timeout, kick, ban, serverban, help, inbox, assign, acting, remind, onboard, eliminate, lockdown, automodCmd, stats, officeSetup, counting, forceVerify, gnick, record, poll, scheduleDm, serverHealth, syncRoles, accessCmd, whois, leaderboard, myroles, roleInfo, serverinfo, channelInfo, syncAllRoles, findUser, auditLog, botPerms, feedback, embedCmd, whoIsHere, quote, snippet, ping, staffOnline, timezone, randomPick, standup, thanks, kudosLeaderboard, todoCmd, reminders, myKudos, links, breakCmd, idea, panicBotCmd, logsCmd, emergencyCmd, panelCmd, loaCmd, loaPanelCmd];
 // The CO Staff Network is suspended, so its CO-specific commands are HIDDEN —
 // the command files are kept, they're just not registered with Discord or routed.
 // Moderation, tickets, office, network-verify and general utility stay live.
@@ -2285,6 +2287,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
     if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
     if (interaction.customId.startsWith('netverify_')) return netverifyButton(interaction);
+    if (interaction.customId.startsWith('nettransfer_') || interaction.customId.startsWith('nettrial_')) return nettransferButton(interaction);
     // Ultimatum Clear / Keep buttons on a relayed reply — founders decide whether
     // a reply is good enough; a reply alone no longer auto-cancels the ultimatum.
     if (interaction.customId.startsWith('ult:')) {
@@ -2715,6 +2718,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId.startsWith('verify_')) return verifyButton(interaction);
     if (interaction.customId.startsWith('unverify_')) return unverifyButton(interaction);
     if (interaction.customId.startsWith('netverify_')) return netverifySelect(interaction);
+    if (interaction.customId.startsWith('nettransfer_')) return nettransferSelect(interaction);
     if (interaction.customId?.startsWith('logspanel_')) {
       try { return logspanel.handleSelect(interaction); }
       catch(e) { console.error('[logspanel handleSelect error]', e.message, 'customId:', interaction.customId, 'values:', interaction.values); throw e; }
@@ -2760,6 +2764,7 @@ client.on('interactionCreate', async interaction => {
 
     // /network-verify "what's their name?" modal → renders the dry-run preview
     if (interaction.customId?.startsWith('netverify_name~')) return netverifyModal(interaction);
+    if (interaction.customId?.startsWith('nettransfer_name~')) return nettransferModal(interaction);
 
     // AutoMod panel modals
     if (interaction.customId?.startsWith('automod_')) {

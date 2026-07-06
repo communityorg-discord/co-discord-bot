@@ -157,6 +157,40 @@ export async function runWeeklyReport(client) {
 }
 
 // ── Scheduler ────────────────────────────────────────────────────────────────
+// ── Network position TRIALS: when a trial window ends, ask an approver to keep
+// or revert it. DMs the person who started the trial (Junior Admin / Admin);
+// falls back to the FSA ops channel so it never gets lost. Runs every 30 min.
+export async function runTrialExpiry(client) {
+    const r = await networkVerifyApi.dueTrials().catch(() => null);
+    const trials = (r && Array.isArray(r.trials)) ? r.trials : [];
+    if (!trials.length) return;
+    for (const t of trials) {
+        const staffer = await client.users.fetch(String(t.discord_id)).catch(() => null);
+        const who = staffer ? `<@${t.discord_id}>` : `user ${t.discord_id}`;
+        const e = new EmbedBuilder().setColor(0xF59E0B)
+            .setTitle('Position trial ended — keep or revert?')
+            .setDescription(`${who}'s **${t.trial_position}** trial has ended.\n\nKeep them there permanently, or revert${t.original_position ? ` to **${t.original_position}**` : ' (they held no network position before, so reverting removes their verification)'}?`)
+            .setFooter({ text: 'USGRP · Network Transfer' }).setTimestamp();
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`nettrial_accept~${t.id}`).setLabel('Keep (accept)').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(`nettrial_reject~${t.id}`).setLabel('Revert (reject)').setStyle(ButtonStyle.Danger),
+        );
+        let delivered = false;
+        if (t.started_by) {
+            const approver = await client.users.fetch(String(t.started_by)).catch(() => null);
+            if (approver) delivered = !!(await approver.send({ embeds: [e], components: [row] }).catch(() => null));
+        }
+        if (!delivered) {
+            // Fall back to the FSA ops channel so a decision is always reachable.
+            try {
+                const ch = await client.channels.fetch(FSA_OPS_CHANNEL).catch(() => null);
+                if (ch?.isTextBased?.()) { await ch.send({ embeds: [e], components: [row] }).catch(() => {}); delivered = true; }
+            } catch { /* best-effort */ }
+        }
+        console.log(JSON.stringify({ msg: 'network trial expiry prompted', trial_id: t.id, discord_id: t.discord_id, delivered }));
+    }
+}
+
 export function startAccessCrons(client) {
     const at = (h, m, fn, label) => {
         const next = () => { const n = new Date(); const t = new Date(n); t.setHours(h, m, 0, 0); if (t <= n) t.setDate(t.getDate() + 1); return t - n; };
@@ -167,6 +201,9 @@ export function startAccessCrons(client) {
     setInterval(() => runExpiryAndWarn(client).catch(e => console.error('[access expiry]', e.message)), 30 * 60 * 1000);
     // leave-watch: every 30 min
     setInterval(() => runLeaveWatch(client).catch(e => console.error('[access leavewatch]', e.message)), 30 * 60 * 1000);
+    // network position trial expiry: every 30 min
+    setInterval(() => runTrialExpiry(client).catch(e => console.error('[access trial-expiry]', e.message)), 30 * 60 * 1000);
+    runTrialExpiry(client).catch(() => {}); // once shortly after boot
     // daily mandatory reminder: 10:00
     at(10, 0, () => runDailyMandatory(client), 'daily-mandatory');
     // weekly report: Sunday 12:00 (check hourly for Sunday-noon)

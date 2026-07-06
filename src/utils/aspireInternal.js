@@ -56,4 +56,13 @@ export const networkVerifyApi = {
   // Touches up to ~19 guilds (roles + nicknames + invites) — give it room.
   apply: (user_id, position, approved_by, seat_no = null, name = null) =>
     call('POST', '/internal/network-verify-apply', { body: { user_id, position, approved_by, seat_no, name }, timeoutMs: 180000 }),
+  // Move someone to a NEW position (they don't keep the old one). trial_days > 0
+  // makes it a trial that an approver accepts/rejects when the window ends.
+  transfer: (user_id, position, approved_by, seat_no = null, name = null, trial_days = 0) =>
+    call('POST', '/internal/network-transfer', { body: { user_id, position, approved_by, seat_no, name, trial_days }, timeoutMs: 180000 }),
+  // Accept (keep) or reject (revert) an in-flight trial.
+  decideTrial: (trial_id, accept, decided_by, name = null) =>
+    call('POST', '/internal/network-trial-decide', { body: { trial_id, accept, decided_by, name }, timeoutMs: 180000 }),
+  // Trials whose window elapsed + not yet prompted (marks them prompted).
+  dueTrials: () => call('POST', '/internal/network-trials-due', { body: {} }),
 };
