@@ -14,6 +14,19 @@ import { logAction } from '../utils/logger.js';
 import { E } from '../lib/emoji.js';
 
 const SEP = '~';
+// Dion + Evan only (Dion: "me and Evan get notified") — matches FOUNDER_IDS in index.js.
+const FOUNDER_IDS = ['723199054514749450', '415922272956710912'];
+
+// DM the founders an embed (they want a heads-up on every staff move), plus DM
+// the affected staffer so they know their own position changed. Best-effort.
+async function notifyFounders(client, embed) {
+  for (const id of FOUNDER_IDS) {
+    try { const u = await client.users.fetch(id); await u.send({ embeds: [embed] }); } catch { /* DMs closed */ }
+  }
+}
+async function dmUser(client, userId, embed) {
+  try { const u = await client.users.fetch(String(userId)); await u.send({ embeds: [embed] }); return true; } catch { return false; }
+}
 const TRIAL_DAYS = [0, 7, 14, 30]; // 0 = permanent
 const trialLabel = (d) => d === 0 ? 'Permanent transfer' : `${d}-day trial`;
 
@@ -177,6 +190,17 @@ export async function handleButton(interaction) {
       ? base.setColor(0x22C55E).setTitle('Trial accepted — position kept').setDescription(`<@${r.user_id}> keeps **${r.position}** permanently.`).setFooter({ text: `Decided by ${interaction.user.username} · USGRP Network Transfer` })
       : base.setColor(0xF59E0B).setTitle('Trial rejected — reverted').setDescription(`<@${r.user_id}> reverted${r.reverted_to ? ` to **${r.reverted_to}**` : ' — network verification removed (they held nothing before)'}.`).setFooter({ text: `Decided by ${interaction.user.username} · USGRP Network Transfer` });
     await logAction(interaction.client, { action: `Network Trial ${accept ? 'Accepted' : 'Rejected'}`, target: { discordId: r.user_id }, moderator: { discordId: interaction.user.id, name: interaction.user.username }, reason: accept ? r.position : `reverted to ${r.reverted_to || 'none'}`, color: accept ? 0x22C55E : 0xF59E0B }).catch(() => {});
+    // Founders get the outcome too.
+    await notifyFounders(interaction.client, new EmbedBuilder().setColor(accept ? 0x22C55E : 0xF59E0B)
+      .setTitle(accept ? '✅ Network trial accepted' : '↩️ Network trial reverted')
+      .setDescription(accept ? `<@${r.user_id}> keeps **${r.position}** permanently.` : `<@${r.user_id}> reverted${r.reverted_to ? ` to **${r.reverted_to}**` : ' — verification removed (held nothing before)'}.`)
+      .addFields({ name: 'Decided by', value: `<@${interaction.user.id}>`, inline: true })
+      .setFooter({ text: 'USGRP · Network Transfer' }).setTimestamp());
+    // Tell the affected staffer the outcome of their trial.
+    await dmUser(interaction.client, r.user_id, new EmbedBuilder().setColor(accept ? 0x22C55E : 0xF59E0B)
+      .setTitle(accept ? `Your trial was accepted — you keep ${r.position}` : 'Your trial ended — position reverted')
+      .setDescription(accept ? `Congratulations — your trial as **${r.position}** is now permanent. Your roles across the network stay as they are.` : `Your trial has ended and you've been returned${r.reverted_to ? ` to **${r.reverted_to}**` : ' to your previous state (network verification removed)'}. Your roles and nickname have been updated accordingly.`)
+      .setFooter({ text: 'USGRP · Network Transfer' }).setTimestamp());
     return interaction.editReply({ embeds: [e], components: [] });
   }
   if (!id.startsWith(`nettransfer_apply${SEP}`)) return;
@@ -215,6 +239,19 @@ export async function handleButton(interaction) {
     )
     .setFooter({ text: 'Roles + nickname synced · hierarchy updated · USGRP Network Transfer' }).setTimestamp();
   await logAction(interaction.client, { action: r.is_trial ? 'Network Position Trial Started' : 'Network Position Transferred', target: { discordId: targetId }, moderator: { discordId: interaction.user.id, name: interaction.user.username }, reason: `${r.transferred_from || 'none'} → ${position}${r.is_trial ? ` (${days}d trial)` : ''}`, color: r.is_trial ? 0xF59E0B : 0x22C55E }).catch(() => {});
+
+  // Notify the FOUNDERS (Dion + Evan) — they want a heads-up on every move.
+  await notifyFounders(interaction.client, new EmbedBuilder().setColor(r.is_trial ? 0xF59E0B : 0x22C55E)
+    .setTitle(r.is_trial ? '⏳ Network position trial started' : '🔀 Network position transferred')
+    .setDescription(`<@${targetId}>${r.transferred_from ? ` moved from **${r.transferred_from}** to` : ' is now'} **${position}**${r.seat_no ? ` · seat ${r.seat_no}` : ''}.${r.is_trial ? `\n\nTrial ends <t:${Math.floor(new Date(r.trial.ends_at).getTime() / 1000)}:R> — the approver will be asked to keep or revert.` : ''}`)
+    .addFields({ name: 'Approved by', value: `<@${interaction.user.id}>`, inline: true }, { name: 'Type', value: trialLabel(days), inline: true })
+    .setFooter({ text: 'USGRP · Network Transfer' }).setTimestamp());
+
+  // DM the AFFECTED staffer so they know their own position changed.
+  await dmUser(interaction.client, targetId, new EmbedBuilder().setColor(r.is_trial ? 0xF59E0B : 0x5865F2)
+    .setTitle(r.is_trial ? `You're on a ${days}-day trial as ${position}` : `You've moved to ${position}`)
+    .setDescription(`${r.transferred_from ? `You've moved from **${r.transferred_from}** to` : 'You are now'} **${position}**${r.seat_no ? ` · seat ${r.seat_no}` : ''} across the USGRP network. Your roles and nickname have been updated.${r.is_trial ? `\n\n⏳ This is a **trial** — it ends <t:${Math.floor(new Date(r.trial.ends_at).getTime() / 1000)}:R>. An approver will then decide whether you keep it or return to your previous position.` : ''}`)
+    .setFooter({ text: 'USGRP · Network Transfer' }).setTimestamp());
 
   // Refresh the #structure org charts (aspire-bot already rewrote structure.json).
   (async () => {

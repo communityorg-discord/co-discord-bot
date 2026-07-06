@@ -9,6 +9,9 @@ import { grantAndInvite } from './actions.js';
 import * as store from './store.js';
 import { E, ce } from '../lib/emoji.js';
 
+// Dion + Evan only (they want a heads-up on trial decisions) — matches index.js.
+const FOUNDER_IDS = ['723199054514749450', '415922272956710912'];
+
 const DAY = 86400000, HOUR = 3600000;
 const short = (n) => String(n).replace(/^USGRP \| /, '');
 
@@ -188,6 +191,21 @@ export async function runTrialExpiry(client) {
             } catch { /* best-effort */ }
         }
         console.log(JSON.stringify({ msg: 'network trial expiry prompted', trial_id: t.id, discord_id: t.discord_id, delivered }));
+        // Heads-up to the founders that a trial decision is now pending, and to
+        // the staffer that their trial window has ended (a decision is coming).
+        const founderEmbed = new EmbedBuilder().setColor(0xF59E0B)
+            .setTitle('⏳ Network trial ended — decision pending')
+            .setDescription(`${who}'s **${t.trial_position}** trial has ended.\n\n${t.started_by ? `<@${t.started_by}>` : 'The FSA ops channel'} has been asked to keep or revert it.`)
+            .setFooter({ text: 'USGRP · Network Transfer' }).setTimestamp();
+        for (const id of FOUNDER_IDS) {
+            try { const u = await client.users.fetch(id); await u.send({ embeds: [founderEmbed] }); } catch { /* DMs closed */ }
+        }
+        if (staffer) {
+            await staffer.send({ embeds: [new EmbedBuilder().setColor(0xF59E0B)
+                .setTitle('Your trial window has ended')
+                .setDescription(`Your trial as **${t.trial_position}** has reached its end. An approver will now decide whether you keep it or return to your previous position — you'll be told the outcome.`)
+                .setFooter({ text: 'USGRP · Network Transfer' }).setTimestamp()] }).catch(() => {});
+        }
     }
 }
 
