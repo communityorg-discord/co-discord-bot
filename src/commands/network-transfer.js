@@ -1,4 +1,7 @@
-// COMMAND_PERMISSION_FALLBACK: superuser_only
+// COMMAND_PERMISSION_FALLBACK: auth_level >= 6
+// Accessible to Junior Admin and above (netadmin RANK power >= 6 — Junior Admin,
+// Deputy/DSA/SSA Admin=6, FSA Administrator=7, Senior=8, Head=9); founders always
+// bypass. Trial accept/reject buttons carry the same gate (canUseCommand check).
 // USGRP NETWORK-staff position TRANSFER — move an existing (or new) network
 // staffer to a DIFFERENT position. They do NOT keep the old one; the single
 // per-person record swaps over, roles + nickname re-sync across the network, and
