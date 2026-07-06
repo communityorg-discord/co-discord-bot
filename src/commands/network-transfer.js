@@ -30,6 +30,21 @@ async function dmUser(client, userId, embed) {
 const TRIAL_DAYS = [0, 7, 14, 30]; // 0 = permanent
 const trialLabel = (d) => d === 0 ? 'Permanent transfer' : `${d}-day trial`;
 
+// Seat availability for a position (from networkPositions: seat_count/taken/open).
+// Shown right in the picker so you see at a glance what's open vs full.
+const posSeats = (p) => {
+  const total = p.seat_count || 1;
+  const taken = Math.min(p.taken || 0, total);
+  return { total, taken, open: Math.max(0, total - taken) };
+};
+function availLabel(p) {
+  const { total, taken, open } = posSeats(p);
+  if (open === 0) return `FULL (${taken}/${total})`;
+  if (taken === 0) return `${open} open (all vacant)`;
+  return `${open} of ${total} open`;
+}
+const availEmoji = (p) => { const { taken, open } = posSeats(p); return open === 0 ? '🔴' : (taken === 0 ? '🟢' : '🟡'); };
+
 function guessName(interaction, targetId) {
   const m = interaction.guild?.members?.cache?.get(targetId);
   const u = interaction.client.users.cache.get(targetId);
@@ -73,13 +88,14 @@ export async function execute(interaction) {
     .setCustomId(`nettransfer_pos${SEP}${target.id}`)
     .setPlaceholder('Choose the NEW position…')
     .addOptions(posRes.positions.slice(0, 25).map(p => ({
-      label: p.position.slice(0, 100),
+      label: `${p.position} · ${availLabel(p)}`.slice(0, 100),
       description: `${p.group} · "${p.short_title}, ${p.group}"`.slice(0, 100),
       value: p.position.slice(0, 100),
+      emoji: availEmoji(p),
       default: false,
     })));
   const e = new EmbedBuilder().setColor(0x5865F2).setTitle('Network Position Transfer')
-    .setDescription(`Transferring <@${target.id}>${currentPos ? ` from **${currentPos}**` : ' (not currently network-verified)'}.\n\nChoose the **new** position — they'll move to it and no longer hold the old one. Next you'll pick permanent or a trial, then approve.`)
+    .setDescription(`Transferring <@${target.id}>${currentPos ? ` from **${currentPos}**` : ' (not currently network-verified)'}.\n\nChoose the **new** position — they'll move to it and no longer hold the old one. Each shows how many seats are open. 🟢 fully vacant · 🟡 some open · 🔴 fully filled (picking it re-assigns a seat). Next you'll pick permanent or a trial, then approve.`)
     .setFooter({ text: 'USGRP · Network Transfer' });
   return interaction.editReply({ embeds: [e], components: [new ActionRowBuilder().addComponents(menu)] });
 }
