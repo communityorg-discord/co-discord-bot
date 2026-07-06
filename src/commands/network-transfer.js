@@ -13,7 +13,14 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { canUseCommand } from '../utils/permissions.js';
 import { networkVerifyApi } from '../utils/aspireInternal.js';
+import { usgrpPowerLevel, powerFromRecord } from '../utils/usgrpAuthority.js';
+import { SUPERUSER_IDS } from '../config.js';
 import { logAction } from '../utils/logger.js';
+
+// The rank power a given network position confers (Head Admin 9 … Member 4).
+// Used to stop someone transferring a person INTO a position above their own
+// rank — a Junior Admin must not be able to create a Head Administrator.
+const positionPower = (position) => powerFromRecord({ position });
 import { E } from '../lib/emoji.js';
 
 const SEP = '~';
@@ -87,20 +94,40 @@ export async function execute(interaction) {
   }
   const currentPos = cur && cur.position ? cur.position : null;
 
+  // Rank cap: you can only transfer someone INTO a position at or below your OWN
+  // rank — a Junior Admin (6) must not be able to create a Head Administrator (9).
+  // Founders bypass and see every position.
+  const isFounder = SUPERUSER_IDS.includes(String(interaction.user.id));
+  const myPower = isFounder ? 99 : await usgrpPowerLevel(interaction.user.id);
+  const allowed = posRes.positions.filter(p => isFounder || positionPower(p.position) <= myPower);
+  if (!allowed.length) {
+    return interaction.editReply({ content: `${E.cross} There are no positions at or below your own rank that you can transfer someone into.` });
+  }
+  const hiddenN = posRes.positions.length - allowed.length;
+
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`nettransfer_pos${SEP}${target.id}`)
     .setPlaceholder('Choose the NEW position…')
-    .addOptions(posRes.positions.slice(0, 25).map(p => ({
+    .addOptions(allowed.slice(0, 25).map(p => ({
       label: `${p.position} · ${availLabel(p)}`.slice(0, 100),
       description: `${p.group} · "${p.short_title}, ${p.group}"`.slice(0, 100),
       value: p.position.slice(0, 100),
       emoji: availEmoji(p),
       default: false,
     })));
+  const capNote = hiddenN > 0 ? `\n\n_${hiddenN} position${hiddenN === 1 ? '' : 's'} above your own rank ${hiddenN === 1 ? 'is' : 'are'} hidden — you can't transfer someone above your level._` : '';
   const e = new EmbedBuilder().setColor(0x5865F2).setTitle('Network Position Transfer')
-    .setDescription(`Transferring <@${target.id}>${currentPos ? ` from **${currentPos}**` : ' (not currently network-verified)'}.\n\nChoose the **new** position — they'll move to it and no longer hold the old one. Each shows how many seats are open. 🟢 fully vacant · 🟡 some open · 🔴 fully filled (picking it re-assigns a seat). Next you'll pick permanent or a trial, then approve.`)
+    .setDescription(`Transferring <@${target.id}>${currentPos ? ` from **${currentPos}**` : ' (not currently network-verified)'}.\n\nChoose the **new** position — they'll move to it and no longer hold the old one. Each shows how many seats are open. 🟢 fully vacant · 🟡 some open · 🔴 fully filled (picking it re-assigns a seat). Next you'll pick permanent or a trial, then approve.${capNote}`)
     .setFooter({ text: 'USGRP · Network Transfer' });
   return interaction.editReply({ embeds: [e], components: [new ActionRowBuilder().addComponents(menu)] });
+}
+
+// Server-side rank guard reused at every step (select/modal/apply) so a crafted
+// customId can't bypass the picker's visual filter. Returns true if OK.
+async function actorMayAssign(interaction, position) {
+  if (SUPERUSER_IDS.includes(String(interaction.user.id))) return true;
+  const myPower = await usgrpPowerLevel(interaction.user.id);
+  return positionPower(position) <= myPower;
 }
 
 export async function handleSelect(interaction) {
@@ -233,6 +260,14 @@ export async function handleButton(interaction) {
   const days = Number(parts[3]) || 0;
   const position = parts[4];
   const name = parts.slice(5).join(SEP) || null;
+
+  // Server-side rank guard — a crafted customId can't move someone above the
+  // actor's own rank even if the picker filter were bypassed.
+  if (!await actorMayAssign(interaction, position)) {
+    const denied = EmbedBuilder.from(interaction.message.embeds[0]).setColor(0xEF4444).setTitle('Above your rank')
+      .setDescription(`${E.cross} You can't transfer someone into **${position}** — it's above your own rank.`).setFooter({ text: 'USGRP · Network Transfer' });
+    return interaction.editReply({ embeds: [denied], components: [] });
+  }
 
   const applying = EmbedBuilder.from(interaction.message.embeds[0]).setColor(0x5865F2).setTitle(`${days === 0 ? 'Transferring' : 'Starting trial'} — ${position}…`).setFooter({ text: 'Syncing roles across the network…' });
   await interaction.editReply({ embeds: [applying], components: [] });
