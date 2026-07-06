@@ -264,6 +264,11 @@ function cleanup() {
     const env = { ...process.env, HOME, CLAUDE_AUTOMATED: '1', PATH: `${process.env.PATH || ''}:${HOME}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin` };
     const child = spawn(CLAUDE, args, { cwd: REPO, env });
     let buf = '', finalText = null, sessionId = resumeId, isErr = false, cost = 0, turns = 0, stderr = '', stoppedBy = null, terminated = false;
+    // Fallback for the "ticks but no message" bug: the `result` event's text is
+    // occasionally empty (the model ended its turn on a tool call / an empty final
+    // message). Keep the last non-empty assistant TEXT block we streamed so we can
+    // fall back to it instead of posting a blank success embed.
+    let lastAssistantText = null;
     // Resolve as soon as the run is truly finished — don't block on the stdout
     // pipe closing. If the Claude session spawned a BACKGROUNDED child (e.g. a
     // run_in_background bash), that child inherits stdout and keeps the pipe open
@@ -304,9 +309,18 @@ function cleanup() {
         else if (ev.type === 'assistant' && ev.message?.content) {
           const toolBlocks = ev.message.content.filter(b => b.type === 'tool_use');
           if (toolBlocks.length) { const tb = toolBlocks[toolBlocks.length - 1]; pushPhase(phaseFor(tb.name, tb.input)); setStatus(); }
-          else if (ev.message.content.some(b => b.type === 'text' && b.text)) { pushPhase('think'); setStatus(); }
+          else {
+            // Remember the last real text the model produced — the fallback if the
+            // result event comes back empty.
+            const txt = ev.message.content.filter(b => b.type === 'text' && b.text).map(b => b.text).join('\n').trim();
+            if (txt) { lastAssistantText = txt; pushPhase('think'); setStatus(); }
+          }
         } else if (ev.type === 'result' && !terminated) {
-          finalText = ev.result; sessionId = ev.session_id || sessionId; isErr = !!ev.is_error; cost = ev.total_cost_usd || 0; turns = ev.num_turns || 0;
+          // Prefer the result text; fall back to the last streamed assistant text
+          // if it's empty/whitespace, so a valid turn never posts a blank message.
+          const resultText = (ev.result == null ? '' : String(ev.result)).trim();
+          finalText = resultText || lastAssistantText || null;
+          sessionId = ev.session_id || sessionId; isErr = !!ev.is_error; cost = ev.total_cost_usd || 0; turns = ev.num_turns || 0;
           // The result event IS the definitive end of the turn — finalise now so a
           // backgrounded child holding stdout open can't stall the reply. Kill the
           // child (and its group) so any such leaked pipe is released.
@@ -355,12 +369,25 @@ function cleanup() {
     if (statusId) await editMsg(statusId, { embeds: [e], components: [] });
     const pingId = await pingDone(`${em('stop', '🛑')} Stopped.`);
     if (R.sessionId) { rememberSession(statusId, R.sessionId); rememberSession(pingId, R.sessionId); }
-  } else if (R.isErr || R.finalText == null) {
-    await react('❌');
-    const msg = String(R.finalText || R.stderr || 'see server logs').slice(0, 1500);
-    if (statusId) await editMsg(statusId, { embeds: [embed(0xef4444, `${em('err', '❌')} Couldn't finish — ` + msg, foot('failed'))], components: [] });
-    const pingId = await pingDone(`${em('err', '❌')} That one didn't finish —`);
-    if (R.sessionId) { rememberSession(statusId, R.sessionId); rememberSession(pingId, R.sessionId); }
+  } else if (R.isErr || R.finalText == null || !String(R.finalText).trim()) {
+    // Genuine failure OR the turn ended with no usable text (result empty AND no
+    // assistant text to fall back on). Never leave the founder with blank ticks:
+    // if it wasn't an error, say the work's done but there was no written reply.
+    const noText = !R.isErr && (R.finalText == null || !String(R.finalText).trim());
+    await react(noText ? '✅' : '❌');
+    if (noText) {
+      const stages = renderDone();
+      const body = (stages ? stages + '\n\n' : '') + `${em('tick', '✅')} Done — but I didn't produce a written reply this time (the turn ended on an action with no summary). Reply to continue if you need more.`;
+      const e = embed(0x4ade80, body, `✓ done in ${mmss(Date.now() - startedAt)} · ${WORKER} · ${R.turns} turns · $${R.cost.toFixed(3)} · reply to continue`);
+      if (statusId) await editMsg(statusId, { embeds: [e], components: [] });
+      const pingId = await pingDone(`${em('tick', '✅')} Done (no written reply) — reply to continue.`);
+      if (R.sessionId) { rememberSession(statusId, R.sessionId); rememberSession(pingId, R.sessionId); }
+    } else {
+      const msg = String(R.finalText || R.stderr || 'see server logs').slice(0, 1500);
+      if (statusId) await editMsg(statusId, { embeds: [embed(0xef4444, `${em('err', '❌')} Couldn't finish — ` + msg, foot('failed'))], components: [] });
+      const pingId = await pingDone(`${em('err', '❌')} That one didn't finish —`);
+      if (R.sessionId) { rememberSession(statusId, R.sessionId); rememberSession(pingId, R.sessionId); }
+    }
   } else {
     await react('✅');
     const stages = renderDone();
