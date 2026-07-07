@@ -35,6 +35,14 @@ const SESS_FILE = `${LOCK_DIR}/sessions.json`;
 const CHAN_FILE = `${LOCK_DIR}/channels.json`;
 const API = 'https://discord.com/api/v10';
 const TIMEOUT_MS = 60 * 60_000;                  // hard wall for a single run (big "fix everything" jobs need room; reply-to-continue resumes if it's still not enough)
+// Idle wall: if the headless session emits NOTHING on stdout for this long and
+// hasn't produced a result, its output stream is dead (a dropped API stream
+// leaves the CLI blocked in ep_poll forever). Without this the run only ends at
+// the 60-min hard wall, wedging its worker slot + channel lock the whole time —
+// the "Utilities says it's running but nothing's happening" orphan. Any stream
+// event (tool call, assistant text, tool result) resets the heartbeat, so it's
+// generous enough not to trip a long single tool/sub-agent step.
+const IDLE_MS = 20 * 60_000;
 const LOCK_TTL_MS = TIMEOUT_MS + 90_000;         // a lock older than this MUST be dead → reclaim (self-heal). Derived, so it tracks TIMEOUT_MS automatically.
 const CHAN_RESUME_TTL_MS = 45 * 60_000;          // only resume a channel session this fresh
 
@@ -282,7 +290,7 @@ function cleanup() {
     // session-end DM to Dion + Evan is just noise.
     const env = { ...process.env, HOME, CLAUDE_AUTOMATED: '1', PATH: `${process.env.PATH || ''}:${HOME}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin` };
     const child = spawn(CLAUDE, args, { cwd: REPO, env });
-    let buf = '', finalText = null, sessionId = resumeId, isErr = false, cost = 0, turns = 0, stderr = '', stoppedBy = null, terminated = false;
+    let buf = '', finalText = null, sessionId = resumeId, isErr = false, cost = 0, turns = 0, stderr = '', stoppedBy = null, terminated = false, stalled = false;
     // Fallback for the "ticks but no message" bug: the `result` event's text is
     // occasionally empty (the model ended its turn on a tool call / an empty final
     // message). Keep the last non-empty assistant TEXT block we streamed so we can
@@ -302,10 +310,15 @@ function cleanup() {
       if (terminated) return; terminated = true;
       if (reason.stop) stoppedBy = reason.stop;
       if (reason.timeout) { isErr = true; finalText = `timed out after ${Math.round(TIMEOUT_MS / 60_000)} minutes`; }
+      if (reason.stalled) { isErr = true; stalled = true; finalText = `the session went quiet for ${Math.round(IDLE_MS / 60_000)} minutes with no output (its stream to the model dropped), so I stopped it here to free the worker`; }
       try { child.kill('SIGKILL'); } catch { }
       finish();
     };
     const killer = setTimeout(() => term({ timeout: true }), TIMEOUT_MS);
+    // Idle watchdog: rearmed on every stdout chunk (see child.stdout 'data'). If
+    // it ever fires, the stream has been silent for IDLE_MS → the run is dead.
+    let idle = setTimeout(() => term({ stalled: true }), IDLE_MS);
+    const beat = () => { clearTimeout(idle); idle = setTimeout(() => term({ stalled: true }), IDLE_MS); };
     // Stop button → kill sessions that were running when it was clicked (we
     // honour a STOP only if it's newer than our start; a fresh run ignores an
     // old one). releaseSlot clears STOP once the last session ends.
@@ -319,6 +332,7 @@ function cleanup() {
     child.stdin.write(PROMPT); child.stdin.end();
     child.stderr.on('data', d => stderr += d);
     child.stdout.on('data', d => {
+      beat();                     // any output = alive; rearm the idle watchdog
       buf += d; let nl;
       while ((nl = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
@@ -353,8 +367,8 @@ function cleanup() {
     child.on('close', finish);
     child.on('exit', finish);
     await done;
-    clearTimeout(killer); clearInterval(stopWatch);
-    return { finalText, sessionId, isErr, cost, turns, stderr, stoppedBy };
+    clearTimeout(killer); clearTimeout(idle); clearInterval(stopWatch);
+    return { finalText, sessionId, isErr, cost, turns, stderr, stoppedBy, stalled };
   }
 
   // Resume order: an explicit reply (CR_RESUME) is precise and wins. Otherwise
