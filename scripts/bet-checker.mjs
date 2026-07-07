@@ -165,9 +165,9 @@ const twoUp = (side) => {
 const btts = () => boolLeg('Both Teams To Score', homeScore >= 1 && awayScore >= 1, scoreTxt);
 
 // ===== SLIP CONFIG ===========================================================
-// Dion's placed slip: £5 → £198 @ 33/1 (11 legs), stat-heavy build.
+// Dion's two placed slips on this match.
 const SLIPS = [{
-  title: 'Slip · £5 @ 33/1', legs: [
+  title: 'Slip 1 · £5 @ 33/1', legs: [
     numLeg('24+ Match Total Fouls', totalFouls, 24),
     numLeg('3+ Match Total Cards', totalCards, 3),
     numLeg('Luis Díaz 1+ Shots on Target', sot('Diaz'), 1),
@@ -179,6 +179,18 @@ const SLIPS = [{
     numLeg('8+ Match Total Shots on Target', totalSOT, 8),
     numLeg('Kobel 3+ Saves', keeperSaves(MATCH.home), 3),
     numLeg('Luis Suárez Anytime Scorer', gl('Suarez'), 1),
+  ],
+}, {
+  title: 'Slip 2 · £2 free → £100 @ 50/1', legs: [
+    underLeg('Under 3.5 Total Goals', totalGoals, 3.5),
+    numLeg('Luis Díaz 1+ Shots on Target', sot('Diaz'), 1),
+    numLeg('Breel Embolo 1+ Shots on Target', sot('Embolo'), 1),
+    numLeg('James Rodríguez 1+ Shots on Target', sot('James'), 1),
+    btts(),
+    numLeg('Kobel 3+ Saves', keeperSaves(MATCH.home), 3),
+    numLeg('Luis Díaz Anytime Scorer', gl('Diaz'), 1),
+    numLeg('3+ Match Total Cards', totalCards, 3),
+    numLeg('24+ Match Total Fouls', totalFouls, 24),
   ],
 }];
 // =============================================================================
