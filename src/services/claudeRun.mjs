@@ -116,19 +116,23 @@ function rememberSession(replyId, sessionId) {
   const keys = Object.keys(map); if (keys.length > 300) delete map[keys[0]];
   try { writeFileSync(SESS_FILE, JSON.stringify(map)); } catch { }
 }
-// A session transcript this big can no longer be resumed cleanly — the CLI
-// chokes loading a month of history and the turn dies with 0 turns / no reply
-// (the "no written reply" loop). Past this cap we IGNORE the saved session and
-// start fresh instead. Belt-and-braces root-cause guard so one transcript can
-// never snowball to hundreds of MB again.
+// Whether a saved session id can actually be resumed. Two ways it can't:
+//   · the transcript FILE is gone (archived/rotated/never existed) — resuming a
+//     nonexistent session hard-fails with "No conversation found with session
+//     ID …", and worse, the failure keeps getting re-saved so replies loop on a
+//     dead id forever. Missing file → start fresh.
+//   · the transcript is HUGE — the CLI chokes loading a month of history and the
+//     turn dies with 0 turns / no reply. Past the cap → start fresh.
+// Only a present, non-empty, small-enough transcript is resumable.
 const RESUME_MAX_BYTES = 40 * 1024 * 1024; // 40MB
-function resumableSize(sessionId) {
-  if (!sessionId) return true;
+function canResume(sessionId) {
+  if (!sessionId) return false;
   try {
     const proj = REPO.replace(/\//g, '-');
     const f = `${HOME}/.claude/projects/${proj}/${sessionId}.jsonl`;
-    return statSync(f).size <= RESUME_MAX_BYTES;
-  } catch { return true; } // no file / unknown → let the CLI decide
+    const sz = statSync(f).size;             // throws if the file is missing
+    return sz > 0 && sz <= RESUME_MAX_BYTES;
+  } catch { return false; }                  // missing/unreadable → can't resume
 }
 
 // Channel-scoped session memory (the conversation's session, bot-agnostic).
@@ -358,18 +362,21 @@ function cleanup() {
   // so two same-channel runs can't fork one transcript; if it's locked, or the
   // session turns out stale, we start fresh.
   let resume = RESUME, usedChannelResume = false;
+  // An explicit reply resume (CR_RESUME) is only usable if its transcript still
+  // exists and isn't bloated — otherwise the CLI hard-fails ("No conversation
+  // found …"). Drop a dead/huge one so we cleanly start fresh instead of looping.
+  if (resume && !canResume(resume)) resume = null;
   if (!resume) {
     const cs = channelSession(CHANNEL);
-    if (cs && lockChannel(CHANNEL)) { resume = cs; usedChannelResume = true; ACTIVE_CHAN = CHANNEL; }
+    if (cs && canResume(cs) && lockChannel(CHANNEL)) { resume = cs; usedChannelResume = true; ACTIVE_CHAN = CHANNEL; }
   }
-  // If the target transcript is too big to resume cleanly, drop the resume and
-  // start fresh — a bloated session would otherwise die with 0 turns/no reply.
-  if (resume && !resumableSize(resume)) { resume = null; }
 
   let R = await runOnce(resume);
-  // Stale/expired channel session → the request would silently fail. Retry once
-  // as a fresh session so the founder's ask still gets done.
-  if (R.isErr && usedChannelResume && !R.stoppedBy) { pushPhase('think'); await setStatus(); R = await runOnce(null); }
+  // A resume that still failed at runtime (stale id, race, transcript vanished
+  // between the check and the run) would otherwise strand the founder. Retry
+  // once as a FRESH session for ANY resume — reply-resume or channel-resume —
+  // so the ask still gets done. (Only a genuine error, never a Stop.)
+  if (R.isErr && resume && !R.stoppedBy) { pushPhase('think'); await setStatus(); R = await runOnce(null); }
 
   clearInterval(typer);
   await unreact('👀');
@@ -404,7 +411,10 @@ function cleanup() {
       const msg = String(R.finalText || R.stderr || 'see server logs').slice(0, 1500);
       if (statusId) await editMsg(statusId, { embeds: [embed(0xef4444, `${em('err', '❌')} Couldn't finish — ` + msg, foot('failed'))], components: [] });
       const pingId = await pingDone(`${em('err', '❌')} That one didn't finish —`);
-      if (R.sessionId) { rememberSession(statusId, R.sessionId); rememberSession(pingId, R.sessionId); }
+      // Only remember the session if it's genuinely resumable. A failed run's
+      // sessionId is often the dead resume id we were handed — re-saving it here
+      // is what re-poisoned the map and made replies loop on a dead session.
+      if (R.sessionId && canResume(R.sessionId)) { rememberSession(statusId, R.sessionId); rememberSession(pingId, R.sessionId); }
     }
   } else {
     await react('✅');
