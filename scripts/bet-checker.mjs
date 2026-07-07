@@ -27,7 +27,7 @@ const LEAGUE = 'fifa.friendly';
 const STATE = '/home/vpcommunityorganisation/.local/state/bet-checker.json';
 const SELF = fileURLToPath(import.meta.url);
 
-let st = { armed: false, postedFinal: false, maxBelLead: 0 };
+let st = { armed: false, postedFinal: false, postedHalftime: false, maxBelLead: 0 };
 try { st = { ...st, ...JSON.parse(readFileSync(STATE, 'utf8')) }; } catch { /* first run */ }
 const saveState = () => { mkdirSync('/home/vpcommunityorganisation/.local/state', { recursive: true }); writeFileSync(STATE, JSON.stringify(st)); };
 
@@ -41,6 +41,7 @@ try {
 
 const comp = json.header?.competitions?.[0];
 const state = comp?.status?.type?.state || 'pre';        // pre | in | post
+const statusName = comp?.status?.type?.name || '';       // e.g. STATUS_HALFTIME
 const clock = comp?.status?.type?.shortDetail || comp?.status?.displayClock || '';
 const home = (comp?.competitors || []).find(c => c.homeAway === 'home');
 const away = (comp?.competitors || []).find(c => c.homeAway === 'away');
@@ -233,6 +234,23 @@ if (state === 'pre') {
 if (state === 'post' && st.postedFinal) { console.log('[bets] final already posted'); removeSelfCron(); process.exit(0); }
 
 const scoreLine = `${home?.team?.displayName || 'USA'} ${usaScore}–${belScore} ${away?.team?.displayName || 'Belgium'}`;
+
+// Halftime — nothing changes for ~15 min, so post ONE quiet "paused" card the
+// first time we see HT, then stay silent until the second half kicks off.
+if (statusName === 'STATUS_HALFTIME') {
+  if (!st.postedHalftime) {
+    await post({
+      title: `⏸️ HALF TIME — ${scoreLine}`,
+      description: [renderSlip(slip1), renderSlip(slip2), renderSlip(slip3)].join('\n\n').slice(0, 4096) + '\n\n*Paused for the break — I’ll pick back up when the second half kicks off.*',
+      color: 0x95A5A6,
+      footer: { text: 'Claude · live bet tracker · half time' },
+      timestamp: new Date().toISOString(),
+    });
+    st.postedHalftime = true; saveState();
+    console.log('[bets] posted HT card, going quiet');
+  } else console.log('[bets] halftime, staying quiet');
+  process.exit(0);
+}
 const embed = {
   title: `${final ? '🏁 FULL TIME' : '⚽ LIVE'} — ${scoreLine}${clock ? ` · ${clock}` : ''}`,
   description: [renderSlip(slip1), renderSlip(slip2), renderSlip(slip3)].join('\n\n').slice(0, 4096),
