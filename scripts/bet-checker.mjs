@@ -189,7 +189,8 @@ function renderSlip(s) {
   const tag = final ? (gone === 0 ? '🟢 WINNER' : `🔴 ${gone} gone`) : (gone ? `🔴 ${gone} gone` : '🟢 alive');
   return `**${s.title}** — ${hits}/${s.legs.length} ${tag}\n` + s.legs.map(l => `${ICON[l.status]} ${l.label} (${l.cur})`).join('\n');
 }
-const slipsBody = () => SLIPS.map(renderSlip).join('\n\n').slice(0, 4096);
+const LEGEND = '✅ landed · ⏳ still to come · ❌ gone · ❔ no data from the feed yet';
+const slipsBody = () => (SLIPS.map(renderSlip).join('\n\n') + `\n\n${LEGEND}`).slice(0, 4096);
 
 // ---- post -------------------------------------------------------------------
 async function post(embed) {
