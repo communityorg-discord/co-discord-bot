@@ -44,8 +44,21 @@ const state = comp?.status?.type?.state || 'pre';        // pre | in | post
 const clock = comp?.status?.type?.shortDetail || comp?.status?.displayClock || '';
 const home = (comp?.competitors || []).find(c => c.homeAway === 'home');
 const away = (comp?.competitors || []).find(c => c.homeAway === 'away');
-const usaScore = Number(home?.score ?? 0) || 0;         // United States = home
-const belScore = Number(away?.score ?? 0) || 0;         // Belgium = away
+// ESPN's soccer summary leaves competitor.score undefined and keeps the live
+// score in linescores (a single cumulative entry that updates as goals go in).
+// Prefer .score, fall back to the last linescore value.
+function liveScore(c) {
+  const s = Number(c?.score);
+  if (Number.isFinite(s)) return s;
+  const ls = c?.linescores;
+  if (Array.isArray(ls) && ls.length) {
+    const v = Number(ls[ls.length - 1]?.displayValue ?? ls[ls.length - 1]?.value);
+    if (Number.isFinite(v)) return v;
+  }
+  return 0;
+}
+const usaScore = liveScore(home);                       // United States = home
+const belScore = liveScore(away);                       // Belgium = away
 const lead = belScore - usaScore;
 if (lead > st.maxBelLead) { st.maxBelLead = lead; }
 
