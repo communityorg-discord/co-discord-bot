@@ -72,38 +72,60 @@ function teamStat(teamName, keys) {
   }
   return null;
 }
-// flatten every player's stat row into { fullName: { key: value } }
-const players = {};
-for (const g of (json.boxscore?.players || [])) {
-  for (const block of (g.statistics || [])) {
-    const keys = block.keys || block.names || [];
-    for (const a of (block.athletes || [])) {
-      const name = a.athlete?.displayName || '';
-      const rec = players[name] || (players[name] = {});
-      (a.stats || []).forEach((v, i) => { if (keys[i]) rec[keys[i]] = v; });
-    }
+// ESPN's soccer summary does NOT populate boxscore.players during a live match
+// (it stays empty and only fills post-game, if ever). The live per-player facts
+// we need — goals, shots on target, fouls won — are only in the text feeds:
+//   keyEvents[]  → goals & cards (structured, reliable)
+//   commentary[] → "Attempt saved/blocked/missed by X", "Goal! ... X (Team)",
+//                  "X wins a free kick" (fouls won)
+// So we derive per-player counts by parsing that text.
+const PLAYER = { sot: {}, goals: {}, foulsWon: {} };  // { substringKey: count } via helpers below
+const bump = (bag, name) => { if (name) bag[name] = (bag[name] || 0) + 1; };
+
+// Structured goals from keyEvents (most reliable for scorers).
+for (const e of (json.keyEvents || [])) {
+  const type = (e.type?.text || '').toLowerCase();
+  if (type.startsWith('goal') && !type.includes('own')) {
+    // first participant is the scorer; "Goal! ... Name (Team)" also in text
+    const scorer = e.participants?.[0]?.athlete?.displayName
+      || (e.text || '').match(/Goal![^.]*?\.\s*([A-Z][^()]+?)\s*\(/)?.[1]?.trim();
+    if (scorer) { bump(PLAYER.goals, scorer); bump(PLAYER.sot, scorer); } // a goal is a shot on target
   }
 }
-function playerStat(nameSub, keys) {
-  const entry = Object.entries(players).find(([n]) => n.toLowerCase().includes(nameSub.toLowerCase()));
-  if (!entry) return null;
-  for (const k of keys) {
-    const raw = entry[1][k];
-    if (raw != null) { const n = Number(String(raw).replace(/[^0-9.-]/g, '')); if (Number.isFinite(n)) return n; }
-  }
-  return null;
+// Commentary text parse for shots on target + fouls won (and goals as backup).
+for (const c of (json.commentary || [])) {
+  const t = c.text || '';
+  let m;
+  if ((m = t.match(/Attempt saved\.\s*([^.(]+?)\s*\(/))) bump(PLAYER.sot, m[1].trim());
+  else if ((m = t.match(/^Goal!.*?\.\s*([^.(]+?)\s*\(/))) { const n = m[1].trim(); if (!PLAYER.goals[n]) bump(PLAYER.goals, n); bump(PLAYER.sot, n); }
+  if ((m = t.match(/([^.(]+?)\s*\([^)]*\)\s*wins a free kick/))) bump(PLAYER.foulsWon, m[1].trim());
 }
-const SOT = ['shotsOnTarget', 'shotsOnGoal', 'onTargetScoringAtt'];
-const GOALS = ['totalGoals', 'goals'];
-const FOULS_WON = ['foulsSuffered', 'foulsDrawn', 'wasFouled'];
+
+function countFor(bag, nameSub) {
+  const sub = nameSub.toLowerCase();
+  let n = 0; let seen = false;
+  for (const [name, c] of Object.entries(bag)) if (name.toLowerCase().includes(sub)) { n += c; seen = true; }
+  return { n, seen };
+}
+// Returns a live count for a player metric, or null when we genuinely have no
+// signal yet (so the leg shows ⏳ pending, not a false 0). Once the game has
+// events, an absent name means 0 for that metric (they just haven't done it).
+function playerStat(nameSub, kind) {
+  const bag = kind === 'goals' ? PLAYER.goals : kind === 'foulsWon' ? PLAYER.foulsWon : PLAYER.sot;
+  const anyData = (json.commentary || []).length > 0 || (json.keyEvents || []).length > 1;
+  if (!anyData) return null;                 // no feed yet → pending
+  return countFor(bag, nameSub).n;           // 0 is a real answer once play is underway
+}
 const SAVES = ['saves', 'goalKeeperSaves', 'savesMade'];
 
 const totalFouls = (teamStat('United States', ['foulsCommitted', 'fouls']) ?? 0) + (teamStat('Belgium', ['foulsCommitted', 'fouls']) ?? 0);
 const totalCorners = (teamStat('United States', ['wonCorners', 'corners', 'cornerKicks']) ?? 0) + (teamStat('Belgium', ['wonCorners', 'corners', 'cornerKicks']) ?? 0);
 const totalCards = (teamStat('United States', ['yellowCards']) ?? 0) + (teamStat('United States', ['redCards']) ?? 0) + (teamStat('Belgium', ['yellowCards']) ?? 0) + (teamStat('Belgium', ['redCards']) ?? 0);
 const totalGoals = usaScore + belScore;
-const freeseSaves = teamStat('United States', SAVES) ?? playerStat('Freese', SAVES);
-const courtoisSaves = teamStat('Belgium', SAVES) ?? playerStat('Courtois', SAVES);
+// Keeper saves come from the TEAM stat (each side has one keeper) — the live
+// team boxscore carries `saves`, which is exactly the GK's save count.
+const freeseSaves = teamStat('United States', SAVES);
+const courtoisSaves = teamStat('Belgium', SAVES);
 
 // ---- leg helpers ------------------------------------------------------------
 const final = state === 'post';
@@ -118,20 +140,22 @@ const numLeg = (label, cur, target) => {
 // boolean leg (already-happened condition)
 const boolLeg = (label, cond, curTxt) => ({ label, status: cond ? 'hit' : (final ? 'miss' : 'pending'), cur: curTxt });
 
-const player = (sub, keys) => playerStat(sub, keys);
+const sot = (sub) => playerStat(sub, 'sot');
+const fw = (sub) => playerStat(sub, 'foulsWon');
+const gl = (sub) => playerStat(sub, 'goals');
 
 const slip1 = {
   title: 'Slip 1 · £4.50 → £162 @ 35/1', legs: [
     numLeg('3+ Match Total Cards', totalCards, 3),
-    numLeg('Balogun 1+ Shots on Target', player('Balogun', SOT), 1),
-    numLeg('Balogun 2+ Fouls Won', player('Balogun', FOULS_WON), 2),
+    numLeg('Balogun 1+ Shots on Target', sot('Balogun'), 1),
+    numLeg('Balogun 2+ Fouls Won', fw('Balogun'), 2),
     numLeg('9+ Match Total Corners', totalCorners, 9),
     numLeg('Freese 3+ Saves', freeseSaves, 3),
     numLeg('Courtois 2+ Saves', courtoisSaves, 2),
-    numLeg('De Ketelaere 1+ Fouls Won', player('Ketelaere', FOULS_WON), 1),
-    numLeg('Balogun Anytime Scorer', player('Balogun', GOALS), 1),
-    numLeg('Trossard 1+ Shots on Target', player('Trossard', SOT), 1),
-    numLeg('De Ketelaere 1+ Shots on Target', player('Ketelaere', SOT), 1),
+    numLeg('De Ketelaere 1+ Fouls Won', fw('Ketelaere'), 1),
+    numLeg('Balogun Anytime Scorer', gl('Balogun'), 1),
+    numLeg('Trossard 1+ Shots on Target', sot('Trossard'), 1),
+    numLeg('De Ketelaere 1+ Shots on Target', sot('Ketelaere'), 1),
     boolLeg('Both Teams To Score', usaScore >= 1 && belScore >= 1, `${usaScore}-${belScore}`),
   ],
 };
@@ -141,12 +165,12 @@ const slip2 = {
     numLeg('9+ Match Total Corners', totalCorners, 9),
     numLeg('Courtois 3+ Saves', courtoisSaves, 3),
     numLeg('Freese 3+ Saves', freeseSaves, 3),
-    numLeg('Balogun 3+ Fouls Won', player('Balogun', FOULS_WON), 3),
+    numLeg('Balogun 3+ Fouls Won', fw('Balogun'), 3),
     numLeg('3+ Match Total Cards', totalCards, 3),
-    numLeg('Balogun 1+ Shots on Target', player('Balogun', SOT), 1),
-    numLeg('De Ketelaere 1+ Shots on Target', player('Ketelaere', SOT), 1),
-    numLeg('Balogun Anytime Scorer', player('Balogun', GOALS), 1),
-    numLeg('Trossard Anytime Scorer', player('Trossard', GOALS), 1),
+    numLeg('Balogun 1+ Shots on Target', sot('Balogun'), 1),
+    numLeg('De Ketelaere 1+ Shots on Target', sot('Ketelaere'), 1),
+    numLeg('Balogun Anytime Scorer', gl('Balogun'), 1),
+    numLeg('Trossard Anytime Scorer', gl('Trossard'), 1),
   ],
 };
 const slip3 = {
@@ -154,9 +178,9 @@ const slip3 = {
     boolLeg('Belgium (2UP paid if 2 clear)', st.maxBelLead >= 2 || (final && belScore > usaScore), `${usaScore}-${belScore}`),
     boolLeg('Both Teams To Score', usaScore >= 1 && belScore >= 1, `${usaScore}-${belScore}`),
     numLeg('Over 2.5 Total Goals', totalGoals, 3),
-    numLeg('Pulisic 1+ Shots on Target', player('Pulisic', SOT), 1),
-    numLeg('De Bruyne 1+ Shots on Target (benched)', player('Bruyne', SOT), 1),
-    numLeg('Balogun Anytime Scorer', player('Balogun', GOALS), 1),
+    numLeg('Pulisic 1+ Shots on Target', sot('Pulisic'), 1),
+    numLeg('De Bruyne 1+ Shots on Target (benched)', sot('Bruyne'), 1),
+    numLeg('Balogun Anytime Scorer', gl('Balogun'), 1),
     numLeg('9+ Match Total Corners', totalCorners, 9),
     numLeg('Freese 3+ Saves', freeseSaves, 3),
     numLeg('Courtois 2+ Saves', courtoisSaves, 2),
