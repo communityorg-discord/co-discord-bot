@@ -25,11 +25,11 @@ const STATE = '/home/vpcommunityorganisation/.local/state/bet-checker.json';
 
 // ===== MATCH CONFIG ==========================================================
 const MATCH = {
-  event: '760509',              // ESPN gameId
+  event: '760508',              // ESPN gameId
   league: 'fifa.world',         // ESPN soccer league slug
-  home: 'Argentina',            // exact ESPN display name (home)
-  away: 'Egypt',                // exact ESPN display name (away)
-  label: 'Argentina v Egypt',
+  home: 'Switzerland',          // exact ESPN display name (home)
+  away: 'Colombia',             // exact ESPN display name (away)
+  label: 'Switzerland v Colombia',
 };
 // =============================================================================
 
@@ -84,7 +84,7 @@ function teamStat(teamName, keys) {
 // ESPN does NOT populate boxscore.players live, so per-player facts (goals, shots
 // on target, fouls won) are derived from the text feeds: keyEvents for goals &
 // cards, commentary for "Attempt saved" (SOT), goals, and "X wins a free kick".
-const PLAYER = { sot: {}, goals: {}, foulsWon: {}, assists: {} };
+const PLAYER = { sot: {}, goals: {}, foulsWon: {}, assists: {}, foulsCommitted: {} };
 const bump = (bag, name) => { if (name) bag[name] = (bag[name] || 0) + 1; };
 for (const e of (json.keyEvents || [])) {
   const type = (e.type?.text || '').toLowerCase();
@@ -105,6 +105,8 @@ for (const c of (json.commentary || [])) {
   if ((m = t.match(/([^.(]+?)\s*\([^)]*\)\s*wins a free kick/))) bump(PLAYER.foulsWon, m[1].trim());
   // "Assisted by X." appears on the goal commentary line
   if ((m = t.match(/Assisted by\s+([^.(]+?)\s*[.(]/))) bump(PLAYER.assists, m[1].trim());
+  // "Foul by X (Team)." → fouls committed
+  if ((m = t.match(/Foul by\s+([^.(]+?)\s*\(/))) bump(PLAYER.foulsCommitted, m[1].trim());
 }
 function countFor(bag, nameSub) {
   const sub = nameSub.toLowerCase(); let n = 0;
@@ -112,7 +114,7 @@ function countFor(bag, nameSub) {
   return n;
 }
 function playerStat(nameSub, kind) {
-  const bag = kind === 'goals' ? PLAYER.goals : kind === 'foulsWon' ? PLAYER.foulsWon : kind === 'assists' ? PLAYER.assists : PLAYER.sot;
+  const bag = kind === 'goals' ? PLAYER.goals : kind === 'foulsWon' ? PLAYER.foulsWon : kind === 'assists' ? PLAYER.assists : kind === 'foulsCommitted' ? PLAYER.foulsCommitted : PLAYER.sot;
   const anyData = (json.commentary || []).length > 0 || (json.keyEvents || []).length > 1;
   if (!anyData) return null;      // no feed yet → pending
   return countFor(bag, nameSub);  // 0 is a real answer once play is underway
@@ -123,6 +125,7 @@ const totalCorners = (teamStat(MATCH.home, ['wonCorners', 'corners', 'cornerKick
 const totalFouls = (teamStat(MATCH.home, ['foulsCommitted', 'fouls']) ?? 0) + (teamStat(MATCH.away, ['foulsCommitted', 'fouls']) ?? 0);
 const totalCards = (teamStat(MATCH.home, ['yellowCards']) ?? 0) + (teamStat(MATCH.home, ['redCards']) ?? 0) + (teamStat(MATCH.away, ['yellowCards']) ?? 0) + (teamStat(MATCH.away, ['redCards']) ?? 0);
 const totalGoals = homeScore + awayScore;
+const totalSOT = (teamStat(MATCH.home, ['shotsOnTarget', 'onTargetScoringAtt']) ?? 0) + (teamStat(MATCH.away, ['shotsOnTarget', 'onTargetScoringAtt']) ?? 0);
 const keeperSaves = (team) => teamStat(team, SAVES);   // each side has one keeper; team `saves` = GK saves
 
 // ---- leg helpers ------------------------------------------------------------
@@ -137,6 +140,13 @@ const numLeg = (label, cur, target) => {
 const boolLeg = (label, cond, curTxt) => ({ label, status: cond ? 'hit' : (final ? 'miss' : 'pending'), cur: curTxt });
 const sot = (sub) => playerStat(sub, 'sot');
 const gl = (sub) => playerStat(sub, 'goals');
+const fc = (sub) => playerStat(sub, 'foulsCommitted');   // player fouls committed
+// "Under N goals" leg: alive while goals < N, LOST the instant goals reach N,
+// won at FT if still under. (limit is the line, e.g. 3.5 → busts at 4 goals)
+const underLeg = (label, cur, limit) => {
+  const dead = cur > limit;
+  return { label, status: dead ? 'miss' : (final ? 'hit' : 'pending'), cur };
+};
 const scoreOrAssist = (label, sub) => {
   const g = playerStat(sub, 'goals');
   const a = playerStat(sub, 'assists');
@@ -155,29 +165,20 @@ const twoUp = (side) => {
 const btts = () => boolLeg('Both Teams To Score', homeScore >= 1 && awayScore >= 1, scoreTxt);
 
 // ===== SLIP CONFIG ===========================================================
-// Dion's two placed slips on this match.
+// Dion's placed slip: £5 → £198 @ 33/1 (11 legs), stat-heavy build.
 const SLIPS = [{
-  title: 'Slip 1 · £2 free → £100 @ 50/1', legs: [
-    twoUp('home'),                                              // Argentina Match Result (2UP)
-    numLeg('Over 2.5 Total Goals', totalGoals, 3),
-    btts(),
+  title: 'Slip · £5 @ 33/1', legs: [
+    numLeg('24+ Match Total Fouls', totalFouls, 24),
+    numLeg('3+ Match Total Cards', totalCards, 3),
+    numLeg('Luis Díaz 1+ Shots on Target', sot('Diaz'), 1),
+    numLeg('Ricardo Rodríguez 1+ Fouls', fc('Ricardo'), 1),
+    numLeg('Gustavo Puerta 1+ Fouls', fc('Puerta'), 1),
+    underLeg('Under 3.5 Total Goals', totalGoals, 3.5),
     numLeg('8+ Match Total Corners', totalCorners, 8),
-    numLeg('Lautaro Martínez 1+ Shots on Target', sot('Lautaro'), 1),
-    numLeg('Emi Martínez 2+ Saves', keeperSaves(MATCH.home), 2),
-    numLeg('Shobeir 4+ Saves', keeperSaves(MATCH.away), 4),
-    numLeg('Enzo Fernández 1+ Shots on Target', sot('Enzo'), 1),
-    numLeg('Messi 2+ Goals', gl('Messi'), 2),
-  ],
-}, {
-  title: 'Slip 2 · £5 → £130 @ 25/1', legs: [
-    numLeg('Over 2.5 Total Goals', totalGoals, 3),
-    numLeg('Messi Anytime Scorer', gl('Messi'), 1),
-    scoreOrAssist('Enzo Fernández Score or Assist', 'Enzo'),
-    numLeg('Emi Martínez 2+ Saves', keeperSaves(MATCH.home), 2),
-    numLeg('Shobeir 4+ Saves', keeperSaves(MATCH.away), 4),
-    numLeg('Enzo Fernández 1+ Shots on Target', sot('Enzo'), 1),
-    numLeg('Salah 1+ Shots on Target', sot('Salah'), 1),
-    numLeg('8+ Match Total Corners', totalCorners, 8),
+    numLeg('Luis Díaz 2+ Fouls Won', playerStat('Diaz', 'foulsWon'), 2),
+    numLeg('8+ Match Total Shots on Target', totalSOT, 8),
+    numLeg('Kobel 3+ Saves', keeperSaves(MATCH.home), 3),
+    numLeg('Luis Suárez Anytime Scorer', gl('Suarez'), 1),
   ],
 }];
 // =============================================================================
@@ -248,9 +249,9 @@ if (statusName === 'STATUS_HALFTIME') {
 
 // In open play, only post when something MATERIAL moved so the channel gets a
 // card on every real event instead of an identical one every 3 min. FT always posts.
-const liveSig = `${scoreTxt}|c${totalCorners}|f${totalFouls}|k${totalCards}`
+const liveSig = `${scoreTxt}|c${totalCorners}|f${totalFouls}|k${totalCards}|tsot${totalSOT}`
   + `|hs${keeperSaves(MATCH.home) ?? '?'}|as${keeperSaves(MATCH.away) ?? '?'}`
-  + `|sot${JSON.stringify(PLAYER.sot)}|g${JSON.stringify(PLAYER.goals)}`;
+  + `|sot${JSON.stringify(PLAYER.sot)}|g${JSON.stringify(PLAYER.goals)}|fc${JSON.stringify(PLAYER.foulsCommitted)}|fwn${JSON.stringify(PLAYER.foulsWon)}`;
 if (!final && st.liveSig === liveSig) { console.log('[bets] no change since last card — skipping'); process.exit(0); }
 await post({
   title: `${final ? '🏁 FULL TIME' : '⚽ LIVE'} — ${scoreLine}${clock ? ` · ${clock}` : ''}`,
