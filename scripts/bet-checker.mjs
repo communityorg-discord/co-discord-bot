@@ -235,10 +235,15 @@ if (state === 'post' && st.postedFinal) { console.log('[bets] final already post
 
 const scoreLine = `${home?.team?.displayName || 'USA'} ${usaScore}–${belScore} ${away?.team?.displayName || 'Belgium'}`;
 
-// Halftime — nothing changes for ~15 min, so post ONE quiet "paused" card the
-// first time we see HT, then stay silent until the second half kicks off.
+// Halftime — mostly static, so we don't spam. BUT ESPN's stat feed often lags
+// the whistle and keeps catching up for a minute or two into the break (corners
+// /fouls/cards tick up after HT is declared). So instead of posting exactly once
+// and going permanently silent, we post when the MATERIAL stats change: keep a
+// signature of the key totals and re-post the HT card only when it moves. Once
+// the feed settles it naturally stops posting.
 if (statusName === 'STATUS_HALFTIME') {
-  if (!st.postedHalftime) {
+  const sig = `${usaScore}-${belScore}|c${totalCorners}|f${totalFouls}|k${totalCards}`;
+  if (st.htSig !== sig) {
     await post({
       title: `⏸️ HALF TIME — ${scoreLine}`,
       description: [renderSlip(slip1), renderSlip(slip2), renderSlip(slip3)].join('\n\n').slice(0, 4096) + '\n\n*Paused for the break — I’ll pick back up when the second half kicks off.*',
@@ -246,11 +251,19 @@ if (statusName === 'STATUS_HALFTIME') {
       footer: { text: 'Claude · live bet tracker · half time' },
       timestamp: new Date().toISOString(),
     });
-    st.postedHalftime = true; saveState();
-    console.log('[bets] posted HT card, going quiet');
-  } else console.log('[bets] halftime, staying quiet');
+    st.postedHalftime = true; st.htSig = sig; saveState();
+    console.log('[bets] posted HT card (sig', sig + ')');
+  } else console.log('[bets] halftime, no stat change — staying quiet');
   process.exit(0);
 }
+// In open play, only post when something MATERIAL moved (score / corners /
+// fouls / cards / keeper saves / a player SOT or goal) so the channel gets a
+// card on every real event instead of an identical one every 3 min. Full time
+// always posts (the definitive final card).
+const liveSig = `${usaScore}-${belScore}|c${totalCorners}|f${totalFouls}|k${totalCards}`
+  + `|fs${freeseSaves ?? '?'}|cs${courtoisSaves ?? '?'}`
+  + `|sot${JSON.stringify(PLAYER.sot)}|g${JSON.stringify(PLAYER.goals)}`;
+if (!final && st.liveSig === liveSig) { console.log('[bets] no change since last card — skipping'); process.exit(0); }
 const embed = {
   title: `${final ? '🏁 FULL TIME' : '⚽ LIVE'} — ${scoreLine}${clock ? ` · ${clock}` : ''}`,
   description: [renderSlip(slip1), renderSlip(slip2), renderSlip(slip3)].join('\n\n').slice(0, 4096),
@@ -259,5 +272,8 @@ const embed = {
   timestamp: new Date().toISOString(),
 };
 await post(embed);
-if (final) { st.postedFinal = true; saveState(); removeSelfCron(); }
+st.liveSig = liveSig;
+if (final) { st.postedFinal = true; }
+saveState();
+if (final) { removeSelfCron(); }
 console.log(`[bets] posted ${final ? 'FINAL' : 'live'} card (${scoreLine})`);
