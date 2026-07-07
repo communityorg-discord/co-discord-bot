@@ -116,6 +116,21 @@ function rememberSession(replyId, sessionId) {
   const keys = Object.keys(map); if (keys.length > 300) delete map[keys[0]];
   try { writeFileSync(SESS_FILE, JSON.stringify(map)); } catch { }
 }
+// A session transcript this big can no longer be resumed cleanly — the CLI
+// chokes loading a month of history and the turn dies with 0 turns / no reply
+// (the "no written reply" loop). Past this cap we IGNORE the saved session and
+// start fresh instead. Belt-and-braces root-cause guard so one transcript can
+// never snowball to hundreds of MB again.
+const RESUME_MAX_BYTES = 40 * 1024 * 1024; // 40MB
+function resumableSize(sessionId) {
+  if (!sessionId) return true;
+  try {
+    const proj = REPO.replace(/\//g, '-');
+    const f = `${HOME}/.claude/projects/${proj}/${sessionId}.jsonl`;
+    return statSync(f).size <= RESUME_MAX_BYTES;
+  } catch { return true; } // no file / unknown → let the CLI decide
+}
+
 // Channel-scoped session memory (the conversation's session, bot-agnostic).
 function channelSession(ch) {
   try { const e = JSON.parse(readFileSync(CHAN_FILE, 'utf8'))[ch]; if (e?.session && Date.now() - (e.at || 0) < CHAN_RESUME_TTL_MS) return e.session; } catch { }
@@ -347,6 +362,9 @@ function cleanup() {
     const cs = channelSession(CHANNEL);
     if (cs && lockChannel(CHANNEL)) { resume = cs; usedChannelResume = true; ACTIVE_CHAN = CHANNEL; }
   }
+  // If the target transcript is too big to resume cleanly, drop the resume and
+  // start fresh — a bloated session would otherwise die with 0 turns/no reply.
+  if (resume && !resumableSize(resume)) { resume = null; }
 
   let R = await runOnce(resume);
   // Stale/expired channel session → the request would silently fail. Retry once
