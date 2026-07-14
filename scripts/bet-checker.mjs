@@ -119,7 +119,12 @@ const goalSide = (e) => {
 };
 for (const e of (json.keyEvents || [])) {
   const type = (e.type?.text || '').toLowerCase();
-  if (type.startsWith('goal') && !type.includes('own')) {
+  // A converted IN-GAME penalty arrives as type "Penalty - Scored", not "Goal…"
+  // (Oyarzabal's 22' pen tonight), so key on ESPN's scoringPlay flag as well as
+  // the type text. Shootout pens carry shootout:true and must NOT count toward
+  // scorer/team-goal markets.
+  const isGoal = (type.startsWith('goal') || e.scoringPlay === true) && e.shootout !== true;
+  if (isGoal && !type.includes('own')) {
     const scorer = e.participants?.[0]?.athlete?.displayName
       || (e.text || '').match(/Goal![^.]*?\.\s*([A-Z][^()]+?)\s*\(/)?.[1]?.trim();
     if (scorer) { bump(PLAYER.goals, scorer); bump(PLAYER.sot, scorer); }  // a goal is a shot on target
@@ -128,7 +133,7 @@ for (const e of (json.keyEvents || [])) {
     // second participant on a goal event is usually the assister
     const assister = e.participants?.[1]?.athlete?.displayName;
     if (assister) bump(PLAYER.assists, assister);
-  } else if (type.startsWith('goal') && type.includes('own')) {
+  } else if (isGoal && type.includes('own')) {
     // own goal credits the OTHER team's tally (never a named-scorer leg)
     const benef = goalSide(e) === 'home' ? 'away' : goalSide(e) === 'away' ? 'home' : null;
     if (benef) bump(goalsByTeam[benef], '(own goal)');
@@ -233,7 +238,8 @@ const keeperSaves = (team) => teamStat(team, SAVES);   // each side has one keep
 function firstScorer() {
   for (const e of (json.keyEvents || [])) {
     const type = (e.type?.text || '').toLowerCase();
-    if (type.startsWith('goal')) {
+    // same rule as the tally loop: in-game pens count (scoringPlay), shootout pens don't
+    if ((type.startsWith('goal') || e.scoringPlay === true) && e.shootout !== true) {
       const tid = String(e.team?.id ?? '');
       const tname = e.team?.displayName || '';
       const isOwn = type.includes('own');
