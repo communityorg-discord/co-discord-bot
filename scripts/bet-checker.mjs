@@ -200,13 +200,20 @@ function rosterStat(nameSub, kind) {
   }
   return matched ? n : null;
 }
+// Minutes on the match clock (0 pre-kickoff; parses "45'+2'" → 45).
+const clockMin = Number(String(comp?.status?.displayClock || '0').match(/\d+/)?.[0] || 0);
 function playerStat(nameSub, kind) {
   // Opta-grade structured stats first; fall back to commentary if the player
   // isn't in the roster block yet (or the feed hasn't published stats at all).
   if (haveRosterStats) { const r = rosterStat(nameSub, kind); if (r != null) return r; }
   const bag = kind === 'goals' ? PLAYER.goals : kind === 'foulsWon' ? PLAYER.foulsWon : kind === 'assists' ? PLAYER.assists : kind === 'foulsCommitted' ? PLAYER.foulsCommitted : kind === 'cards' ? PLAYER.cards : kind === 'shots' ? PLAYER.shots : kind === 'saves' ? PLAYER.saves : PLAYER.sot;
   const anyData = (json.commentary || []).length > 0 || (json.keyEvents || []).length > 1;
-  if (!anyData) return null;      // no feed yet → pending
+  // Before the feeds wake up — pre-kickoff and the opening minutes before the
+  // first commentary line / roster-stat block lands — every player is genuinely
+  // on 0 of everything, so report a live 0 (⏳ pending), not ❔ "no data".
+  // Keep ❔ only for a real mid-game feed gap: play well underway yet ESPN
+  // publishing NO player data at all, where a hard 0 would be a guess.
+  if (!anyData) return (state === 'pre' || (state === 'in' && clockMin < 10)) ? 0 : null;
   return countFor(bag, nameSub);  // 0 is a real answer once play is underway
 }
 const SAVES = ['saves', 'goalKeeperSaves', 'savesMade'];
