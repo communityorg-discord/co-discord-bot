@@ -40,6 +40,19 @@ try {
 } catch { /* first run */ }
 const saveState = () => { mkdirSync('/home/vpcommunityorganisation/.local/state', { recursive: true }); writeFileSync(STATE, JSON.stringify(st)); };
 
+// ---- manual stat overrides ----------------------------------------------------
+// For markets ESPN's feed doesn't carry (throw-ins). When Dion posts the count
+// from the bookie, drop it in this file and the leg tracks it like any other
+// stat — no code change needed:
+//   echo '{"event":"760514","throwIns":16,"asOf":"HT (7+9)"}' > ~/.local/state/bet-checker-manual.json
+// Keys: event (must match MATCH.event or the file is ignored), one entry per
+// market (throwIns: <number>), optional asOf (shown next to the count), and
+// optional final:true meaning the numbers are full-time-final so an
+// under-the-line count may settle to a definite miss.
+const MANUAL_FILE = '/home/vpcommunityorganisation/.local/state/bet-checker-manual.json';
+let MANUAL = {};
+try { const m = JSON.parse(readFileSync(MANUAL_FILE, 'utf8')); if (String(m.event) === MATCH.event) MANUAL = m; } catch { /* none yet */ }
+
 // ---- manual stop ------------------------------------------------------------
 // `node bet-checker.mjs --stop` ends the tracker on demand (e.g. the slips are
 // dead and there's no point watching extra time). Posts one closing card, marks
@@ -349,9 +362,19 @@ const sh = (sub) => playerStat(sub, 'shots');    // player total shots (on+off t
 const sv = (sub) => playerStat(sub, 'saves');    // NAMED keeper saves (roster block; no commentary fallback)
 const asst = (sub) => playerStat(sub, 'assists'); // player assists (roster goalAssists / "Assisted by X")
 // Market the ESPN feed simply doesn't carry (checked: no throw-in stat at team
-// OR player level in the fifa.world summary). Permanently ❔ — it never settles
-// here and never counts a slip as gone/won on its own; check the bookie at FT.
-const noFeedLeg = (label) => ({ label, status: 'unknown', cur: 'not in feed' });
+// OR player level in the fifa.world summary) but that we can feed by hand via
+// MANUAL_FILE. No manual number yet → ❔ like before. Counts only go up, so a
+// hit locks the moment the fed number clears the line; a definite miss needs
+// final:true in the file — an under-the-line number at FT without it stays ❔
+// (it may just be the half-time count) and the FT card says to check the bookie.
+const manualNumLeg = (label, key, target) => {
+  const v = Number(MANUAL[key]);
+  if (!Number.isFinite(v)) return { label, status: 'unknown', cur: 'not in feed' };
+  const cur = `${v}${MANUAL.asOf ? ` manual @ ${MANUAL.asOf}` : ' manual'}`;
+  if (v >= target) return { label, status: 'hit', cur };
+  if (MANUAL.final) return { label, status: 'miss', cur };
+  return { label, status: final ? 'unknown' : 'pending', cur };
+};
 // Anytime-goalscorer leg for a NAMED player on a KNOWN side. Same evaluation as
 // numLeg(..., gl(sub), 1) but tagged with { side, sub } so slipDeadReason can
 // spot when a slip's scorer legs + a correct-score cap have become jointly
@@ -383,7 +406,7 @@ const anytimeScorer = (sub, side, label) => {
 //   "<player> Anytime Goalscorer" → anytimeScorer(name,'home'|'away')
 //   "<player> Score or Assist" → scoreOrAssist(label, name)
 //   "Both Teams to Score: Yes" → btts()
-//   "N+ Match Total Throw-Ins" → noFeedLeg(label)  (ESPN has no throw-in stat)
+//   "N+ Match Total Throw-Ins" → manualNumLeg(label,'throwIns',N)  (no ESPN stat; fed via MANUAL_FILE)
 const SLIPS = [{
   // £5 @ 18/1 → £95.00 (Bet ID 26304331). 8 legs.
   title: 'Slip 1 · Bet Builder (8 legs) · £5 @ 18/1 → £95.00', legs: [
@@ -409,7 +432,8 @@ const SLIPS = [{
   ],
 }, {
   // £0.50 bet credit longshot @ 425/1 → £212.50. 11 legs, incl. a throw-ins
-  // market the feed can't see (stays ❔ — settle that one on the bookie).
+  // market the feed can't see — fed by hand via MANUAL_FILE when Dion posts
+  // the bookie's count (❔ until the first number lands).
   title: 'Slip 3 · Bet Builder (11 legs) · £0.50 credit @ 425/1 → £212.50', legs: [
     numLeg('France 4+ Team Total Corners', homeCorners, 4),
     numLeg('Spain 4+ Team Total Corners', awayCorners, 4),
@@ -421,7 +445,7 @@ const SLIPS = [{
     numLeg('4+ Match Total Cards', totalCards, 4),
     anytimeScorer('Mbapp', 'home', 'Kylian Mbappé Anytime Goalscorer'),
     anytimeScorer('Yamal', 'away', 'Lamine Yamal Anytime Goalscorer'),
-    noFeedLeg('32+ Match Total Throw-Ins'),
+    manualNumLeg('32+ Match Total Throw-Ins', 'throwIns', 32),
   ],
 }];
 // =============================================================================
@@ -497,7 +521,7 @@ const scoreLine = `${home?.team?.displayName || MATCH.home} ${homeScore}–${awa
 if (statusName === 'STATUS_HALFTIME') {
   // Lock the half-time score the first time we see the break — htFtLeg reads it.
   if (st.htHome == null) { st.htHome = homeScore; st.htAway = awayScore; saveState(); }
-  const sig = `${scoreTxt}|c${totalCorners}|f${totalFouls}|k${totalCards}`;
+  const sig = `${scoreTxt}|c${totalCorners}|f${totalFouls}|k${totalCards}|m${JSON.stringify(MANUAL)}`;
   if (st.htSig !== sig) {
     await post({
       title: `⏸️ HALF TIME — ${scoreLine}`,
@@ -521,7 +545,7 @@ const rosterSig = ROSTER_PLAYERS.map(p => `${p.name}:${p.stat.totalShots||0},${p
 const liveSig = `${scoreTxt}|c${totalCorners}|f${totalFouls}|k${totalCards}|tsot${totalSOT}`
   + `|hs${keeperSaves(MATCH.home) ?? '?'}|as${keeperSaves(MATCH.away) ?? '?'}`
   + `|sot${JSON.stringify(PLAYER.sot)}|g${JSON.stringify(PLAYER.goals)}|fc${JSON.stringify(PLAYER.foulsCommitted)}|fwn${JSON.stringify(PLAYER.foulsWon)}|ww${JSON.stringify(PLAYER.woodwork)}|cd${JSON.stringify(PLAYER.cards)}`
-  + `|r${rosterSig}`;
+  + `|r${rosterSig}|m${JSON.stringify(MANUAL)}`;
 if (!final && st.liveSig === liveSig) { console.log('[bets] no change since last card — skipping'); process.exit(0); }
 await post({
   title: `${final ? '🏁 FULL TIME' : '⚽ LIVE'} — ${scoreLine}${clock ? ` · ${clock}` : ''}`,
