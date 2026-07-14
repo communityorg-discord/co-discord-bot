@@ -25,20 +25,41 @@ const STATE = '/home/vpcommunityorganisation/.local/state/bet-checker.json';
 
 // ===== MATCH CONFIG ==========================================================
 const MATCH = {
-  event: '760508',              // ESPN gameId
+  event: '760514',              // ESPN gameId
   league: 'fifa.world',         // ESPN soccer league slug
-  home: 'Switzerland',          // exact ESPN display name (home)
-  away: 'Colombia',             // exact ESPN display name (away)
-  label: 'Switzerland v Colombia',
+  home: 'France',               // exact ESPN display name (home)
+  away: 'Spain',                // exact ESPN display name (away)
+  label: 'France v Spain',
 };
 // =============================================================================
 
-let st = { event: MATCH.event, armed: false, postedFinal: false, postedHalftime: false, maxHomeLead: 0, maxAwayLead: 0 };
+let st = { event: MATCH.event, armed: false, postedFinal: false, postedHalftime: false, maxHomeLead: 0, maxAwayLead: 0, htHome: null, htAway: null };
 try {
   const saved = JSON.parse(readFileSync(STATE, 'utf8'));
   if (saved.event === MATCH.event) st = { ...st, ...saved };  // same match → resume; different → fresh
 } catch { /* first run */ }
 const saveState = () => { mkdirSync('/home/vpcommunityorganisation/.local/state', { recursive: true }); writeFileSync(STATE, JSON.stringify(st)); };
+
+// ---- manual stop ------------------------------------------------------------
+// `node bet-checker.mjs --stop` ends the tracker on demand (e.g. the slips are
+// dead and there's no point watching extra time). Posts one closing card, marks
+// the tracker done, and removes its own cron so it stops running. Deliberately
+// independent of the live feed so it works even if ESPN is slow or down.
+if (process.argv.includes('--stop')) {
+  if (!st.postedFinal) {
+    await post({
+      title: `🛑 Bet tracker stopped — ${MATCH.label}`,
+      description: 'Closing this one out — the slips can’t come in, so I’m switching the live tracker off here. No more cards for this match.',
+      color: 0xE74C3C,
+      footer: { text: 'Claude · live bet tracker · stopped' },
+      timestamp: new Date().toISOString(),
+    });
+  }
+  st.postedFinal = true; saveState();
+  removeSelfCron();
+  console.log('[bets] stopped on request');
+  process.exit(0);
+}
 
 // ---- fetch live feed --------------------------------------------------------
 let json;
@@ -84,17 +105,37 @@ function teamStat(teamName, keys) {
 // ESPN does NOT populate boxscore.players live, so per-player facts (goals, shots
 // on target, fouls won) are derived from the text feeds: keyEvents for goals &
 // cards, commentary for "Attempt saved" (SOT), goals, and "X wins a free kick".
-const PLAYER = { sot: {}, goals: {}, foulsWon: {}, assists: {}, foulsCommitted: {} };
+const PLAYER = { sot: {}, goals: {}, foulsWon: {}, assists: {}, foulsCommitted: {}, woodwork: {}, cards: {}, shots: {}, saves: {} };
 const bump = (bag, name) => { if (name) bag[name] = (bag[name] || 0) + 1; };
+// Per-team goal tally (by scorer). Feeds slipDeadReason so we can tell when a
+// correct-score leg and several anytime-scorer legs on one slip have become
+// jointly impossible even though no single leg has individually died yet.
+const goalsByTeam = { home: {}, away: {} };
+const goalSide = (e) => {
+  const tid = String(e.team?.id ?? ''); const tname = e.team?.displayName || '';
+  if (tid === String(home?.team?.id) || tname.includes(MATCH.home)) return 'home';
+  if (tid === String(away?.team?.id) || tname.includes(MATCH.away)) return 'away';
+  return null;
+};
 for (const e of (json.keyEvents || [])) {
   const type = (e.type?.text || '').toLowerCase();
   if (type.startsWith('goal') && !type.includes('own')) {
     const scorer = e.participants?.[0]?.athlete?.displayName
       || (e.text || '').match(/Goal![^.]*?\.\s*([A-Z][^()]+?)\s*\(/)?.[1]?.trim();
     if (scorer) { bump(PLAYER.goals, scorer); bump(PLAYER.sot, scorer); }  // a goal is a shot on target
+    const side = goalSide(e);
+    if (side) bump(goalsByTeam[side], scorer || '(unknown)');
     // second participant on a goal event is usually the assister
     const assister = e.participants?.[1]?.athlete?.displayName;
     if (assister) bump(PLAYER.assists, assister);
+  } else if (type.startsWith('goal') && type.includes('own')) {
+    // own goal credits the OTHER team's tally (never a named-scorer leg)
+    const benef = goalSide(e) === 'home' ? 'away' : goalSide(e) === 'away' ? 'home' : null;
+    if (benef) bump(goalsByTeam[benef], '(own goal)');
+  } else if (type.includes('card')) {
+    // Yellow/red card events carry the booked player — feeds "player carded" legs.
+    const booked = e.participants?.[0]?.athlete?.displayName;
+    if (booked) bump(PLAYER.cards, booked);
   }
 }
 for (const c of (json.commentary || [])) {
@@ -102,31 +143,103 @@ for (const c of (json.commentary || [])) {
   let m;
   if ((m = t.match(/Attempt saved\.\s*([^.(]+?)\s*\(/))) bump(PLAYER.sot, m[1].trim());
   else if ((m = t.match(/^Goal!.*?\.\s*([^.(]+?)\s*\(/))) { const n = m[1].trim(); if (!PLAYER.goals[n]) bump(PLAYER.goals, n); bump(PLAYER.sot, n); }
+  // Woodwork: ESPN commentary writes "hits the ... post"/"hits the bar"/"hits the crossbar".
+  // Counts toward "shots on target INCLUDING woodwork" enhanced markets only.
+  if ((m = t.match(/([^.(]+?)\s*\([^)]*\)[^.]*?hits the (?:left |right )?(?:post|bar|crossbar)/i))) bump(PLAYER.woodwork, m[1].trim());
   if ((m = t.match(/([^.(]+?)\s*\([^)]*\)\s*wins a free kick/))) bump(PLAYER.foulsWon, m[1].trim());
   // "Assisted by X." appears on the goal commentary line
   if ((m = t.match(/Assisted by\s+([^.(]+?)\s*[.(]/))) bump(PLAYER.assists, m[1].trim());
   // "Foul by X (Team)." → fouls committed
   if ((m = t.match(/Foul by\s+([^.(]+?)\s*\(/))) bump(PLAYER.foulsCommitted, m[1].trim());
+  // "X (Team) is shown the yellow/red card" → player booked (fallback to keyEvents)
+  if ((m = t.match(/([^.(]+?)\s*\([^)]*\)\s*is shown the (?:yellow|red) card/i))) { const n = m[1].trim(); if (!PLAYER.cards[n]) bump(PLAYER.cards, n); }
 }
+// Accent-insensitive so "Mbappé" matches a feed that writes "Mbappe" and
+// vice-versa. Also fold the Nordic letters (ø→o, å→a, æ→ae, ð→d) that NFD does
+// NOT decompose, so "Ødegaard" matches a feed writing "Odegaard" either way.
+const norm = (s) => (s || '')
+  .normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/ø/gi, 'o').replace(/å/gi, 'a').replace(/æ/gi, 'ae').replace(/ð/gi, 'd').replace(/þ/gi, 'th')
+  .toLowerCase();
 function countFor(bag, nameSub) {
-  const sub = nameSub.toLowerCase(); let n = 0;
-  for (const [name, c] of Object.entries(bag)) if (name.toLowerCase().includes(sub)) n += c;
+  const sub = norm(nameSub); let n = 0;
+  for (const [name, c] of Object.entries(bag)) if (norm(name).includes(sub)) n += c;
   return n;
 }
+// ---- Opta-grade structured per-player stats ---------------------------------
+// ESPN's soccer summary is Stats-Perform/Opta-sourced and carries an actual
+// per-player stat block in rosters[].roster[].stats — the same granular numbers
+// bookies settle on (shots on target, fouls suffered = "fouled X times", goals,
+// assists). That's far more reliable than inferring them from commentary text,
+// so we PREFER these when the feed has them and keep the commentary scrape as an
+// early-match fallback (and the only source for woodwork, which isn't in here).
+const ROSTER_PLAYERS = [];
+for (const side of (json.rosters || [])) {
+  for (const p of (side.roster || [])) {
+    if (!Array.isArray(p.stats) || !p.stats.length) continue;
+    const stat = {};
+    for (const s of p.stats) { const n = Number(s.value); if (Number.isFinite(n)) stat[s.name] = n; }
+    if (Object.keys(stat).length) ROSTER_PLAYERS.push({ name: p.athlete?.displayName || '', stat });
+  }
+}
+const haveRosterStats = ROSTER_PLAYERS.length > 0;
+// map our leg "kind" → ESPN roster stat field name. `cards` is special (sum of
+// yellowCards + redCards) so it's handled directly in rosterStat below.
+const ROSTER_FIELD = { goals: 'totalGoals', sot: 'shotsOnTarget', foulsWon: 'foulsSuffered', foulsCommitted: 'foulsCommitted', assists: 'goalAssists', shots: 'totalShots', saves: 'saves' };
+function rosterStat(nameSub, kind) {
+  const sub = norm(nameSub); let n = 0, matched = false;
+  for (const p of ROSTER_PLAYERS) {
+    if (!norm(p.name).includes(sub)) continue;
+    if (kind === 'cards') {
+      const y = p.stat.yellowCards, r = p.stat.redCards;
+      if (y != null || r != null) { n += (y || 0) + (r || 0); matched = true; }
+    } else {
+      const field = ROSTER_FIELD[kind];
+      if (field && p.stat[field] != null) { n += p.stat[field]; matched = true; }
+    }
+  }
+  return matched ? n : null;
+}
 function playerStat(nameSub, kind) {
-  const bag = kind === 'goals' ? PLAYER.goals : kind === 'foulsWon' ? PLAYER.foulsWon : kind === 'assists' ? PLAYER.assists : kind === 'foulsCommitted' ? PLAYER.foulsCommitted : PLAYER.sot;
+  // Opta-grade structured stats first; fall back to commentary if the player
+  // isn't in the roster block yet (or the feed hasn't published stats at all).
+  if (haveRosterStats) { const r = rosterStat(nameSub, kind); if (r != null) return r; }
+  const bag = kind === 'goals' ? PLAYER.goals : kind === 'foulsWon' ? PLAYER.foulsWon : kind === 'assists' ? PLAYER.assists : kind === 'foulsCommitted' ? PLAYER.foulsCommitted : kind === 'cards' ? PLAYER.cards : kind === 'shots' ? PLAYER.shots : kind === 'saves' ? PLAYER.saves : PLAYER.sot;
   const anyData = (json.commentary || []).length > 0 || (json.keyEvents || []).length > 1;
   if (!anyData) return null;      // no feed yet → pending
   return countFor(bag, nameSub);  // 0 is a real answer once play is underway
 }
 const SAVES = ['saves', 'goalKeeperSaves', 'savesMade'];
 
-const totalCorners = (teamStat(MATCH.home, ['wonCorners', 'corners', 'cornerKicks']) ?? 0) + (teamStat(MATCH.away, ['wonCorners', 'corners', 'cornerKicks']) ?? 0);
+const homeCorners = teamStat(MATCH.home, ['wonCorners', 'corners', 'cornerKicks']) ?? 0;
+const awayCorners = teamStat(MATCH.away, ['wonCorners', 'corners', 'cornerKicks']) ?? 0;
+const totalCorners = homeCorners + awayCorners;
 const totalFouls = (teamStat(MATCH.home, ['foulsCommitted', 'fouls']) ?? 0) + (teamStat(MATCH.away, ['foulsCommitted', 'fouls']) ?? 0);
 const totalCards = (teamStat(MATCH.home, ['yellowCards']) ?? 0) + (teamStat(MATCH.home, ['redCards']) ?? 0) + (teamStat(MATCH.away, ['yellowCards']) ?? 0) + (teamStat(MATCH.away, ['redCards']) ?? 0);
 const totalGoals = homeScore + awayScore;
 const totalSOT = (teamStat(MATCH.home, ['shotsOnTarget', 'onTargetScoringAtt']) ?? 0) + (teamStat(MATCH.away, ['shotsOnTarget', 'onTargetScoringAtt']) ?? 0);
+const totalShots = (teamStat(MATCH.home, ['totalShots', 'totalShotsTaken']) ?? 0) + (teamStat(MATCH.away, ['totalShots', 'totalShotsTaken']) ?? 0);
 const keeperSaves = (team) => teamStat(team, SAVES);   // each side has one keeper; team `saves` = GK saves
+
+// Which side scored the game's FIRST goal — derived from keyEvents (goals carry a
+// team). Returns 'home' | 'away' | null (no goal yet / can't tell).
+function firstScorer() {
+  for (const e of (json.keyEvents || [])) {
+    const type = (e.type?.text || '').toLowerCase();
+    if (type.startsWith('goal')) {
+      const tid = String(e.team?.id ?? '');
+      const tname = e.team?.displayName || '';
+      const isOwn = type.includes('own');
+      // own goal credits the OTHER team
+      if (tid === String(home?.team?.id) || tname.includes(MATCH.home)) return isOwn ? 'away' : 'home';
+      if (tid === String(away?.team?.id) || tname.includes(MATCH.away)) return isOwn ? 'home' : 'away';
+    }
+  }
+  // fallback: if only one side is on the board, they scored first
+  if (homeScore > 0 && awayScore === 0) return 'home';
+  if (awayScore > 0 && homeScore === 0) return 'away';
+  return null;
+}
 
 // ---- leg helpers ------------------------------------------------------------
 const final = state === 'post';
@@ -139,6 +252,13 @@ const numLeg = (label, cur, target) => {
 };
 const boolLeg = (label, cond, curTxt) => ({ label, status: cond ? 'hit' : (final ? 'miss' : 'pending'), cur: curTxt });
 const sot = (sub) => playerStat(sub, 'sot');
+// "Shots on Target INCLUDING Woodwork": SOT plus any post/bar strikes. Returns
+// null (pending) until there's feed data, same convention as playerStat.
+const sotWood = (sub) => {
+  const s = playerStat(sub, 'sot');
+  if (s == null) return null;
+  return s + countFor(PLAYER.woodwork, sub);
+};
 const gl = (sub) => playerStat(sub, 'goals');
 const fc = (sub) => playerStat(sub, 'foulsCommitted');   // player fouls committed
 // "Under N goals" leg: alive while goals < N, LOST the instant goals reach N,
@@ -146,6 +266,13 @@ const fc = (sub) => playerStat(sub, 'foulsCommitted');   // player fouls committ
 const underLeg = (label, cur, limit) => {
   const dead = cur > limit;
   return { label, status: dead ? 'miss' : (final ? 'hit' : 'pending'), cur };
+};
+// "Over N.5" leg (goals, corners, etc.): HITS the instant the running total
+// clears the line (e.g. Over 1.5 → hit at 2), and can only ever go up, so once
+// hit it stays hit. Pending until then; a miss only at FT if still short.
+const overLeg = (label, cur, line) => {
+  const hit = cur > line;
+  return { label, status: hit ? 'hit' : (final ? 'miss' : 'pending'), cur };
 };
 const scoreOrAssist = (label, sub) => {
   const g = playerStat(sub, 'goals');
@@ -163,34 +290,125 @@ const twoUp = (side) => {
   return boolLeg(`${side === 'home' ? MATCH.home : MATCH.away} Match Result (2UP)`, everTwoClear || winningAtFT, scoreTxt);
 };
 const btts = () => boolLeg('Both Teams To Score', homeScore >= 1 && awayScore >= 1, scoreTxt);
+// Straight match result (win): only settles at FT. Alive/pending until then,
+// hit if the backed side is ahead at the whistle.
+const matchResult = (side, label) => {
+  const winning = side === 'home' ? homeScore > awayScore : awayScore > homeScore;
+  return { label, status: final ? (winning ? 'hit' : 'miss') : 'pending', cur: scoreTxt };
+};
+// Team with most corners: settles at FT (a lead can flip). Shows running count.
+const mostCorners = (side, label) => {
+  const ahead = side === 'home' ? homeCorners > awayCorners : awayCorners > homeCorners;
+  return { label, status: final ? (ahead ? 'hit' : 'miss') : 'pending', cur: `${homeCorners}-${awayCorners}` };
+};
+// First team to score: locks the instant the first goal goes in.
+const firstToScore = (side, label) => {
+  const fs = firstScorer();
+  if (fs === side) return { label, status: 'hit', cur: scoreTxt };
+  if (fs) return { label, status: 'miss', cur: scoreTxt };          // other side struck first
+  return { label, status: final ? 'miss' : 'pending', cur: scoreTxt }; // 0-0 → miss at FT
+};
+// Exact correct score (home-away): settles at FT — any in-play score is still
+// reachable, so it stays alive until the whistle, busting only once the running
+// goals already EXCEED the predicted tally on either side (can't come back down).
+const correctScore = (h, a, label) => {
+  const dead = homeScore > h || awayScore > a;
+  return { label, status: final ? ((homeScore === h && awayScore === a) ? 'hit' : 'miss') : (dead ? 'miss' : 'pending'), cur: scoreTxt, meta: { kind: 'correctScore', h, a } };
+};
+// Half-time/Full-time double (e.g. "Draw / Spain" = level at the break, backed
+// side ahead at FT). htSide/ftSide: 'home' | 'away' | 'draw'. The HT half only
+// locks once we've reached the break; before that the whole leg is pending.
+const htFtLeg = (htSide, ftSide, label) => {
+  const ahead = (s) => s === 'draw' ? homeScore === awayScore : s === 'home' ? homeScore > awayScore : awayScore > homeScore;
+  const htHeld = st.htHome != null
+    ? (htSide === 'draw' ? st.htHome === st.htAway : htSide === 'home' ? st.htHome > st.htAway : st.htAway > st.htHome)
+    : ahead(htSide);
+  const htKnown = st.htHome != null || statusName === 'STATUS_HALFTIME' || state === 'post';
+  if (htKnown && !htHeld) return { label, status: 'miss', cur: scoreTxt };   // HT half already wrong → dead
+  return { label, status: final ? ((htHeld && ahead(ftSide)) ? 'hit' : 'miss') : 'pending', cur: scoreTxt };
+};
+
+// Team total cards (yellows + reds) for one side — for a "Belgium 2+ Cards" leg.
+const teamCards = (team) => (teamStat(team, ['yellowCards']) ?? 0) + (teamStat(team, ['redCards']) ?? 0);
+const fw = (sub) => playerStat(sub, 'foulsWon');
+const cd = (sub) => playerStat(sub, 'cards');    // player yellow+red cards (for "carded anytime")
+const sh = (sub) => playerStat(sub, 'shots');    // player total shots (on+off target)
+const sv = (sub) => playerStat(sub, 'saves');    // NAMED keeper saves (roster block; no commentary fallback)
+const asst = (sub) => playerStat(sub, 'assists'); // player assists (roster goalAssists / "Assisted by X")
+// Market the ESPN feed simply doesn't carry (checked: no throw-in stat at team
+// OR player level in the fifa.world summary). Permanently ❔ — it never settles
+// here and never counts a slip as gone/won on its own; check the bookie at FT.
+const noFeedLeg = (label) => ({ label, status: 'unknown', cur: 'not in feed' });
+// Anytime-goalscorer leg for a NAMED player on a KNOWN side. Same evaluation as
+// numLeg(..., gl(sub), 1) but tagged with { side, sub } so slipDeadReason can
+// spot when a slip's scorer legs + a correct-score cap have become jointly
+// impossible (e.g. "Spain 2-1" but needing 2 *different* Spain players to score,
+// after someone else already scored Spain's first).
+const anytimeScorer = (sub, side, label) => {
+  const leg = numLeg(label, gl(sub), 1);
+  leg.meta = { kind: 'anytimeScorer', side, sub };
+  return leg;
+};
 
 // ===== SLIP CONFIG ===========================================================
-// Dion's two placed slips on this match.
+// Dion's THREE PLACED bet-builders on France v Spain (transcribed from his slip
+// screenshots 2026-07-14). France = home, Spain = away.
+// Leg → helper map for this bookie's exact market names:
+//   "Match Result (2UP)"      → twoUp('home')  (early payout if 2 clear)
+//   "Over 1.50 Total Goals"   → overLeg(totalGoals, 1.5)
+//   "N+ Match Total Corners"  → numLeg(totalCorners, N)
+//   "N+ Team Total Corners"   → numLeg(homeCorners | awayCorners, N)
+//   "N+ Match Total Cards"    → numLeg(totalCards, N)
+//   "N+ Team Total Cards"     → numLeg(teamCards(name), N)
+//   "<keeper> N+ Saves"       → sv(name)   (named-keeper roster saves)
+//   "<player> N+ Shots"       → sh(name)   (total shots)
+//   "<player> N+ Shots on Target" → sot(name)  (plain SOT — NOT woodwork here)
+//   "<player> N+ Fouls"       → fc(name)   (fouls COMMITTED)
+//   "<player> N+ Fouls Won"   → fw(name)   (fouls SUFFERED / won free kicks)
+//   "<player> N+ Assists"     → asst(name)
+//   "<player> Carded Anytime" → cd(name)
+//   "<player> Anytime Goalscorer" → anytimeScorer(name,'home'|'away')
+//   "<player> Score or Assist" → scoreOrAssist(label, name)
+//   "Both Teams to Score: Yes" → btts()
+//   "N+ Match Total Throw-Ins" → noFeedLeg(label)  (ESPN has no throw-in stat)
 const SLIPS = [{
-  title: 'Slip 1 · £5 @ 33/1', legs: [
-    numLeg('24+ Match Total Fouls', totalFouls, 24),
-    numLeg('3+ Match Total Cards', totalCards, 3),
-    numLeg('Luis Díaz 1+ Shots on Target', sot('Diaz'), 1),
-    numLeg('Ricardo Rodríguez 1+ Fouls', fc('Ricardo'), 1),
-    numLeg('Gustavo Puerta 1+ Fouls', fc('Puerta'), 1),
-    underLeg('Under 3.5 Total Goals', totalGoals, 3.5),
+  // £5 @ 18/1 → £95.00 (Bet ID 26304331). 8 legs.
+  title: 'Slip 1 · Bet Builder (8 legs) · £5 @ 18/1 → £95.00', legs: [
+    numLeg('Lamine Yamal 1+ Shots on Target', sot('Yamal'), 1),
+    numLeg('Rodri 2+ Fouls Won', fw('Rodri'), 2),
+    numLeg('Alex Baena 1+ Fouls', fc('Baena'), 1),
+    numLeg('France 1+ Team Total Cards', teamCards(MATCH.home), 1),
+    btts(),
+    scoreOrAssist('Michael Olise Score or Assist', 'Olise'),
+    numLeg('Kylian Mbappé 2+ Shots on Target', sot('Mbapp'), 2),
     numLeg('8+ Match Total Corners', totalCorners, 8),
-    numLeg('Luis Díaz 2+ Fouls Won', playerStat('Diaz', 'foulsWon'), 2),
-    numLeg('8+ Match Total Shots on Target', totalSOT, 8),
-    numLeg('Kobel 3+ Saves', keeperSaves(MATCH.home), 3),
-    numLeg('Luis Suárez Anytime Scorer', gl('Suarez'), 1),
   ],
 }, {
-  title: 'Slip 2 · £2 free → £100 @ 50/1', legs: [
-    underLeg('Under 3.5 Total Goals', totalGoals, 3.5),
-    numLeg('Luis Díaz 1+ Shots on Target', sot('Diaz'), 1),
-    numLeg('Breel Embolo 1+ Shots on Target', sot('Embolo'), 1),
-    numLeg('James Rodríguez 1+ Shots on Target', sot('James'), 1),
+  // £5 @ 20/1 → £105.00 (Bet ID 26302396). 7 legs.
+  title: 'Slip 2 · Bet Builder (7 legs) · £5 @ 20/1 → £105.00', legs: [
+    numLeg('Kylian Mbappé 2+ Shots on Target', sot('Mbapp'), 2),
+    numLeg('Michael Olise 1+ Shots on Target', sot('Olise'), 1),
+    numLeg('Michael Olise 1+ Assists', asst('Olise'), 1),
+    scoreOrAssist('Lamine Yamal Score or Assist', 'Yamal'),
+    numLeg('8+ Match Total Corners', totalCorners, 8),
+    numLeg('France 1+ Team Total Cards', teamCards(MATCH.home), 1),
+    numLeg('Lamine Yamal 1+ Shots on Target', sot('Yamal'), 1),
+  ],
+}, {
+  // £0.50 bet credit longshot @ 425/1 → £212.50. 11 legs, incl. a throw-ins
+  // market the feed can't see (stays ❔ — settle that one on the bookie).
+  title: 'Slip 3 · Bet Builder (11 legs) · £0.50 credit @ 425/1 → £212.50', legs: [
+    numLeg('France 4+ Team Total Corners', homeCorners, 4),
+    numLeg('Spain 4+ Team Total Corners', awayCorners, 4),
+    numLeg('9+ Match Total Corners', totalCorners, 9),
+    numLeg('Marc Cucurella Carded Anytime', cd('Cucurella'), 1),
+    numLeg('Lamine Yamal 2+ Fouls', fc('Yamal'), 2),
+    numLeg('Kylian Mbappé 2+ Shots on Target', sot('Mbapp'), 2),
     btts(),
-    numLeg('Kobel 3+ Saves', keeperSaves(MATCH.home), 3),
-    numLeg('Luis Díaz Anytime Scorer', gl('Diaz'), 1),
-    numLeg('3+ Match Total Cards', totalCards, 3),
-    numLeg('24+ Match Total Fouls', totalFouls, 24),
+    numLeg('4+ Match Total Cards', totalCards, 4),
+    anytimeScorer('Mbapp', 'home', 'Kylian Mbappé Anytime Goalscorer'),
+    anytimeScorer('Yamal', 'away', 'Lamine Yamal Anytime Goalscorer'),
+    noFeedLeg('32+ Match Total Throw-Ins'),
   ],
 }];
 // =============================================================================
@@ -199,7 +417,10 @@ const ICON = { hit: '✅', miss: '❌', pending: '⏳', unknown: '❔' };
 function renderSlip(s) {
   const hits = s.legs.filter(l => l.status === 'hit').length;
   const gone = s.legs.filter(l => l.status === 'miss').length;
-  const tag = final ? (gone === 0 ? '🟢 WINNER' : `🔴 ${gone} gone`) : (gone ? `🔴 ${gone} gone` : '🟢 alive');
+  const unknowns = s.legs.filter(l => l.status === 'unknown').length;
+  const tag = final
+    ? (gone > 0 ? `🔴 ${gone} gone` : unknowns > 0 ? '🟡 check ❔ legs on the bookie' : '🟢 WINNER')
+    : (gone ? `🔴 ${gone} gone` : '🟢 alive');
   return `**${s.title}** — ${hits}/${s.legs.length} ${tag}\n` + s.legs.map(l => `${ICON[l.status]} ${l.label} (${l.cur})`).join('\n');
 }
 const LEGEND = '✅ landed · ⏳ still to come · ❌ gone · ❔ no data from the feed yet';
@@ -223,6 +444,23 @@ function removeSelfCron() {
   } catch (e) { console.error('[bets] cron self-remove failed', e.message); }
 }
 
+// ---- on-demand preview ------------------------------------------------------
+// `node bet-checker.mjs --preview` posts the current slips card right now,
+// whatever the match state (handy pre-kickoff to see the embed). Read-only: it
+// touches NEITHER the state file NOR the cron — it just renders + posts once.
+if (process.argv.includes('--preview')) {
+  const pre = state === 'pre';
+  await post({
+    title: `${pre ? '👀 Preview' : '⚽ LIVE'} — ${MATCH.label}${pre ? ' · not kicked off yet' : ''}`,
+    description: slipsBody(),
+    color: 0x9B59B6,
+    footer: { text: `Claude · live bet tracker · preview (${SLIPS.length} slips)` },
+    timestamp: new Date().toISOString(),
+  });
+  console.log('[bets] posted preview card');
+  process.exit(0);
+}
+
 if (state === 'pre') {
   if (!st.armed) {
     await post({
@@ -244,6 +482,8 @@ const scoreLine = `${home?.team?.displayName || MATCH.home} ${homeScore}–${awa
 // Half time — mostly static, but ESPN's stat feed lags the whistle and keeps
 // catching up for a minute or two, so re-post only when the key totals move.
 if (statusName === 'STATUS_HALFTIME') {
+  // Lock the half-time score the first time we see the break — htFtLeg reads it.
+  if (st.htHome == null) { st.htHome = homeScore; st.htAway = awayScore; saveState(); }
   const sig = `${scoreTxt}|c${totalCorners}|f${totalFouls}|k${totalCards}`;
   if (st.htSig !== sig) {
     await post({
@@ -261,9 +501,14 @@ if (statusName === 'STATUS_HALFTIME') {
 
 // In open play, only post when something MATERIAL moved so the channel gets a
 // card on every real event instead of an identical one every 3 min. FT always posts.
+// Roster fingerprint: the per-player structured stats now drive most legs
+// (shots, SoT, cards, fouls), so fold them into the signature — otherwise a
+// roster-only change (no team-total move) wouldn't trigger a fresh card.
+const rosterSig = ROSTER_PLAYERS.map(p => `${p.name}:${p.stat.totalShots||0},${p.stat.shotsOnTarget||0},${p.stat.foulsSuffered||0},${p.stat.foulsCommitted||0},${(p.stat.yellowCards||0)+(p.stat.redCards||0)},${p.stat.totalGoals||0},${p.stat.goalAssists||0}`).join('|');
 const liveSig = `${scoreTxt}|c${totalCorners}|f${totalFouls}|k${totalCards}|tsot${totalSOT}`
   + `|hs${keeperSaves(MATCH.home) ?? '?'}|as${keeperSaves(MATCH.away) ?? '?'}`
-  + `|sot${JSON.stringify(PLAYER.sot)}|g${JSON.stringify(PLAYER.goals)}|fc${JSON.stringify(PLAYER.foulsCommitted)}|fwn${JSON.stringify(PLAYER.foulsWon)}`;
+  + `|sot${JSON.stringify(PLAYER.sot)}|g${JSON.stringify(PLAYER.goals)}|fc${JSON.stringify(PLAYER.foulsCommitted)}|fwn${JSON.stringify(PLAYER.foulsWon)}|ww${JSON.stringify(PLAYER.woodwork)}|cd${JSON.stringify(PLAYER.cards)}`
+  + `|r${rosterSig}`;
 if (!final && st.liveSig === liveSig) { console.log('[bets] no change since last card — skipping'); process.exit(0); }
 await post({
   title: `${final ? '🏁 FULL TIME' : '⚽ LIVE'} — ${scoreLine}${clock ? ` · ${clock}` : ''}`,
