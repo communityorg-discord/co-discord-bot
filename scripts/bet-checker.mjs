@@ -25,11 +25,11 @@ const STATE = '/home/vpcommunityorganisation/.local/state/bet-checker.json';
 
 // ===== MATCH CONFIG ==========================================================
 const MATCH = {
-  event: '760514',              // ESPN gameId
+  event: '760515',              // ESPN gameId
   league: 'fifa.world',         // ESPN soccer league slug
-  home: 'France',               // exact ESPN display name (home)
-  away: 'Spain',                // exact ESPN display name (away)
-  label: 'France v Spain',
+  home: 'England',              // exact ESPN display name (home)
+  away: 'Argentina',            // exact ESPN display name (away)
+  label: 'England v Argentina',
 };
 // =============================================================================
 
@@ -44,7 +44,7 @@ const saveState = () => { mkdirSync('/home/vpcommunityorganisation/.local/state'
 // For markets ESPN's feed doesn't carry (throw-ins). When Dion posts the count
 // from the bookie, drop it in this file and the leg tracks it like any other
 // stat — no code change needed:
-//   echo '{"event":"760514","throwIns":16,"asOf":"HT (7+9)"}' > ~/.local/state/bet-checker-manual.json
+//   echo '{"event":"760515","throwIns":16,"asOf":"HT (7+9)"}' > ~/.local/state/bet-checker-manual.json
 // Keys: event (must match MATCH.event or the file is ignored), one entry per
 // market (throwIns: <number>), optional asOf (shown next to the count), and
 // optional final:true meaning the numbers are full-time-final so an
@@ -385,67 +385,124 @@ const anytimeScorer = (sub, side, label) => {
   leg.meta = { kind: 'anytimeScorer', side, sub };
   return leg;
 };
+// First-goalscorer leg for a NAMED player. Locks the moment the game's first
+// player goal goes in: hit if it's ours, dead if anyone else struck first.
+// Own goals are skipped (standard bookie rule — the first PLAYER goal counts)
+// and shootout pens never count. Pending until then; miss at FT if goalless.
+const firstGoalscorer = (sub, label) => {
+  for (const e of (json.keyEvents || [])) {
+    const type = (e.type?.text || '').toLowerCase();
+    const isGoal = (type.startsWith('goal') || e.scoringPlay === true) && e.shootout !== true;
+    if (!isGoal || type.includes('own')) continue;
+    const scorer = e.participants?.[0]?.athlete?.displayName
+      || (e.text || '').match(/Goal![^.]*?\.\s*([A-Z][^()]+?)\s*\(/)?.[1]?.trim();
+    if (!scorer) continue;
+    return { label, status: norm(scorer).includes(norm(sub)) ? 'hit' : 'miss', cur: `1st: ${scorer}` };
+  }
+  return { label, status: final ? 'miss' : 'pending', cur: 'no goals yet' };
+};
 
 // ===== SLIP CONFIG ===========================================================
-// Dion's THREE PLACED bet-builders on France v Spain (transcribed from his slip
-// screenshots 2026-07-14). France = home, Spain = away.
-// Leg → helper map for this bookie's exact market names:
+// Dion's SIX PLACED bet-builders on England v Argentina (transcribed from his
+// slip screenshots 2026-07-15). England = home, Argentina = away.
+// Slip 1 is Paddy Power (screenshot starts at the first visible leg — the slip
+// header is scrolled off, so if PP hides more legs above it they aren't here);
+// slips 2–6 are Midnite. "Super Sub"/"SUB HERO" tags are bookie promos
+// (sub-on players still count) — nothing to track, so they're ignored.
+// Leg → helper map for these bookies' exact market names:
 //   "Match Result (2UP)"      → twoUp('home')  (early payout if 2 clear)
-//   "Over 1.50 Total Goals"   → overLeg(totalGoals, 1.5)
+//   "Correct Score h-a"       → correctScore(h, a)  (home-away order!)
+//   "First Team to Score"     → firstToScore('home'|'away')
+//   "<player> First Goalscorer" → firstGoalscorer(name)
+//   "Over N.50 Total Goals"   → overLeg(totalGoals, N.5)
+//   "Over N.5 Corners"        → overLeg(totalCorners, N.5)
 //   "N+ Match Total Corners"  → numLeg(totalCorners, N)
-//   "N+ Team Total Corners"   → numLeg(homeCorners | awayCorners, N)
-//   "N+ Match Total Cards"    → numLeg(totalCards, N)
+//   "N+ Match Total Fouls"    → numLeg(totalFouls, N)
 //   "N+ Team Total Cards"     → numLeg(teamCards(name), N)
 //   "<keeper> N+ Saves"       → sv(name)   (named-keeper roster saves)
-//   "<player> N+ Shots"       → sh(name)   (total shots)
-//   "<player> N+ Shots on Target" → sot(name)  (plain SOT — NOT woodwork here)
-//   "<player> N+ Fouls"       → fc(name)   (fouls COMMITTED)
-//   "<player> N+ Fouls Won"   → fw(name)   (fouls SUFFERED / won free kicks)
-//   "<player> N+ Assists"     → asst(name)
-//   "<player> Carded Anytime" → cd(name)
+//   "<player> N+ Shots on Target" → sot(name)  (plain SOT)
+//   "<player> N+ Shots on Target Incl. Woodwork" → sotWood(name)
+//   "<player> N+ Goals"       → gl(name)
+//   "<player> N+ Fouls" / "To Commit N+ Fouls" → fc(name)  (fouls COMMITTED)
+//   "<player> N+ Fouls Won" / "To Be Fouled N+ Times" → fw(name)  (fouls SUFFERED)
+//   "<player> Shown a Card"   → cd(name)
 //   "<player> Anytime Goalscorer" → anytimeScorer(name,'home'|'away')
 //   "<player> Score or Assist" → scoreOrAssist(label, name)
 //   "Both Teams to Score: Yes" → btts()
 //   "N+ Match Total Throw-Ins" → manualNumLeg(label,'throwIns',N)  (no ESPN stat; fed via MANUAL_FILE)
 const SLIPS = [{
-  // £5 @ 18/1 → £95.00 (Bet ID 26304331). 8 legs.
-  title: 'Slip 1 · Bet Builder (8 legs) · £5 @ 18/1 → £95.00', legs: [
-    numLeg('Lamine Yamal 1+ Shots on Target', sot('Yamal'), 1),
-    numLeg('Rodri 2+ Fouls Won', fw('Rodri'), 2),
-    numLeg('Alex Baena 1+ Fouls', fc('Baena'), 1),
-    numLeg('France 1+ Team Total Cards', teamCards(MATCH.home), 1),
+  // Paddy Power. £5 (inc. £5 free bet) → £1296.69 potential. 9 visible legs.
+  title: 'Slip 1 · Paddy Power (9 legs) · £5 free bet → £1296.69', legs: [
+    numLeg('Jude Bellingham Fouled 2+ Times', fw('Jude Bellingham'), 2),
     btts(),
-    scoreOrAssist('Michael Olise Score or Assist', 'Olise'),
-    numLeg('Kylian Mbappé 2+ Shots on Target', sot('Mbapp'), 2),
-    numLeg('8+ Match Total Corners', totalCorners, 8),
+    numLeg('Lionel Messi 2+ SOT incl. Woodwork', sotWood('Lionel Messi'), 2),
+    numLeg('Enzo Fernandez 1+ Fouls', fc('Enzo Fernandez'), 1),
+    numLeg('Harry Kane Fouled 1+ Times', fw('Harry Kane'), 1),
+    firstGoalscorer('Jude Bellingham', 'Jude Bellingham First Goalscorer'),
+    numLeg('Elliot Anderson Shown a Card', cd('Elliot Anderson'), 1),
+    numLeg('Harry Kane 2+ SOT incl. Woodwork', sotWood('Harry Kane'), 2),
+    overLeg('Over 6.5 Corners', totalCorners, 6.5),
   ],
 }, {
-  // £5 @ 20/1 → £105.00 (Bet ID 26302396). 7 legs.
-  title: 'Slip 2 · Bet Builder (7 legs) · £5 @ 20/1 → £105.00', legs: [
-    numLeg('Kylian Mbappé 2+ Shots on Target', sot('Mbapp'), 2),
-    numLeg('Michael Olise 1+ Shots on Target', sot('Olise'), 1),
-    numLeg('Michael Olise 1+ Assists', asst('Olise'), 1),
-    scoreOrAssist('Lamine Yamal Score or Assist', 'Yamal'),
+  // Midnite. £0.25 credit @ 425/1 → £106.25 (Bet ID 26325793). 5 legs.
+  title: 'Slip 2 · Bet Builder (5 legs) · £0.25 credit @ 425/1 → £106.25', legs: [
+    correctScore(3, 2, 'England 3-2 Correct Score'),
+    numLeg('Jude Bellingham 2+ Goals', gl('Jude Bellingham'), 2),
     numLeg('8+ Match Total Corners', totalCorners, 8),
-    numLeg('France 1+ Team Total Cards', teamCards(MATCH.home), 1),
-    numLeg('Lamine Yamal 1+ Shots on Target', sot('Yamal'), 1),
+    numLeg('Lionel Messi 1+ Shots on Target', sot('Lionel Messi'), 1),
+    numLeg('Harry Kane 1+ Shots on Target', sot('Harry Kane'), 1),
   ],
 }, {
-  // £0.50 bet credit longshot @ 425/1 → £212.50. 11 legs, incl. a throw-ins
-  // market the feed can't see — fed by hand via MANUAL_FILE when Dion posts
-  // the bookie's count (❔ until the first number lands).
-  title: 'Slip 3 · Bet Builder (11 legs) · £0.50 credit @ 425/1 → £212.50', legs: [
-    numLeg('France 4+ Team Total Corners', homeCorners, 4),
-    numLeg('Spain 4+ Team Total Corners', awayCorners, 4),
-    numLeg('9+ Match Total Corners', totalCorners, 9),
-    numLeg('Marc Cucurella Carded Anytime', cd('Cucurella'), 1),
-    numLeg('Lamine Yamal 2+ Fouls', fc('Yamal'), 2),
-    numLeg('Kylian Mbappé 2+ Shots on Target', sot('Mbapp'), 2),
+  // Midnite. £2 credit @ 325/1 → £650.00. 11 legs, incl. a throw-ins market
+  // the feed can't see — fed by hand via MANUAL_FILE when Dion posts the
+  // bookie's count (❔ until the first number lands).
+  title: 'Slip 3 · Bet Builder (11 legs) · £2 credit @ 325/1 → £650.00', legs: [
+    numLeg('Jude Bellingham 2+ Goals', gl('Jude Bellingham'), 2),
+    numLeg('8+ Match Total Corners', totalCorners, 8),
+    numLeg('Jordan Pickford 2+ Saves', sv('Jordan Pickford'), 2),
+    numLeg('Lionel Messi 1+ Shots on Target', sot('Lionel Messi'), 1),
+    numLeg('Harry Kane 1+ Shots on Target', sot('Harry Kane'), 1),
+    manualNumLeg('31+ Match Total Throw-Ins', 'throwIns', 31),
+    numLeg('23+ Match Total Fouls', totalFouls, 23),
+    numLeg('Argentina 2+ Team Total Cards', teamCards(MATCH.away), 2),
+    numLeg('Jude Bellingham 2+ Fouls Won', fw('Jude Bellingham'), 2),
+    numLeg('Bukayo Saka 1+ Fouls Won', fw('Bukayo Saka'), 1),
+    numLeg('Lionel Messi 1+ Fouls Won', fw('Lionel Messi'), 1),
+  ],
+}, {
+  // Midnite. £5 voucher @ 25/1 → £125.00 (Bet ID 26357881). 8 legs.
+  title: 'Slip 4 · Bet Builder (8 legs) · £5 voucher @ 25/1 → £125.00', legs: [
+    overLeg('Over 2.50 Total Goals', totalGoals, 2.5),
     btts(),
-    numLeg('4+ Match Total Cards', totalCards, 4),
-    anytimeScorer('Mbapp', 'home', 'Kylian Mbappé Anytime Goalscorer'),
-    anytimeScorer('Yamal', 'away', 'Lamine Yamal Anytime Goalscorer'),
-    manualNumLeg('32+ Match Total Throw-Ins', 'throwIns', 32),
+    numLeg('Lionel Messi 2+ Shots on Target', sot('Lionel Messi'), 2),
+    numLeg('Harry Kane 1+ Shots on Target', sot('Harry Kane'), 1),
+    numLeg('Jude Bellingham 2+ Shots on Target', sot('Jude Bellingham'), 2),
+    anytimeScorer('Jude Bellingham', 'home', 'Jude Bellingham Anytime Goalscorer'),
+    numLeg('7+ Match Total Corners', totalCorners, 7),
+    numLeg('England 1+ Team Total Cards', teamCards(MATCH.home), 1),
+  ],
+}, {
+  // Midnite. £5 @ 35/1 → £180.00 (Bet ID 26361964). 8 legs.
+  title: 'Slip 5 · Bet Builder (8 legs) · £5 @ 35/1 → £180.00', legs: [
+    btts(),
+    numLeg('Harry Kane 2+ Shots on Target', sot('Harry Kane'), 2),
+    numLeg('Jude Bellingham 2+ Shots on Target', sot('Jude Bellingham'), 2),
+    numLeg('Lionel Messi 1+ Shots on Target', sot('Lionel Messi'), 1),
+    scoreOrAssist('Harry Kane Score or Assist', 'Harry Kane'),
+    anytimeScorer('Jude Bellingham', 'home', 'Jude Bellingham Anytime Goalscorer'),
+    numLeg('7+ Match Total Corners', totalCorners, 7),
+    numLeg('Jude Bellingham 2+ Fouls Won', fw('Jude Bellingham'), 2),
+  ],
+}, {
+  // Midnite. £0.13 @ 1000/1 → £130.13. 7 legs.
+  title: 'Slip 6 · Bet Builder (7 legs) · £0.13 @ 1000/1 → £130.13', legs: [
+    twoUp('home'),
+    correctScore(3, 2, 'England 3-2 Correct Score'),
+    numLeg('Lionel Messi 2+ Shots on Target', sot('Lionel Messi'), 2),
+    numLeg('Harry Kane 2+ Shots on Target', sot('Harry Kane'), 2),
+    numLeg('Jude Bellingham 2+ Shots on Target', sot('Jude Bellingham'), 2),
+    firstToScore('home', 'England First Team to Score'),
+    numLeg('Jude Bellingham 2+ Goals', gl('Jude Bellingham'), 2),
   ],
 }];
 // =============================================================================
