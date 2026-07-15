@@ -116,6 +116,13 @@ function releaseSlot(id) {
 }
 const lockChannel = (ch) => takeLock(`RUNNING.chan.${ch}`);
 const releaseChannel = (ch) => dropLock(`RUNNING.chan.${ch}`);
+// A session transcript can only be driven by ONE live process — the Claude CLI
+// deadlocks if two runs --resume the same id (both block on the model stream
+// forever). This lock is keyed on the session id itself, so it guards BOTH
+// resume paths (explicit reply CR_RESUME and channel-fallback) which the
+// channel lock alone did not — an in-flight reply used to fork the transcript.
+const lockSession = (id) => takeLock(`RUNNING.sess.${id}`);
+const releaseSession = (id) => dropLock(`RUNNING.sess.${id}`);
 
 function rememberSession(replyId, sessionId) {
   if (!replyId || !sessionId) return;
@@ -210,14 +217,19 @@ function phaseFor(name, input) {
   }
   return 'think';
 }
-const embed = (color, desc, footer) => ({ color, author: { name: 'Claude' }, description: String(desc).slice(0, 4000), footer: footer ? { text: footer } : undefined, timestamp: new Date().toISOString() });
+// State icon for the embed author row, reusing the bot's own emoji pack as CDN
+// images: the animated spinner while live, tick/stop/err once finished. Falls
+// back to no icon when the pack is missing.
+const emojiUrl = (key) => { const m = /^<(a?):\w+:(\d+)>$/.exec(EMOJIS[key] || ''); return m ? `https://cdn.discordapp.com/emojis/${m[2]}.${m[1] ? 'gif' : 'png'}` : undefined; };
+const embed = (color, desc, footer, icon) => ({ color, author: { name: 'Claude', icon_url: emojiUrl(icon || 'processing') }, description: String(desc).slice(0, 4000), footer: footer ? { text: footer } : undefined, timestamp: new Date().toISOString() });
 const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 // Released exactly once, from every exit path (success / error / stop / throw).
-let ACTIVE_SLOT = null, ACTIVE_CHAN = null;
+let ACTIVE_SLOT = null, ACTIVE_CHAN = null, ACTIVE_SESS = null;
 function cleanup() {
   if (ACTIVE_SLOT != null) { releaseSlot(ACTIVE_SLOT); ACTIVE_SLOT = null; }
   if (ACTIVE_CHAN != null) { releaseChannel(ACTIVE_CHAN); ACTIVE_CHAN = null; }
+  if (ACTIVE_SESS != null) { releaseSession(ACTIVE_SESS); ACTIVE_SESS = null; }
 }
 
 (async () => {
@@ -233,16 +245,27 @@ function cleanup() {
   const pushPhase = (k) => { if (seen[seen.length - 1] !== k) seen.push(k); };
   let WORKER = null, statusId = null, lastEdit = 0;
   const foot = (label) => `${label} · ${WORKER} · ${mmss(Date.now() - startedAt)}`;
+  const doneFoot = (r) => `✓ done in ${mmss(Date.now() - startedAt)} · ${r.turns} turn${r.turns === 1 ? '' : 's'} · $${r.cost.toFixed(2)} · reply to continue`;
+  // Aggregate the step trail: each distinct step once, in first-seen order, with
+  // an ×N count — the old render emitted one line per occurrence, so a long run
+  // read as "Thought it through / Ran a command / Thought it through / …" noise
+  // that drowned the actual summary.
+  const tally = (list) => { const m = new Map(); for (const k of list) m.set(k, (m.get(k) || 0) + 1); return [...m.entries()]; };
   const renderProgress = () => {
-    const list = seen.slice(-8);
-    return (list.length ? list : ['investigate']).map((k, i) => {
-      const p = PHASES[k] || PHASES.think;
-      // The current step gets the animated processing spinner in front of it so
-      // the card visibly *moves* while it works; finished steps get a tick.
-      return i === list.length - 1 ? `${em('processing', '⏳')} ${em(p.key, p.emoji)} ${p.doing}…` : `${em('tick', '✅')} ${p.done}`;
-    }).join('\n');
+    const cur = seen[seen.length - 1] || 'investigate';
+    // Finished steps as a compact ticked checklist; the current step last with
+    // the animated processing spinner so the card visibly *moves* while it works.
+    const lines = tally(seen.slice(0, -1)).map(([k, n]) => `${em('tick', '✅')} ${(PHASES[k] || PHASES.think).done}${n > 1 ? ` ×${n}` : ''}`);
+    const p = PHASES[cur] || PHASES.think;
+    lines.push(`${em('processing', '⏳')} ${em(p.key, p.emoji)} ${p.doing}…`);
+    return lines.join('\n');
   };
-  const renderDone = () => seen.slice(-8).map(k => `${em('tick', '✅')} ${(PHASES[k] || PHASES.think).done}`).join('\n');
+  // Finished cards lead with the summary; the trail collapses to one small
+  // subtext line underneath — what happened, not a log.
+  const renderTrail = () => tally(seen).map(([k, n]) => { const p = PHASES[k] || PHASES.think; return `${em(p.key, p.emoji)} ${p.done}${n > 1 ? ` ×${n}` : ''}`; }).join(' · ');
+  // Append the -# subtext trail only if it fits inside the 4000-char description
+  // cap — a slice mid-emoji would render as broken `<:cl_…` markup.
+  const withTrail = (text) => { const t = String(text); const trail = renderTrail(); const add = trail ? `\n\n-# ${trail}` : ''; return (add && t.length + add.length <= 4000) ? t + add : t; };
   const setStatus = async () => {
     if (!statusId || Date.now() - lastEdit < 3000) return;
     lastEdit = Date.now();
@@ -338,7 +361,23 @@ function cleanup() {
         const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
         if (!line.trim()) continue;
         let ev; try { ev = JSON.parse(line); } catch { continue; }
-        if (ev.type === 'system' && ev.subtype === 'init') { sessionId = ev.session_id || sessionId; pushPhase('investigate'); setStatus(); }
+        if (ev.type === 'system' && ev.subtype === 'init') {
+          sessionId = ev.session_id || sessionId;
+          // Map the status card → this session AS SOON AS the id is known, not
+          // only on completion. Otherwise, if the founder replies to the card
+          // while the run is still going — or the run errors before the
+          // completion-time rememberSession() — the reply finds no mapping,
+          // dispatches resume:false, and cold-starts with NO memory of the
+          // conversation (the "why don't you check your previous responses" bug:
+          // whole multi-turn threads kept re-litigating from scratch). Recording
+          // it here means a reply resumes the moment a session exists. Also seed
+          // the channel session so a plain follow-up resumes too.
+          if (sessionId && statusId) { rememberSession(statusId, sessionId); recordChannelSession(CHANNEL, sessionId); }
+          // Lock a FRESH session id the moment it's minted, so a reply arriving
+          // mid-run can't resume (and deadlock) the transcript we're driving.
+          if (sessionId && ACTIVE_SESS !== sessionId && lockSession(sessionId)) ACTIVE_SESS = sessionId;
+          pushPhase('investigate'); setStatus();
+        }
         else if (ev.type === 'assistant' && ev.message?.content) {
           const toolBlocks = ev.message.content.filter(b => b.type === 'tool_use');
           if (toolBlocks.length) { const tb = toolBlocks[toolBlocks.length - 1]; pushPhase(phaseFor(tb.name, tb.input)); setStatus(); }
@@ -380,9 +419,17 @@ function cleanup() {
   // exists and isn't bloated — otherwise the CLI hard-fails ("No conversation
   // found …"). Drop a dead/huge one so we cleanly start fresh instead of looping.
   if (resume && !canResume(resume)) resume = null;
+  // A session can only be driven by one live run. If another process already
+  // holds this session (e.g. you replied to a card whose run is STILL going),
+  // don't resume it — that deadlocks the CLI. Start fresh instead so the ask
+  // still gets done. Guards the explicit-reply path the channel lock missed.
+  if (resume && !lockSession(resume)) resume = null;
+  else if (resume) ACTIVE_SESS = resume;
   if (!resume) {
     const cs = channelSession(CHANNEL);
-    if (cs && canResume(cs) && lockChannel(CHANNEL)) { resume = cs; usedChannelResume = true; ACTIVE_CHAN = CHANNEL; }
+    if (cs && canResume(cs) && lockChannel(CHANNEL) && lockSession(cs)) {
+      resume = cs; usedChannelResume = true; ACTIVE_CHAN = CHANNEL; ACTIVE_SESS = cs;
+    }
   }
 
   let R = await runOnce(resume);
@@ -390,7 +437,12 @@ function cleanup() {
   // between the check and the run) would otherwise strand the founder. Retry
   // once as a FRESH session for ANY resume — reply-resume or channel-resume —
   // so the ask still gets done. (Only a genuine error, never a Stop.)
-  if (R.isErr && resume && !R.stoppedBy) { pushPhase('think'); await setStatus(); R = await runOnce(null); }
+  if (R.isErr && resume && !R.stoppedBy) {
+    // The resume failed — free its session lock before retrying fresh so we
+    // don't hold a dead id (the fresh run mints + locks its own id at init).
+    if (ACTIVE_SESS != null) { releaseSession(ACTIVE_SESS); ACTIVE_SESS = null; }
+    pushPhase('think'); await setStatus(); R = await runOnce(null);
+  }
 
   clearInterval(typer);
   await unreact('👀');
@@ -403,8 +455,7 @@ function cleanup() {
 
   if (R.stoppedBy) {
     await react('🛑');
-    const stages = renderDone();
-    const e = embed(0xf59e0b, (stages ? stages + '\n\n' : '') + `${em('stop', '🛑')} **Stopped by ${R.stoppedBy.name}**`, foot('stopped'));
+    const e = embed(0xf59e0b, withTrail(`${em('stop', '🛑')} **Stopped by ${R.stoppedBy.name}**`), foot('stopped'), 'stop');
     if (statusId) await editMsg(statusId, { embeds: [e], components: [] });
     const pingId = await pingDone(`${em('stop', '🛑')} Stopped.`);
     if (R.sessionId) { rememberSession(statusId, R.sessionId); rememberSession(pingId, R.sessionId); }
@@ -415,15 +466,14 @@ function cleanup() {
     const noText = !R.isErr && (R.finalText == null || !String(R.finalText).trim());
     await react(noText ? '✅' : '❌');
     if (noText) {
-      const stages = renderDone();
-      const body = (stages ? stages + '\n\n' : '') + `${em('tick', '✅')} Done — but I didn't produce a written reply this time (the turn ended on an action with no summary). Reply to continue if you need more.`;
-      const e = embed(0x4ade80, body, `✓ done in ${mmss(Date.now() - startedAt)} · ${WORKER} · ${R.turns} turns · $${R.cost.toFixed(3)} · reply to continue`);
+      const body = withTrail(`${em('tick', '✅')} Done — but I didn't produce a written reply this time (the turn ended on an action with no summary). Reply to continue if you need more.`);
+      const e = embed(0x4ade80, body, doneFoot(R), 'tick');
       if (statusId) await editMsg(statusId, { embeds: [e], components: [] });
       const pingId = await pingDone(`${em('tick', '✅')} Done (no written reply) — reply to continue.`);
       if (R.sessionId) { rememberSession(statusId, R.sessionId); rememberSession(pingId, R.sessionId); }
     } else {
       const msg = String(R.finalText || R.stderr || 'see server logs').slice(0, 1500);
-      if (statusId) await editMsg(statusId, { embeds: [embed(0xef4444, `${em('err', '❌')} Couldn't finish — ` + msg, foot('failed'))], components: [] });
+      if (statusId) await editMsg(statusId, { embeds: [embed(0xef4444, withTrail(`${em('err', '❌')} Couldn't finish — ` + msg), foot('failed'), 'err')], components: [] });
       const pingId = await pingDone(`${em('err', '❌')} That one didn't finish —`);
       // Only remember the session if it's genuinely resumable. A failed run's
       // sessionId is often the dead resume id we were handed — re-saving it here
@@ -432,9 +482,7 @@ function cleanup() {
     }
   } else {
     await react('✅');
-    const stages = renderDone();
-    const body = (stages ? stages + '\n\n' : '') + String(R.finalText);
-    const e = embed(0x4ade80, body, `✓ done in ${mmss(Date.now() - startedAt)} · ${WORKER} · ${R.turns} turns · $${R.cost.toFixed(3)} · reply to continue`);
+    const e = embed(0x4ade80, withTrail(R.finalText), doneFoot(R), 'tick');
     let replyId = statusId;
     if (statusId) await editMsg(statusId, { embeds: [e], components: [] });
     else { const r = await reply({ embeds: [e] }); replyId = r?.id; }
