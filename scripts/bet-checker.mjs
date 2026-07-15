@@ -41,16 +41,17 @@ try {
 const saveState = () => { mkdirSync('/home/vpcommunityorganisation/.local/state', { recursive: true }); writeFileSync(STATE, JSON.stringify(st)); };
 
 // ---- manual stat overrides ----------------------------------------------------
-// For markets ESPN's feed doesn't carry (throw-ins, per-player TACKLES — the
-// roster block has no tackles field, team-level only). When Dion posts the
+// For markets ESPN's feed doesn't carry (throw-ins). When Dion posts the
 // count from the bookie, drop it in this file and the leg tracks it like any
 // other stat — no code change needed:
 //   echo '{"event":"760515","throwIns":16,"asOf":"HT (7+9)"}' > ~/.local/state/bet-checker-manual.json
 // Keys: event (must match MATCH.event or the file is ignored), one entry per
-// market (throwIns: <number>; tacklesAnderson / tacklesMacAllister: <number>),
-// optional asOf (shown next to the count), and
+// market (throwIns: <number>), optional asOf (shown next to the count), and
 // optional final:true meaning the numbers are full-time-final so an
 // under-the-line count may settle to a definite miss.
+// Per-player TACKLES are auto-fed from ESPN's core API (see the tackles block
+// below) — but a manual number under the same key (tacklesAnderson /
+// tacklesMacAllister) OVERRIDES the feed if the bookie's count drifts.
 const MANUAL_FILE = '/home/vpcommunityorganisation/.local/state/bet-checker-manual.json';
 let MANUAL = {};
 try { const m = JSON.parse(readFileSync(MANUAL_FILE, 'utf8')); if (String(m.event) === MATCH.event) MANUAL = m; } catch { /* none yet */ }
@@ -203,6 +204,38 @@ for (const side of (json.rosters || [])) {
   }
 }
 const haveRosterStats = ROSTER_PLAYERS.length > 0;
+// ---- per-player tackles (ESPN core API) --------------------------------------
+// The site summary's roster block carries NO tackles field (team totals only),
+// but ESPN's core API serves a per-athlete statistics document with the full
+// Opta defensive block: totalTackles (every tackle attempt — the number most
+// bookies settle player-tackle markets on) and effectiveTackles (tackles won).
+// Verified against France v Spain: Tchouaméni/Rodri both showed 4 totalTackles.
+// One extra fetch per tracked player per tick, only for players named below;
+// athlete + team ids come from the summary's rosters (absent until lineups
+// publish ~1h before KO → leg shows ❔ until then).
+const TACKLE_PLAYERS = { tacklesAnderson: 'Elliot Anderson', tacklesMacAllister: 'Mac Allister' };
+const TACKLES = {};   // manual-file key -> { total, won }
+for (const [key, sub] of Object.entries(TACKLE_PLAYERS)) {
+  let loc = null;
+  for (const side of (json.rosters || [])) {
+    for (const p of (side.roster || [])) {
+      if (norm(p.athlete?.displayName || '').includes(norm(sub))) loc = { teamId: side.team?.id, athleteId: p.athlete?.id };
+    }
+  }
+  if (!loc?.teamId || !loc?.athleteId) continue;
+  try {
+    const r = await fetch(
+      `https://sports.core.api.espn.com/v2/sports/soccer/leagues/${MATCH.league}/events/${MATCH.event}/competitions/${MATCH.event}/competitors/${loc.teamId}/roster/${loc.athleteId}/statistics/0?lang=en&region=us`,
+      { signal: AbortSignal.timeout(10_000) });
+    if (!r.ok) continue;
+    const doc = await r.json();
+    const def = (doc?.splits?.categories || []).find(c => c.name === 'defensive');
+    const stat = (n) => Number((def?.stats || []).find(s => s.name === n)?.value);
+    if (Number.isFinite(stat('totalTackles'))) {
+      TACKLES[key] = { total: stat('totalTackles'), won: Number.isFinite(stat('effectiveTackles')) ? stat('effectiveTackles') : stat('totalTackles') };
+    }
+  } catch { /* feed hiccup — leg falls back to manual/❔ this tick */ }
+}
 // map our leg "kind" → ESPN roster stat field name. `cards` is special (sum of
 // yellowCards + redCards) so it's handled directly in rosterStat below.
 const ROSTER_FIELD = { goals: 'totalGoals', sot: 'shotsOnTarget', foulsWon: 'foulsSuffered', foulsCommitted: 'foulsCommitted', assists: 'goalAssists', shots: 'totalShots', saves: 'saves' };
@@ -397,6 +430,17 @@ const manualNumLeg = (label, key, target) => {
   if (MANUAL.final) return { label, status: 'miss', cur };
   return { label, status: final ? 'unknown' : 'pending', cur };
 };
+// Tackles leg: live Opta number from the core API when it has one; a manual-
+// file number under the same key OVERRIDES the feed (bad-feed insurance); ❔
+// when neither has data. Shows tackles won alongside when they differ, since
+// some books settle on won-only.
+const tackleLeg = (label, key, target) => {
+  if (Number.isFinite(Number(MANUAL[key])) || TACKLES[key] == null) return manualNumLeg(label, key, target);
+  const t = TACKLES[key];
+  const leg = numLeg(label, t.total, target);
+  if (t.won !== t.total) leg.cur = `${t.total}, ${t.won} won`;
+  return leg;
+};
 // Anytime-goalscorer leg for a NAMED player on a KNOWN side. Same evaluation as
 // numLeg(..., gl(sub), 1) but tagged with { side, sub } so slipDeadReason can
 // spot when a slip's scorer legs + a correct-score cap have become jointly
@@ -457,7 +501,7 @@ const firstGoalscorer = (sub, label) => {
 //   "Team to Qualify"          → qualifyLeg('home'|'away')  (ET + pens count)
 //   "Team To Receive The Most Cards" → mostCards('home'|'away')
 //   "N+ Match Total Throw-Ins" → manualNumLeg(label,'throwIns',N)  (no ESPN stat; fed via MANUAL_FILE)
-//   "<player> N+ Tackles"      → manualNumLeg(label,'tackles<Name>',N)  (ditto — roster block has no tackles)
+//   "<player> N+ Tackles"      → tackleLeg(label,'tackles<Name>',N)  (ESPN core API; manual key overrides)
 const SLIPS = [{
   // Paddy Power. £5 (inc. £5 free bet) → £1296.69 potential. 9 visible legs.
   title: 'Slip 1 · Paddy Power (9 legs) · £5 free bet → £1296.69', legs: [
@@ -534,13 +578,14 @@ const SLIPS = [{
   ],
 }, {
   // Dabble. 13 legs @ 23.00 decimal. All legs "Excl. ET" (90-min markets)
-  // except Team to Qualify. Tackles aren't in the ESPN feed — fed by hand via
-  // MANUAL_FILE keys tacklesAnderson / tacklesMacAllister (❔ until then).
+  // except Team to Qualify. Tackles come live from ESPN's core API (see the
+  // tackles block up top); manual keys tacklesAnderson / tacklesMacAllister
+  // override the feed if needed.
   title: 'Slip 7 · Dabble Bet Builder (13 legs) @ 23.00', legs: [
     numLeg('Harry Kane 1+ Shots on Target', sot('Harry Kane'), 1),
     numLeg('Lionel Messi 1+ Shots on Target', sot('Lionel Messi'), 1),
-    manualNumLeg('Elliot Anderson 2+ Tackles', 'tacklesAnderson', 2),
-    manualNumLeg('Alexis Mac Allister 2+ Tackles', 'tacklesMacAllister', 2),
+    tackleLeg('Elliot Anderson 2+ Tackles', 'tacklesAnderson', 2),
+    tackleLeg('Alexis Mac Allister 2+ Tackles', 'tacklesMacAllister', 2),
     numLeg('Jude Bellingham 1+ Fouls', fc('Jude Bellingham'), 1),
     numLeg('Cristian Romero 1+ Fouls', fc('Romero'), 1),
     numLeg('Harry Kane Fouled 1+ Times', fw('Harry Kane'), 1),
@@ -685,7 +730,7 @@ const rosterSig = ROSTER_PLAYERS.map(p => `${p.name}:${p.stat.totalShots||0},${p
 const liveSig = `${scoreTxt}|c${totalCorners}|f${totalFouls}|k${totalCards}|tsot${totalSOT}`
   + `|hs${keeperSaves(MATCH.home) ?? '?'}|as${keeperSaves(MATCH.away) ?? '?'}`
   + `|sot${JSON.stringify(PLAYER.sot)}|g${JSON.stringify(PLAYER.goals)}|fc${JSON.stringify(PLAYER.foulsCommitted)}|fwn${JSON.stringify(PLAYER.foulsWon)}|ww${JSON.stringify(PLAYER.woodwork)}|cd${JSON.stringify(PLAYER.cards)}`
-  + `|r${rosterSig}|m${JSON.stringify(MANUAL)}`;
+  + `|r${rosterSig}|m${JSON.stringify(MANUAL)}|tk${JSON.stringify(TACKLES)}`;
 if (!final && st.liveSig === liveSig) { console.log('[bets] no change since last card — skipping'); process.exit(0); }
 await post(slipsEmbeds({
   title: `${final ? '🏁 FULL TIME' : '⚽ LIVE'} — ${scoreLine}${clock ? ` · ${clock}` : ''}`,
