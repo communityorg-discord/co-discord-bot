@@ -41,12 +41,14 @@ try {
 const saveState = () => { mkdirSync('/home/vpcommunityorganisation/.local/state', { recursive: true }); writeFileSync(STATE, JSON.stringify(st)); };
 
 // ---- manual stat overrides ----------------------------------------------------
-// For markets ESPN's feed doesn't carry (throw-ins). When Dion posts the count
-// from the bookie, drop it in this file and the leg tracks it like any other
-// stat — no code change needed:
+// For markets ESPN's feed doesn't carry (throw-ins, per-player TACKLES — the
+// roster block has no tackles field, team-level only). When Dion posts the
+// count from the bookie, drop it in this file and the leg tracks it like any
+// other stat — no code change needed:
 //   echo '{"event":"760515","throwIns":16,"asOf":"HT (7+9)"}' > ~/.local/state/bet-checker-manual.json
 // Keys: event (must match MATCH.event or the file is ignored), one entry per
-// market (throwIns: <number>), optional asOf (shown next to the count), and
+// market (throwIns: <number>; tacklesAnderson / tacklesMacAllister: <number>),
+// optional asOf (shown next to the count), and
 // optional final:true meaning the numbers are full-time-final so an
 // under-the-line count may settle to a definite miss.
 const MANUAL_FILE = '/home/vpcommunityorganisation/.local/state/bet-checker-manual.json';
@@ -356,6 +358,26 @@ const htFtLeg = (htSide, ftSide, label) => {
 
 // Team total cards (yellows + reds) for one side — for a "Belgium 2+ Cards" leg.
 const teamCards = (team) => (teamStat(team, ['yellowCards']) ?? 0) + (teamStat(team, ['redCards']) ?? 0);
+// Team to receive the MOST cards: settles at FT (the lead can flip); a tie
+// misses (dead-heat rules vary, but "most" needs an outright lead). Running
+// count shown home-away.
+const mostCards = (side, label) => {
+  const hc = teamCards(MATCH.home), ac = teamCards(MATCH.away);
+  const ahead = side === 'home' ? hc > ac : ac > hc;
+  return { label, status: final ? (ahead ? 'hit' : 'miss') : 'pending', cur: `${hc}-${ac}` };
+};
+// "Team to qualify" (knockout progression). Unlike the 90-minute builder legs
+// this runs to the very end — extra time AND penalties count. ESPN flags the
+// advancing side with competitor.winner=true once the tie is over; fall back
+// to comparing the final score if the flag hasn't landed.
+const qualifyLeg = (side, label) => {
+  const mine = side === 'home' ? home : away;
+  const other = side === 'home' ? away : home;
+  if (!final) return { label, status: 'pending', cur: scoreTxt };
+  const won = mine?.winner === true
+    || (other?.winner !== true && (side === 'home' ? homeScore > awayScore : awayScore > homeScore));
+  return { label, status: won ? 'hit' : 'miss', cur: scoreTxt };
+};
 const fw = (sub) => playerStat(sub, 'foulsWon');
 const cd = (sub) => playerStat(sub, 'cards');    // player yellow+red cards (for "carded anytime")
 const sh = (sub) => playerStat(sub, 'shots');    // player total shots (on+off target)
@@ -403,12 +425,15 @@ const firstGoalscorer = (sub, label) => {
 };
 
 // ===== SLIP CONFIG ===========================================================
-// Dion's SIX PLACED bet-builders on England v Argentina (transcribed from his
+// Dion's EIGHT PLACED bet-builders on England v Argentina (transcribed from his
 // slip screenshots 2026-07-15). England = home, Argentina = away.
 // Slip 1 is Paddy Power (screenshot starts at the first visible leg — the slip
 // header is scrolled off, so if PP hides more legs above it they aren't here);
-// slips 2–6 are Midnite. "Super Sub"/"SUB HERO" tags are bookie promos
-// (sub-on players still count) — nothing to track, so they're ignored.
+// slips 2–6 are Midnite. Slips 7–8 came in just before kick-off: 7 is a Dabble
+// 13-legger @ 23.00 (its legs are all "Excl. ET" = 90-minute markets, except
+// Team to Qualify which runs to the end), 8 is a second Paddy Power builder.
+// "Super Sub"/"SUB HERO" tags are bookie promos (sub-on players still count) —
+// nothing to track, so they're ignored.
 // Leg → helper map for these bookies' exact market names:
 //   "Match Result (2UP)"      → twoUp('home')  (early payout if 2 clear)
 //   "Correct Score h-a"       → correctScore(h, a)  (home-away order!)
@@ -429,7 +454,10 @@ const firstGoalscorer = (sub, label) => {
 //   "<player> Anytime Goalscorer" → anytimeScorer(name,'home'|'away')
 //   "<player> Score or Assist" → scoreOrAssist(label, name)
 //   "Both Teams to Score: Yes" → btts()
+//   "Team to Qualify"          → qualifyLeg('home'|'away')  (ET + pens count)
+//   "Team To Receive The Most Cards" → mostCards('home'|'away')
 //   "N+ Match Total Throw-Ins" → manualNumLeg(label,'throwIns',N)  (no ESPN stat; fed via MANUAL_FILE)
+//   "<player> N+ Tackles"      → manualNumLeg(label,'tackles<Name>',N)  (ditto — roster block has no tackles)
 const SLIPS = [{
   // Paddy Power. £5 (inc. £5 free bet) → £1296.69 potential. 9 visible legs.
   title: 'Slip 1 · Paddy Power (9 legs) · £5 free bet → £1296.69', legs: [
@@ -504,6 +532,40 @@ const SLIPS = [{
     firstToScore('home', 'England First Team to Score'),
     numLeg('Jude Bellingham 2+ Goals', gl('Jude Bellingham'), 2),
   ],
+}, {
+  // Dabble. 13 legs @ 23.00 decimal. All legs "Excl. ET" (90-min markets)
+  // except Team to Qualify. Tackles aren't in the ESPN feed — fed by hand via
+  // MANUAL_FILE keys tacklesAnderson / tacklesMacAllister (❔ until then).
+  title: 'Slip 7 · Dabble Bet Builder (13 legs) @ 23.00', legs: [
+    numLeg('Harry Kane 1+ Shots on Target', sot('Harry Kane'), 1),
+    numLeg('Lionel Messi 1+ Shots on Target', sot('Lionel Messi'), 1),
+    manualNumLeg('Elliot Anderson 2+ Tackles', 'tacklesAnderson', 2),
+    manualNumLeg('Alexis Mac Allister 2+ Tackles', 'tacklesMacAllister', 2),
+    numLeg('Jude Bellingham 1+ Fouls', fc('Jude Bellingham'), 1),
+    numLeg('Cristian Romero 1+ Fouls', fc('Romero'), 1),
+    numLeg('Harry Kane Fouled 1+ Times', fw('Harry Kane'), 1),
+    qualifyLeg('home', 'England To Qualify'),
+    btts(),
+    numLeg('Anthony Gordon 1+ Shots', sh('Anthony Gordon'), 1),
+    numLeg('Enzo Fernandez 1+ Shots', sh('Enzo Fern'), 1),
+    overLeg('Over 6.5 Corners', totalCorners, 6.5),
+    overLeg('Over 1.5 Cards', totalCards, 1.5),
+  ],
+}, {
+  // Paddy Power #2. £5 (inc. £5 free bet) → £821.07 potential. 11 legs.
+  title: 'Slip 8 · Paddy Power (11 legs) · £5 free bet → £821.07', legs: [
+    numLeg('Jude Bellingham Fouled 1+ Times', fw('Jude Bellingham'), 1),
+    numLeg('Jude Bellingham 1+ SOT incl. Woodwork', sotWood('Jude Bellingham'), 1),
+    numLeg('Jude Bellingham Shown a Card', cd('Jude Bellingham'), 1),
+    numLeg('Jude Bellingham 1+ Shots', sh('Jude Bellingham'), 1),
+    numLeg('Harry Kane 1+ Shots', sh('Harry Kane'), 1),
+    overLeg('Over 2.5 Goals', totalGoals, 2.5),
+    scoreOrAssist('Jude Bellingham Score or Assist', 'Jude Bellingham'),
+    btts(),
+    overLeg('Over 6.5 Corners', totalCorners, 6.5),
+    firstGoalscorer('Jude Bellingham', 'Jude Bellingham First Goalscorer'),
+    mostCards('home', 'England Most Cards'),
+  ],
 }];
 // =============================================================================
 
@@ -518,14 +580,37 @@ function renderSlip(s) {
   return `**${s.title}** — ${hits}/${s.legs.length} ${tag}\n` + s.legs.map(l => `${ICON[l.status]} ${l.label} (${l.cur})`).join('\n');
 }
 const LEGEND = '✅ landed · ⏳ still to come · ❌ gone · ❔ no data from the feed yet';
-const slipsBody = () => (SLIPS.map(renderSlip).join('\n\n') + `\n\n${LEGEND}`).slice(0, 4096);
+// Every builder leg settles on 90 minutes ("Excl. ET" / bookie standard), but
+// the live counts keep running once a knockout game goes to extra time. Flag
+// it rather than silently over-counting; Team to Qualify is the one leg that
+// genuinely runs to the end.
+const inET = Number(comp?.status?.period || 1) > 2 || /OVERTIME|SHOOTOUT|_PEN/.test(statusName);
+const ET_NOTE = '⚠️ **Past 90 mins** — builder legs settle on NORMAL TIME at the bookie, but the counts here keep running through ET, so double-check settlement there. *England To Qualify* is the exception and runs to the end.';
+// The 8-slip card no longer fits one 4096-char embed description — split on
+// slip boundaries into as few embeds as fit (the first carries title/footer;
+// Discord allows 10 embeds / 6000 chars combined per message).
+function slipsEmbeds(head, extra = '') {
+  const tail = `\n\n${LEGEND}${extra}`;
+  const parts = SLIPS.map(renderSlip);
+  if (inET) parts.unshift(ET_NOTE);
+  const chunks = [];
+  let cur = '';
+  for (const p of parts) {
+    const joined = cur ? `${cur}\n\n${p}` : p;
+    if (joined.length + tail.length > 4096 && cur) { chunks.push(cur); cur = p; }
+    else cur = joined;
+  }
+  chunks.push((cur + tail).slice(0, 4096));
+  return chunks.map((description, i) => i === 0 ? { ...head, description } : { color: head.color, description });
+}
 
 // ---- post -------------------------------------------------------------------
 async function post(embed) {
+  const embeds = Array.isArray(embed) ? embed : [embed];
   const r = await fetch(`https://discord.com/api/v10/channels/${CHANNEL}/messages`, {
     method: 'POST',
     headers: { Authorization: `Bot ${TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ embeds: [embed] }),
+    body: JSON.stringify({ embeds }),
   });
   if (!r.ok) { console.error('[bets] post failed', r.status, await r.text()); process.exit(1); }
 }
@@ -544,13 +629,12 @@ function removeSelfCron() {
 // touches NEITHER the state file NOR the cron — it just renders + posts once.
 if (process.argv.includes('--preview')) {
   const pre = state === 'pre';
-  await post({
+  await post(slipsEmbeds({
     title: `${pre ? '👀 Preview' : '⚽ LIVE'} — ${MATCH.label}${pre ? ' · not kicked off yet' : ''}`,
-    description: slipsBody(),
     color: 0x9B59B6,
     footer: { text: `Claude · live bet tracker · preview (${SLIPS.length} slips)` },
     timestamp: new Date().toISOString(),
-  });
+  }));
   console.log('[bets] posted preview card');
   process.exit(0);
 }
@@ -580,13 +664,12 @@ if (statusName === 'STATUS_HALFTIME') {
   if (st.htHome == null) { st.htHome = homeScore; st.htAway = awayScore; saveState(); }
   const sig = `${scoreTxt}|c${totalCorners}|f${totalFouls}|k${totalCards}|m${JSON.stringify(MANUAL)}`;
   if (st.htSig !== sig) {
-    await post({
+    await post(slipsEmbeds({
       title: `⏸️ HALF TIME — ${scoreLine}`,
-      description: slipsBody() + '\n\n*Paused for the break — I’ll pick back up when the second half kicks off.*',
       color: 0x95A5A6,
       footer: { text: 'Claude · live bet tracker · half time' },
       timestamp: new Date().toISOString(),
-    });
+    }, '\n\n*Paused for the break — I’ll pick back up when the second half kicks off.*'));
     st.postedHalftime = true; st.htSig = sig; saveState();
     console.log('[bets] posted HT card (sig', sig + ')');
   } else console.log('[bets] halftime, no stat change — staying quiet');
@@ -604,13 +687,12 @@ const liveSig = `${scoreTxt}|c${totalCorners}|f${totalFouls}|k${totalCards}|tsot
   + `|sot${JSON.stringify(PLAYER.sot)}|g${JSON.stringify(PLAYER.goals)}|fc${JSON.stringify(PLAYER.foulsCommitted)}|fwn${JSON.stringify(PLAYER.foulsWon)}|ww${JSON.stringify(PLAYER.woodwork)}|cd${JSON.stringify(PLAYER.cards)}`
   + `|r${rosterSig}|m${JSON.stringify(MANUAL)}`;
 if (!final && st.liveSig === liveSig) { console.log('[bets] no change since last card — skipping'); process.exit(0); }
-await post({
+await post(slipsEmbeds({
   title: `${final ? '🏁 FULL TIME' : '⚽ LIVE'} — ${scoreLine}${clock ? ` · ${clock}` : ''}`,
-  description: slipsBody(),
   color: final ? 0xF1C40F : 0x3498DB,
   footer: { text: `Claude · live bet tracker${final ? ' · final' : ''}` },
   timestamp: new Date().toISOString(),
-});
+}));
 st.liveSig = liveSig;
 if (final) st.postedFinal = true;
 saveState();
