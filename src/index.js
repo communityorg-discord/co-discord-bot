@@ -2002,7 +2002,7 @@ const COMMAND_CHANNELS = {
   '1357119461957570570': '1487636502593798255', // CO Staff HQ → #bot-commands
   '1458621643537514590': '1508702297318887424', // USGRP main  → #bot-commands
 };
-const NETADMIN_ROLE_ID = '1516004496612786248'; // USGRP Network Administration — exempt
+const NETADMIN_ROLE_ID = '1528444084061077606'; // USGRP Network Administration — exempt
 const cmdChannelOffenses = new Map();            // userId → { count, lastWarn } — warn on 2nd+
 
 client.on('interactionCreate', async interaction => {
