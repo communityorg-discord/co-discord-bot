@@ -185,6 +185,25 @@ const lost = statuses.filter(s => s === 'lost').length;
 const liveNow = statuses.filter(s => s === 'live').length;
 const allDone = statuses.every(isTerminal);
 const dead = lost > 0;
+
+// Consolation maths once a leg goes down — the first question is always "what
+// would we be on without X?", so put it on the card: rebuild the multiplier
+// from the placed fractional prices with lost (and void) legs pulled out.
+// Derived purely from leg statuses, so it never changes `sig` on its own.
+const fracToDec = (o) => { const [n, d] = String(o).split('/').map(Number); return 1 + n / d; };
+const stakeNum = Number(ACCA.stake.replace(/[^0-9.]/g, ''));
+let whatIf = null;
+if (dead) {
+  const lostPicks = ACCA.legs.filter(l => st.legs[l.id]?.status === 'lost').map(l => l.pick);
+  const kept = ACCA.legs.filter(l => !['lost', 'void'].includes(st.legs[l.id]?.status));
+  const mult = kept.reduce((x, l) => x * fracToDec(l.odds), 1);
+  if (kept.length && Number.isFinite(mult) && Number.isFinite(stakeNum)) {
+    const payout = `${kept.length}-fold @ ${mult.toFixed(2)}x → ~£${(stakeNum * mult).toFixed(2)}`;
+    whatIf = allDone
+      ? `💭 Without ${lostPicks.join(' + ')}: ${payout} would have paid`
+      : `💭 Without ${lostPicks.join(' + ')}: ${payout} still on`;
+  }
+}
 const headline = dead
   ? `🔴 ACCA GONE — ${lost} leg${lost > 1 ? 's' : ''} down (${won}/${ACCA.legs.length} landed)`
   : allDone
@@ -192,7 +211,8 @@ const headline = dead
     : `🟢 alive — ${won}/${ACCA.legs.length} landed${liveNow ? ` · ${liveNow} on the oche now` : ''}`;
 const description = [
   `**${ACCA.stake} · ${ACCA.legs.length}-fold @ ${ACCA.combined} → ${ACCA.returns}**`,
-  headline, '',
+  headline,
+  ...(whatIf ? [whatIf] : []), '',
   ...ACCA.legs.map(legLine), '',
   '✅ landed · 🎯 live · ⏳ still to throw · ❌ gone · ❔ check settlement',
 ].join('\n');
