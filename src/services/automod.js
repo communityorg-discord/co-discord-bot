@@ -4,6 +4,7 @@ import { getUserByDiscordId } from '../db.js';
 import { SUPERUSER_IDS as REAL_SUPERUSERS, OFFICIAL_BYPASS_IDS } from '../config.js';
 import { E } from '../lib/emoji.js';
 import { emitToLogsBot } from './logsBotClient.js';
+import { emitRulesEvent } from '../../../aspire-shared/rulesEmit.js';
 
 const INVITE_REGEX = /(discord\.gg|discord\.com\/invite|discordapp\.com\/invite)\/[a-zA-Z0-9]+/gi;
 const SEVERITY_COLORS = { low: 0x3B82F6, medium: 0xF59E0B, high: 0xEF4444, critical: 0x7F1D1D };
@@ -63,6 +64,7 @@ export class AutoMod {
   }
 
   async notifyEOB(guildId, type, targetId, targetUsername, severity, action, details) {
+    emitRulesEvent('log.event', { level: severity, source: 'co-automod', message: `${type}: ${details} (target ${targetId || 'n/a'}, action ${action})` });
     const embed = new EmbedBuilder()
       .setColor(SEVERITY_COLORS[severity] || SEVERITY_COLORS.medium)
       .setTitle(`AutoMod — ${type.replace(/_/g, ' ').toUpperCase()}`)
@@ -86,7 +88,12 @@ export class AutoMod {
 
     // DM superusers only for high/critical — same trusted-accounts set
     // as the immune list (real superusers + official-account bypass IDs).
-    if (severity === 'high' || severity === 'critical') {
+    // migrated:co-discord-bot.automod-paging — the Rules Engine rule now owns
+    // superuser paging (fed by the log.event emit at the top of this method).
+    // SECURITY PATH: this legacy direct-DM block runs in PARALLEL for one
+    // release. Set AUTOMOD_LEGACY_PAGING_DM=0 to switch it off once
+    // rule-driven DMs are confirmed arriving, then delete the block.
+    if (process.env.AUTOMOD_LEGACY_PAGING_DM !== '0' && (severity === 'high' || severity === 'critical')) {
       // Route via USGRP | Logs; direct-DM fallback if it's down.
       if (!(await emitToLogsBot({ kind: 'admin-dm', user_ids: SUPERUSER_IDS, embed }))) {
         for (const id of SUPERUSER_IDS) {
@@ -252,6 +259,7 @@ export class AutoMod {
       for (const g of this.client.guilds.cache.values()) {
         await g.bans.create(member.id, { reason: '[AutoMod] Suspected mass DM bot' }).catch(() => {});
       }
+      emitRulesEvent('log.event', { level: 'critical', source: 'co-automod-globalban', message: `Global ban: ${member.user?.tag || member.id} joined/left ${recent.c} distinct guilds in 1h — suspected mass-DM bot` });
     }
   }
 
